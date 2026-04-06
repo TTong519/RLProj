@@ -185,7 +185,7 @@ vision = [
 
 ---
 
-### Step 2: Scene Schema and File Format [STATUS: PENDING]
+### Step 2: Scene Schema and File Format [STATUS: COMPLETED]
 **Goal:** Define a comprehensive schema for surgical scene definitions.
 
 **Tasks:**
@@ -465,7 +465,7 @@ surg-rl evaluate --scene scene.json --model trained_model.zip --episodes 10
 | Step | Description | Status | Completion Date |
 |------|-------------|--------|-----------------|
 | 1 | Project Structure and Dependencies | COMPLETED | 2026-04-05 |
-| 2 | Scene Schema and File Format | PENDING | - |
+| 2 | Scene Schema and File Format | COMPLETED | 2026-04-05 |
 | 3 | Scene Generation Module | PENDING | - |
 | 4 | Scene Loader and Parser | PENDING | - |
 | 5 | Simulator Abstraction Layer | PENDING | - |
@@ -486,9 +486,9 @@ surg-rl evaluate --scene scene.json --model trained_model.zip --episodes 10
 
 ## Current Work Location
 
-**Active Step:** 2
-**Last Completed:** 1
-**Next Action:** Define scene schema and file format (Step 2)
+**Active Step:** 3
+**Last Completed:** 2
+**Next Action:** Implement scene generation module (Step 3)
 
 
 ---
