@@ -1,0 +1,86 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Environment variables
+.env
+
+# Project-specific
+logs/
+*.log
+models/
+checkpoints/
+
+# Generated scenes (keep structure but ignore generated files)
+scenes/*.json
+scenes/*.yaml
+!scenes/.gitkeep
+
+# Assets (keep structure but ignore binary files)
+assets/meshes/*.stl
+assets/meshes/*.obj
+assets/meshes/*.dae
+assets/textures/*.png
+assets/textures/*.jpg
+!assets/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Distribution
+*.manifest
+*.spec
+
+# Logs
+*.log
+logs/
+
+# Local configuration
+.env.local
+.env.*.local

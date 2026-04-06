@@ -1,0 +1,28 @@
+# Default configuration for Surg-RL
+# This file shows available configuration options
+
+# Simulator settings
+simulator:
+  type: mujoco  # or pybullet
+  timestep: 0.002
+  
+# Rendering settings
+rendering:
+  width: 640
+  height: 480
+  fps: 60
+  
+# Domain randomization
+randomization:
+  enabled: false
+  physics: true
+  visual: true
+  dynamics: true
+  
+# RL training settings
+training:
+  algorithm: PPO
+  total_timesteps: 100000
+  learning_rate: 0.0003
+  batch_size: 64
+  n_steps: 2048
