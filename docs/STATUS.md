@@ -1,6 +1,6 @@
 # Project Status
 
-**Last Updated:** 2026-04-06
+**Last Updated:** 2026-04-07
 
 ## Current Status Summary
 
@@ -11,11 +11,11 @@
 | Scene Generation | ✅ Complete | LLM/VLM parsers, templates |
 | Scene Loader | ✅ Complete | JSON/YAML loading, caching |
 | Simulator Layer | ✅ Complete | MuJoCo + PyBullet backends |
-| Environment Controller | ❌ Pending | Not started |
+| Environment Controller | ✅ Complete | Domain randomization, curriculum, adaptive difficulty |
 | RL Training | ❌ Pending | Not started |
 | Demos | ⏳ Partial | Basic visualization demo working |
 
-**Active Step:** 6 (Dynamic Environment Controller)
+**Active Step:** 7 (RL Training Pipeline)
 
 ---
 
@@ -55,6 +55,14 @@
 - Primitive fallback for missing assets
 - Rendering support (rgb_array, human)
 
+### ✅ Step 6: Dynamic Environment Controller
+- BaseController abstract class defining controller interface
+- ParameterRandomizer for physics/visual/dynamics randomization
+- CurriculumScheduler for progressive learning stages
+- AdaptiveDifficultyController for performance-based difficulty
+- EnvironmentController integrating all components
+- Full test coverage (37 tests)
+
 ---
 
 ## In Progress
@@ -79,15 +87,8 @@
 
 ## Pending Steps
 
-### ❌ Step 6: Dynamic Environment Controller
-Next to implement. Will include:
-- Real-time parameter randomization
-- Domain randomization integration
-- Curriculum learning support
-- Adaptive difficulty adjustment
-
 ### ❌ Step 7: RL Training Pipeline
-After Step 6. Will include:
+Next to implement. Will include:
 - Observation/action space definitions
 - Gymnasium environment wrapper
 - Custom reward functions
@@ -126,24 +127,50 @@ surg-rl generate --text "Create a suturing scene" --provider openai
 surg-rl generate --text "Create a scene" --provider ollama
 ```
 
+### Domain Randomization
+Use the environment controller for domain randomization:
+
+```python
+from surg_rl.dynamics import EnvironmentController
+from surg_rl.scene_definition import SceneLoader
+
+scene = SceneLoader.load("scenes/suturing.json")
+controller = EnvironmentController.from_scene(scene)
+
+# Start training
+controller.start()
+params = controller.reset(seed=42)
+
+# Apply parameters to simulator...
+# Run episode...
+
+info = controller.episode_end(
+    {"reward": 100, "success": True},
+    simulator,
+)
+```
+
 ---
 
 ## Test Results
 
 ```bash
 pytest tests/ -v
-# Result: 171 passed, 2 skipped
+# Result: 208 tests (207 passed, 1 skipped)
+# Note: 1 async test requires pytest-asyncio configuration
 ```
 
 ---
 
 ## Known Limitations
 
-1. **Missing Asset Files**: The `assets/` directory doesn't contain actual mesh/URDF files. The simulator uses primitive shapes (boxes, spheres, cylinders) as fallbacks.
+1. **Missing Asset Files**: The `assets/` directory does not contain actual mesh/URDF files. The simulator uses primitive shapes (boxes, spheres, cylinders) as fallbacks.
 
 2. **No Robot Control**: Joint control is not implemented. Objects are static in the demo.
 
-3. **No RL Training**: The RL training pipeline (Steps 6-7) is not implemented yet.
+3. **No RL Training**: The RL training pipeline (Step 7) is not implemented yet.
+
+4. **Async Test**: One async test in test_scene_generation.py needs pytest-asyncio configuration.
 
 ---
 
@@ -155,9 +182,18 @@ RLProj/
 │   ├── scene_definition/    # Scene schema and loader
 │   ├── scene_generation/    # LLM/VLM parsers
 │   ├── simulators/          # MuJoCo/PyBullet backends
+│   ├── dynamics/            # Environment controllers (NEW!)
+│   │   ├── __init__.py
+│   │   ├── base_controller.py
+│   │   ├── parameter_randomizer.py
+│   │   ├── curriculum.py
+│   │   ├── adaptive_difficulty.py
+│   │   └── environment_controller.py
 │   ├── utils/               # Config, logging
 │   └── cli.py               # Command line interface
-├── tests/                   # pytest tests (171 tests)
+├── tests/                   # pytest tests (208 tests)
+│   ├── test_dynamics.py     # Dynamics module tests (NEW!)
+│   └── ...
 ├── docs/                    # Documentation
 ├── scenes/                  # Example scene files
 ├── demos/                   # Demo scripts
@@ -168,6 +204,10 @@ RLProj/
 
 ## Next Actions
 
-1. **Step 6**: Implement dynamic environment controller
-2. **Step 7**: Implement RL training pipeline
-3. **Step 8**: Complete demo scripts with robot control
+1. **Step 7**: Implement RL training pipeline
+   - Define observation/action spaces
+   - Create Gymnasium environment wrapper
+   - Implement custom reward functions
+   - Add training monitoring and checkpoint management
+
+2. **Step 8**: Complete demo scripts with robot control

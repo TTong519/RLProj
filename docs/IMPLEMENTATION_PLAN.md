@@ -29,6 +29,7 @@ This project creates an AI-powered system for generating surgical robotics train
 │  - Asset references (meshes, textures, materials)                  │
 │  - Physics parameters                                              │
 │  - Robot and tissue definitions                                    │
+│  - Domain randomization config                                     │
 └───────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
@@ -49,10 +50,19 @@ This project creates an AI-powered system for generating surgical robotics train
                                 ▼
 ┌───────────────────────────────────────────────────────────────────┐
 │              Dynamic Environment Controller                         │
-│  - Real-time parameter randomization                               │
-│  - Domain randomization support                                    │
-│  - Curriculum learning integration                                 │
-│  - Adaptive difficulty adjustment                                  │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │              EnvironmentController                            │  │
+│  │  - ParameterRandomizer (physics, visual, dynamics)            │  │
+│  │  - CurriculumScheduler (Easy → Medium → Hard → Expert)       │  │
+│  │  - AdaptiveDifficultyController (performance-based)            │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                                                                    │
+│  Features:                                                         │
+│  - Real-time parameter randomization                              │
+│  - Domain randomization support (physics, visual, dynamics)       │
+│  - Curriculum learning with auto-advancement                       │
+│  - Adaptive difficulty based on agent performance                 │
+│  - Action/observation noise injection                             │
 └───────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
@@ -62,6 +72,7 @@ This project creates an AI-powered system for generating surgical robotics train
 │  - Custom reward functions for surgical tasks                      │
 │  - Observation and action space definitions                        │
 │  - Training monitoring and logging                                 │
+│  - Checkpoint management                                            │
 └───────────────────────────────────────────────────────────────────┘
 ```
 
@@ -76,12 +87,12 @@ This project creates an AI-powered system for generating surgical robotics train
 | 3 | Scene Generation Module | ✅ COMPLETED | 2026-04-06 |
 | 4 | Scene Loader and Parser | ✅ COMPLETED | 2026-04-06 |
 | 5 | Simulator Abstraction Layer | ✅ COMPLETED | 2026-04-06 |
-| 6 | Dynamic Environment Controller | ⏳ PENDING | - |
+| 6 | Dynamic Environment Controller | ✅ COMPLETED | 2026-04-07 |
 | 7 | RL Training Pipeline | ⏳ PENDING | - |
 | 8 | CLI Interface and Demos | ⏳ PARTIAL | In Progress |
 
-**Active Step:** 6 (Dynamic Environment Controller)
-**Last Completed:** 5 (Simulator Abstraction Layer)
+**Active Step:** 7 (RL Training Pipeline)
+**Last Completed:** 6 (Dynamic Environment Controller)
 
 ---
 
@@ -150,17 +161,60 @@ This project creates an AI-powered system for generating surgical robotics train
 
 ---
 
-### Step 6: Dynamic Environment Controller [STATUS: PENDING]
+### Step 6: Dynamic Environment Controller [STATUS: COMPLETED]
 **Goal:** Implement real-time environment modification during training.
 
-**Tasks:**
-- [ ] Create environment controller base class
-- [ ] Implement parameter randomization
-- [ ] Domain randomization integration
-- [ ] Curriculum learning support
-- [ ] Adaptive difficulty adjustment
+**Completed:**
+- ✅ BaseController abstract class with lifecycle management
+- ✅ ParameterRandomizer for physics/visual/dynamics randomization
+- ✅ CurriculumScheduler for progressive learning (Easy → Medium → Hard → Expert)
+- ✅ AdaptiveDifficultyController for performance-based difficulty adjustment
+- ✅ EnvironmentController integrating all components
+- ✅ Full test coverage (37 tests)
 
-**Next Action:** Implement dynamic environment controller
+**Key Features:**
+- Domain randomization configurable via `DomainRandomizationConfig`
+- 4-stage curriculum with auto-advancement based on success rate
+- Proportional/linear/exponential difficulty adaptation strategies
+- Reproducible parameter sampling with seeds
+- Callback system for episode events
+- Integration with scene definitions via `EnvironmentController.from_scene()`
+
+**Module Structure:**
+```
+src/surg_rl/dynamics/
+├── __init__.py              # Module exports
+├── base_controller.py       # Abstract base class
+├── parameter_randomizer.py  # Domain randomization
+├── curriculum.py            # Curriculum learning
+├── adaptive_difficulty.py   # Adaptive difficulty
+└── environment_controller.py # Main controller
+```
+
+**Usage Example:**
+```python
+from surg_rl.dynamics import EnvironmentController
+from surg_rl.scene_definition import SceneLoader
+
+# Create from scene with all features enabled
+scene = SceneLoader().load("scenes/suturing.json")
+controller = EnvironmentController.from_scene(
+    scene,
+    use_curriculum=True,
+    use_adaptive=True
+)
+
+# Training loop
+controller.start()
+for episode in range(1000):
+    params = controller.reset(seed=episode)
+    # Apply params to simulator...
+    # Run episode...
+    info = controller.episode_end(
+        {"reward": reward, "success": success},
+        simulator
+    )
+```
 
 ---
 
@@ -168,11 +222,28 @@ This project creates an AI-powered system for generating surgical robotics train
 **Goal:** Create RL training infrastructure with Stable-Baselines3.
 
 **Tasks:**
-- [ ] Define observation/action spaces
-- [ ] Create Gymnasium environment wrapper
+- [ ] Define observation/action spaces for surgical tasks
+- [ ] Create Gymnasium environment wrapper (SurgicalEnv)
 - [ ] Implement custom reward functions
-- [ ] Training loop with monitoring
-- [ ] Checkpoint management
+  - Distance-based rewards
+  - Success/failure rewards
+  - Collision penalties
+  - Tissue damage penalties
+- [ ] Training loop with monitoring (TensorBoard)
+- [ ] Checkpoint management (save/load)
+- [ ] Hyperparameter configuration
+
+**Planned Module Structure:**
+```
+src/surg_rl/rl/
+├── __init__.py
+├── environment.py      # Gymnasium environment wrapper
+├── rewards.py          # Custom reward functions
+├── observation.py     # Observation space definitions
+├── action.py          # Action space definitions
+├── training.py        # Training loop and monitoring
+└── callbacks.py       # Custom SB3 callbacks
+```
 
 ---
 
@@ -184,9 +255,9 @@ This project creates an AI-powered system for generating surgical robotics train
 - ✅ Demo script with visualization window
 
 **Remaining:**
-- [ ] Training command
-- [ ] Evaluation command
-- [ ] Complete demo scripts
+- [ ] Training command (`surg-rl train`)
+- [ ] Evaluation command (`surg-rl evaluate`)
+- [ ] Complete demo scripts with robot control
 - [ ] Performance benchmarks
 
 ---
@@ -198,7 +269,10 @@ All steps must pass:
 pytest tests/ -v
 ```
 
-Current: **171 tests passing, 2 skipped**
+Current: **208 tests (207 passed, 1 skipped)**
+- Step 1-5: 170 tests
+- Step 6: 37 tests (NEW)
+- Note: 1 async test requires pytest-asyncio configuration
 
 ---
 
@@ -210,3 +284,20 @@ Current: **171 tests passing, 2 skipped**
 - docs/SCENE_FORMAT.md - Scene format specification
 - docs/ARCHITECTURE.md - Architecture overview
 - docs/TESTING.md - Testing guide
+- docs/STATUS.md - Progress tracker
+
+---
+
+## Next Steps
+
+1. **Step 7: RL Training Pipeline**
+   - Implement Gymnasium environment wrapper
+   - Define observation/action spaces
+   - Create reward functions
+   - Integrate with Stable-Baselines3
+   - Add training monitoring
+
+2. **Step 8: Complete Demos**
+   - Add training CLI command
+   - Create evaluation scripts
+   - Document example workflows

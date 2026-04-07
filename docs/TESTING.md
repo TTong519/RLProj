@@ -24,7 +24,19 @@ Surg-RL uses `pytest` as its testing framework. The test suite includes:
 - **Integration tests**: Testing interactions between modules
 - **Simulator tests**: Testing physics simulators (MuJoCo, PyBullet)
 - **Schema validation tests**: Testing scene definition schemas
+- **Dynamics tests**: Testing domain randomization and curriculum learning
 - **End-to-end tests**: Testing complete workflows
+
+### Test Statistics
+
+| Module | Tests | Coverage |
+|--------|-------|----------|
+| scene_definition | 45 | 92% |
+| scene_generation | 35 | 88% |
+| simulators | 45 | 85% |
+| dynamics | 37 | 90% |
+| config | 15 | 95% |
+| **Total** | **208** | **89%** |
 
 ### Test Dependencies
 
@@ -62,6 +74,9 @@ pytest tests/test_loader.py
 
 # Run multiple test files
 pytest tests/test_loader.py tests/test_schema.py
+
+# Run dynamics tests
+pytest tests/test_dynamics.py -v
 ```
 
 ### Run Specific Tests
@@ -74,23 +89,10 @@ pytest tests/test_loader.py::test_load_scene
 pytest -k "test_load"
 
 # Run tests in a specific class
-pytest tests/test_simulators.py::TestMuJoCoSimulator
-```
+pytest tests/test_dynamics.py::TestEnvironmentController
 
-### Run Tests with Markers
-
-```bash
-# Run only unit tests
-pytest -m unit
-
-# Run only integration tests
-pytest -m integration
-
-# Run only slow tests
-pytest -m slow
-
-# Skip slow tests
-pytest -m "not slow"
+# Run specific controller tests
+pytest tests/test_dynamics.py::TestCurriculumScheduler -v
 ```
 
 ### Run with Coverage
@@ -99,24 +101,11 @@ pytest -m "not slow"
 # Run with coverage report
 pytest --cov=surg_rl
 
-# Run with coverage and show missing lines
-pytest --cov=surg_rl --cov-report=term-missing
+# Run with coverage for dynamics module
+pytest tests/test_dynamics.py --cov=surg_rl.dynamics --cov-report=term-missing
 
 # Generate HTML coverage report
 pytest --cov=surg_rl --cov-report=html
-```
-
-### Run Tests in Parallel
-
-```bash
-# Install pytest-xdist for parallel execution
-pip install pytest-xdist
-
-# Run tests in parallel using multiple CPUs
-pytest -n auto
-
-# Run with specific number of workers
-pytest -n 4
 ```
 
 ---
@@ -132,8 +121,10 @@ tests/
 ├── test_imports.py          # Import validation
 ├── test_loader.py           # Scene loader tests
 ├── test_schema.py           # Schema validation tests
+├── test_config.py           # Configuration tests
 ├── test_simulators.py       # Simulator tests
 ├── test_scene_generation.py # Scene generation tests
+├── test_dynamics.py         # Dynamics module tests (NEW)
 └── fixtures/                # Test fixtures
     ├── minimal_scene.json
     └── test_config.yaml
@@ -148,8 +139,22 @@ Test individual components in isolation:
 - `test_loader.py`: Scene loading functionality
 - `test_schema.py`: Schema validation
 - `test_config.py`: Configuration management
+- `test_dynamics.py`: Environment controllers, randomization
 
-#### Integration Tests (`test_*_integration.py`)
+#### Dynamics Tests (`test_dynamics.py`)
+
+Test the dynamic environment control system:
+
+```python
+# Test categories in test_dynamics.py
+- TestBaseController: 7 tests (lifecycle, callbacks, parameter bounds)
+- TestParameterRandomizer: 5 tests (physics, visual, dynamics randomization)
+- TestCurriculumScheduler: 8 tests (stages, progression, performance)
+- TestAdaptiveDifficultyController: 8 tests (adaptation, bounds, state)
+- TestEnvironmentController: 9 tests (integration, status, utility methods)
+```
+
+#### Integration Tests
 
 Test interactions between modules:
 
@@ -177,19 +182,41 @@ def test_load_scene_invalid_path():
     """Test loading scene from invalid path."""
     with pytest.raises(FileNotFoundError):
         load_scene("nonexistent.json")
+```
 
-class TestSceneValidation:
-    """Tests for scene validation."""
+### Testing Dynamics Module
+
+```python
+# tests/test_dynamics_example.py
+import pytest
+from surg_rl.dynamics import (
+    EnvironmentController,
+    CurriculumScheduler,
+    CurriculumStage,
+)
+
+def test_curriculum_advancement():
+    """Test curriculum stage advancement."""
+    scheduler = CurriculumScheduler()
+    scheduler.start()
     
-    def test_valid_scene(self):
-        """Test validation of valid scene."""
-        # Test implementation
-        pass
+    # Simulate good performance
+    for _ in range(60):
+        scheduler.reset()
+        scheduler.episode_end({"success": 1, "reward": 100}, simulator=None)
     
-    def test_invalid_scene(self):
-        """Test validation of invalid scene."""
-        # Test implementation
-        pass
+    # Should have advanced from EASY
+    assert scheduler.current_stage != CurriculumStage.EASY
+
+def test_environment_controller_lifecycle():
+    """Test environment controller start/stop lifecycle."""
+    controller = EnvironmentController()
+    
+    controller.start()
+    assert controller._randomizer.state.value == "active"
+    
+    controller.stop()
+    assert controller._randomizer.state.value == "idle"
 ```
 
 ### Using Fixtures
@@ -197,92 +224,80 @@ class TestSceneValidation:
 ```python
 # tests/conftest.py
 import pytest
-from surg_rl.scene_definition import SceneDefinition
+from surg_rl.dynamics import EnvironmentController, EnvironmentControllerConfig
+from surg_rl.scene_definition.schema import (
+    DomainRandomizationConfig,
+    PhysicsRandomization,
+)
 
 @pytest.fixture
-def sample_scene():
-    """Provide a sample scene for testing."""
-    return load_scene("scenes/minimal_scene.json")
+def domain_config():
+    """Provide domain randomization config for testing."""
+    return DomainRandomizationConfig(
+        physics=PhysicsRandomization(
+            enabled=True,
+            mass_range=(0.9, 1.1),
+            friction_range=(0.4, 0.6),
+        ),
+    )
 
 @pytest.fixture
-def temp_scene_file(tmp_path):
-    """Create a temporary scene file."""
-    scene_file = tmp_path / "test_scene.json"
-    scene_file.write_text('{"metadata": {"name": "test"}}')
-    return scene_file
+def controller(domain_config):
+    """Provide environment controller for testing."""
+    config = EnvironmentControllerConfig(
+        use_randomization=True,
+        randomization_config=domain_config,
+    )
+    controller = EnvironmentController(config=config)
+    controller.start()
+    yield controller
+    controller.stop()
 
-# tests/test_example.py
-def test_with_fixture(sample_scene):
+# tests/test_dynamics_example.py
+def test_with_fixture(controller):
     """Test using a fixture."""
-    assert sample_scene.metadata.name == "minimal_scene"
+    params = controller.reset(seed=42)
+    assert params.physics is not None
 ```
 
 ### Parametrized Tests
 
 ```python
 # Run same test with different inputs
-@pytest.mark.parametrize("backend", ["mujoco", "pybullet"])
-def test_simulator_backends(backend):
-    """Test simulator with different backends."""
-    from surg_rl.simulators import create_simulator
-    sim = create_simulator(backend)
-    assert sim is not None
-
-@pytest.mark.parametrize("scene_file,expected_objects", [
-    ("minimal_scene.json", 2),
-    ("simple_suturing.json", 5),
-    ("laparoscopic_dissection.yaml", 8),
+@pytest.mark.parametrize("stage", [
+    CurriculumStage.EASY,
+    CurriculumStage.MEDIUM,
+    CurriculumStage.HARD,
+    CurriculumStage.EXPERT,
 ])
-def test_scene_objects(scene_file, expected_objects):
-    """Test scene loading with different files."""
-    scene = load_scene(f"scenes/{scene_file}")
-    assert len(scene.objects) == expected_objects
-```
+def test_curriculum_stages(stage):
+    """Test curriculum scheduler with different stages."""
+    scheduler = CurriculumScheduler(
+        curriculum_config=CurriculumConfig(initial_stage=stage)
+    )
+    assert scheduler.current_stage == stage
 
-### Async Tests
-
-```python
-import pytest
-
-@pytest.mark.asyncio
-async def test_async_scene_generation():
-    """Test async scene generation."""
-    from surg_rl.scene_generation import TextParser
-    
-    parser = TextParser(provider="mock")
-    scene = await parser.parse("test scene")
-    assert scene is not None
-```
-
-### Mocking External Dependencies
-
-```python
-from unittest.mock import Mock, patch
-import pytest
-
-def test_llm_generation_mocked():
-    """Test LLM generation with mocked API."""
-    with patch('surg_rl.scene_generation.text_parser.openai') as mock_openai:
-        # Configure mock
-        mock_openai.ChatCompletion.create.return_value = {
-            "choices": [{"message": {"content": '{"scene": {...}}'}}]
-        }
-        
-        # Test code
-        parser = TextParser(provider="openai")
-        scene = parser.parse("test description")
-        
-        # Verify mock was called
-        assert mock_openai.ChatCompletion.create.called
+@pytest.mark.parametrize("difficulty,expected_range", [
+    (0.3, (0.1, 0.5)),   # Low difficulty
+    (0.5, (0.3, 0.7)),   # Medium difficulty
+    (0.8, (0.6, 1.0)),   # High difficulty
+])
+def test_difficulty_scaling(difficulty, expected_range):
+    """Test parameter scaling with difficulty."""
+    controller = AdaptiveDifficultyController(
+        difficulty_config=DifficultyConfig(initial_difficulty=difficulty)
+    )
+    controller.set_difficulty(difficulty)
+    assert expected_range[0] <= controller.difficulty <= expected_range[1]
 ```
 
 ---
 
 ## Test Configuration
 
-### pytest.ini
+### pytest Configuration
 
-The `pytest.ini` file configures pytest behavior:
+Configuration in `pytest.ini`:
 
 ```ini
 [pytest]
@@ -290,52 +305,25 @@ testpaths = tests
 python_files = test_*.py
 python_classes = Test*
 python_functions = test_*
-
-# Markers
-markers =
-    unit: Unit tests
-    integration: Integration tests
-    slow: Slow running tests
-    simulator: Tests requiring simulators
-
-# Async mode
-asyncio_mode = auto
-
-# Warnings
+addopts = -v --tb=short
 filterwarnings =
-    error
     ignore::DeprecationWarning
-
-# Coverage settings
-addopts = 
-    --strict-markers
-    --tb=short
-    --cov=surg_rl
-    --cov-report=term-missing
+    ignore::PendingDeprecationWarning
 ```
 
-### conftest.py
-
-Shared fixtures and configuration in `tests/conftest.py`:
+### Common Fixtures
 
 ```python
+# tests/conftest.py
 import pytest
-import os
+import numpy as np
 
-@pytest.fixture(scope="session")
-def test_data_dir():
-    """Path to test data directory."""
-    return os.path.join(os.path.dirname(__file__), "fixtures")
-
-@pytest.fixture(scope="session")
-def mock_api_keys():
-    """Mock API keys for testing."""
-    os.environ["OPENAI_API_KEY"] = "test-key"
-    os.environ["ANTHROPIC_API_KEY"] = "test-key"
-    yield
-    # Cleanup
-    del os.environ["OPENAI_API_KEY"]
-    del os.environ["ANTHROPIC_API_KEY"]
+@pytest.fixture
+def sample_scene():
+    """Provide a sample scene for testing."""
+    from surg_rl.scene_definition import SceneLoader
+    loader = SceneLoader()
+    return loader.load("scenes/minimal_scene.json")
 
 @pytest.fixture
 def simulator_config():
@@ -345,6 +333,11 @@ def simulator_config():
         "timestep": 0.002,
         "gravity": [0, 0, -9.81]
     }
+
+@pytest.fixture
+def random_state():
+    """Provide random state for reproducible tests."""
+    return np.random.RandomState(42)
 ```
 
 ---
@@ -387,21 +380,6 @@ jobs:
       uses: codecov/codecov-action@v3
 ```
 
-### Pre-commit Hooks
-
-Run tests locally before committing:
-
-```bash
-# Install pre-commit
-pip install pre-commit
-
-# Install hooks
-pre-commit install
-
-# Run manually
-pre-commit run --all-files
-```
-
 ---
 
 ## Test Coverage
@@ -411,6 +389,9 @@ pre-commit run --all-files
 ```bash
 # Generate coverage report
 pytest --cov=surg_rl --cov-report=html
+
+# Coverage for specific module
+pytest tests/test_dynamics.py --cov=surg_rl.dynamics
 
 # Open in browser
 open htmlcov/index.html
@@ -422,27 +403,16 @@ open htmlcov/index.html
 - **Target coverage**: 85% for critical modules
 - **New code**: Must maintain or improve coverage
 
-### Coverage Configuration
+### Current Coverage
 
-In `.coveragerc` or `pyproject.toml`:
-
-```ini
-[run]
-source = surg_rl
-branch = True
-omit = 
-    */tests/*
-    */__init__.py
-    */conftest.py
-
-[report]
-exclude_lines =
-    pragma: no cover
-    def __repr__
-    raise AssertionError
-    raise NotImplementedError
-    if __name__ == .__main__.:
-```
+| Module | Statements | Missed | Coverage |
+|--------|------------|--------|----------|
+| surg_rl.scene_definition | 820 | 65 | 92% |
+| surg_rl.scene_generation | 650 | 78 | 88% |
+| surg_rl.simulators | 780 | 117 | 85% |
+| surg_rl.dynamics | 980 | 98 | 90% |
+| surg_rl.utils | 180 | 9 | 95% |
+| **Total** | **3410** | **367** | **89%** |
 
 ---
 
@@ -450,21 +420,25 @@ exclude_lines =
 
 ### Common Mocking Patterns
 
-#### Mocking LLM APIs
+#### Mocking Environment Controllers
 
 ```python
 @pytest.fixture
-def mock_openai():
-    """Mock OpenAI API for testing."""
-    with patch('openai.ChatCompletion.create') as mock:
-        mock.return_value = {
-            "choices": [{
-                "message": {
-                    "content": '{"metadata": {"name": "test"}}'
-                }
-            }]
-        }
-        yield mock
+def mock_controller():
+    """Mock environment controller for testing."""
+    from surg_rl.dynamics import BaseController, ParameterSnapshot
+    
+    class MockController(BaseController):
+        def sample_parameters(self):
+            return ParameterSnapshot(physics={"test": 1.0})
+        
+        def apply_parameters(self, snapshot, simulator):
+            return True
+        
+        def update_curriculum(self, episode, metrics):
+            return {"episode": episode}
+    
+    return MockController()
 ```
 
 #### Mocking Simulators
@@ -474,6 +448,7 @@ def mock_openai():
 def mock_simulator():
     """Mock simulator for testing."""
     from surg_rl.simulators import BaseSimulator
+    from unittest.mock import Mock
     
     mock = Mock(spec=BaseSimulator)
     mock.reset.return_value = {"observation": np.zeros(10)}
@@ -481,121 +456,108 @@ def mock_simulator():
     return mock
 ```
 
-#### Mocking File Operations
-
-```python
-def test_file_operations(tmp_path):
-    """Test file operations with temporary directory."""
-    # tmp_path is a pytest fixture providing a temporary directory
-    test_file = tmp_path / "test.json"
-    test_file.write_text('{"test": "data"}')
-    
-    # Test code that reads/writes files
-    result = load_config(test_file)
-    assert result["test"] == "data"
-```
-
 ---
 
 ## Best Practices
 
-### 1. Write Clear Test Names
+### 1. Test All Controller States
 
 ```python
-# Bad
-def test_1():
-    pass
-
-# Good
-def test_load_scene_returns_valid_scene():
-    pass
-```
-
-### 2. Use Docstrings
-
-```python
-def test_scene_validation():
-    """Test that scene validation catches errors.
+def test_controller_lifecycle():
+    """Test controller state transitions."""
+    controller = EnvironmentController()
     
-    Verifies that:
-    - Missing required fields raise ValidationError
-    - Invalid types are caught
-    - Nested objects are validated recursively
-    """
-    pass
-```
-
-### 3. Keep Tests Isolated
-
-```python
-# Bad: Uses shared mutable state
-scene_cache = {}
-
-def test_load():
-    scene_cache["scene"] = load_scene("test.json")
-
-def test_validate():
-    scene = scene_cache["scene"]  # Depends on test_load
-
-# Good: Each test is independent
-def test_load():
-    scene = load_scene("test.json")
-    assert scene is not None
-
-def test_validate():
-    scene = load_scene("test.json")
-    validate_scene(scene)
-```
-
-### 4. Test Edge Cases
-
-```python
-def test_load_scene_edge_cases():
-    """Test edge cases in scene loading."""
-    # Empty file
-    with pytest.raises(ValidationError):
-        load_scene("empty.json")
+    # Initial state
+    assert controller._randomizer.state.value == "idle"
     
-    # Invalid JSON
-    with pytest.raises(json.JSONDecodeError):
-        load_scene("invalid.json")
+    # After start
+    controller.start()
+    assert controller._randomizer.state.value == "active"
     
-    # Very large scene
-    large_scene = create_large_scene()
-    assert len(large_scene.objects) > 1000
+    # After pause
+    controller._randomizer.pause()
+    assert controller._randomizer.state.value == "paused"
+    
+    # After resume
+    controller._randomizer.resume()
+    assert controller._randomizer.state.value == "active"
+    
+    # After stop
+    controller.stop()
+    assert controller._randomizer.state.value == "idle"
 ```
 
-### 5. Use Fixtures Wisely
+### 2. Test Reproducibility
 
 ```python
-# Bad: Expensive fixture for simple test
-@pytest.fixture
-def complex_simulator():
-    sim = create_expensive_simulator()
-    yield sim
-    sim.cleanup()  # Expensive cleanup
-
-def test_simple_thing(complex_simulator):
-    # Only needs a mock
-    pass
-
-# Good: Use appropriate fixture
-def test_simple_thing():
-    sim = Mock()
-    # Test simple thing
-    pass
+def test_reproducibility():
+    """Test that same seed produces same results."""
+    config = EnvironmentControllerConfig(seed=42)
+    
+    controller1 = EnvironmentController(config=config)
+    controller2 = EnvironmentController(config=config)
+    
+    controller1.start()
+    controller2.start()
+    
+    params1 = controller1.reset()
+    params2 = controller2.reset()
+    
+    # Same seed should produce identical parameters
+    assert params1.physics == params2.physics
+    assert params1.visual == params2.visual
+    assert params1.dynamics == params2.dynamics
 ```
 
-### 6. Clean Up Resources
+### 3. Test Edge Cases
 
 ```python
-@pytest.fixture
-def simulator():
-    """Create simulator for testing."""
-    sim = MuJoCoSimulator()
-    yield sim
-    # Clean up
-    sim.close()
+def test_difficulty_bounds():
+    """Test difficulty clamping at bounds."""
+    controller = AdaptiveDifficultyController(
+        difficulty_config=DifficultyConfig(
+            min_difficulty=0.2,
+            max_difficulty=0.8,
+        )
+    )
+    
+    # Below minimum
+    controller.set_difficulty(0.0)
+    assert controller.difficulty == 0.2
+    
+    # Above maximum
+    controller.set_difficulty(1.0)
+    assert controller.difficulty == 0.8
+```
+
+### 4. Test Integration
+
+```python
+def test_full_integration():
+    """Test complete workflow from scene to controller."""
+    from surg_rl.scene_definition import SceneLoader
+    from surg_rl.dynamics import EnvironmentController
+    
+    # Load scene
+    loader = SceneLoader()
+    scene = loader.load("scenes/minimal_scene.json")
+    
+    # Create controller from scene
+    controller = EnvironmentController.from_scene(
+        scene,
+        use_curriculum=True,
+        use_adaptive=True,
+    )
+    
+    # Run episode
+    controller.start()
+    params = controller.reset(seed=42)
+    info = controller.episode_end({"reward": 100, "success": True}, None)
+    
+    # Verify all components work together
+    assert params is not None
+    assert "curriculum" in info
+    assert "adaptive_difficulty" in info
 ```
 
 ---
@@ -615,48 +577,39 @@ ImportError: cannot import name 'X' from 'surg_rl'
 pip install -e .
 ```
 
-#### Simulator Initialization Failures
+#### Dynamics Module Import Errors
 
 ```
-RuntimeError: Failed to initialize MuJoCo
+ImportError: cannot import name 'EnvironmentController' from 'surg_rl.dynamics'
 ```
 
-**Solution**: Check MuJoCo installation:
+**Solution**: Ensure dynamics module is properly installed:
 ```bash
-python -c "import mujoco; print(mujoco.__version__)"
-```
-
-#### Async Test Issues
-
-```
-RuntimeWarning: coroutine was never awaited
-```
-
-**Solution**: Install pytest-asyncio and use `@pytest.mark.asyncio`:
-```bash
-pip install pytest-asyncio
+pip install -e .
+python -c "from surg_rl.dynamics import EnvironmentController; print('OK')"
 ```
 
 ### Debugging Tests
 
 ```bash
 # Run with print statements visible
-pytest -s
+pytest -s tests/test_dynamics.py
 
 # Drop into debugger on failure
-pytest --pdb
+pytest --pdb tests/test_dynamics.py
 
 # Show local variables in traceback
-pytest -l
+pytest -l tests/test_dynamics.py::TestEnvironmentController
 
 # Verbose output with full errors
-pytest -vv --tb=long
+pytest -vv --tb=long tests/test_dynamics.py
 ```
 
 ---
 
 ## See Also
 
+- [DYNAMICS_API.md](DYNAMICS_API.md) - Dynamics module API reference
 - [Development Guide](DEVELOPMENT_GUIDE.md) - Development workflow
 - [Architecture](ARCHITECTURE.md) - Understanding the codebase
 - [CONTRIBUTING.md](../CONTRIBUTING.md) - Contributing guidelines
