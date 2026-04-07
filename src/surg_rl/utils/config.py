@@ -62,7 +62,7 @@ class Settings(BaseSettings):
         return self.assets_dir / "materials"
 
     # LLM Configuration for scene generation
-    llm_provider: Literal["openai", "anthropic"] = Field(
+    llm_provider: Literal["openai", "anthropic", "ollama"] = Field(
         default="openai",
         description="LLM provider for scene generation",
     )
@@ -75,6 +75,28 @@ class Settings(BaseSettings):
     llm_api_key: Optional[str] = Field(
         default=None,
         description="API key for LLM provider",
+    )
+
+    # Ollama Configuration
+    ollama_base_url: str = Field(
+        default="http://localhost:11434",
+        description="Ollama API base URL",
+    )
+
+    ollama_model: str = Field(
+        default="llama3.2",
+        description="Default Ollama model for text generation",
+    )
+
+    ollama_vision_model: str = Field(
+        default="llava",
+        description="Default Ollama model for vision tasks",
+    )
+
+    ollama_timeout: int = Field(
+        default=300,
+        ge=1,
+        description="Timeout in seconds for Ollama API calls",
     )
 
     llm_temperature: float = Field(

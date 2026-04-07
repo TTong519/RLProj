@@ -67,6 +67,24 @@ from .schema import (
     SceneDefinition,
 )
 
+from .loader import (
+    # Exceptions
+    SceneLoaderError,
+    SceneFileNotFoundError,
+    SceneValidationError,
+    SceneParseError,
+    AssetLoadError,
+    # Classes
+    SceneCache,
+    AssetManager,
+    SceneLoader,
+    # Functions
+    get_loader,
+    reset_loader,
+    load_scene,
+    save_scene,
+)
+
 __all__ = [
     # Enums
     "SimulatorType",
@@ -127,4 +145,19 @@ __all__ = [
     # Scene
     "Metadata",
     "SceneDefinition",
+    # Loader exceptions
+    "SceneLoaderError",
+    "SceneFileNotFoundError",
+    "SceneValidationError",
+    "SceneParseError",
+    "AssetLoadError",
+    # Loader classes
+    "SceneCache",
+    "AssetManager",
+    "SceneLoader",
+    # Loader functions
+    "get_loader",
+    "reset_loader",
+    "load_scene",
+    "save_scene",
 ]

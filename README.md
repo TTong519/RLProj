@@ -1,173 +1,365 @@
-# Surgical Robotics RL Training System
+# Surg-RL: Surgical Robotics Reinforcement Learning Training System
 
-AI-powered surgical robotics scene generation and reinforcement learning training system.
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-## Overview
+**Surg-RL** is a comprehensive framework for training reinforcement learning agents in surgical robotics simulations. It provides a unified interface for scene generation, physics simulation, and RL training with support for both cloud LLM APIs and local models via Ollama.
 
-This system generates complete simulation scenes for surgical robotics training from textual or visual input, then trains reinforcement learning models using those scenes in MuJoCo or PyBullet simulators with dynamic environment modification.
+---
 
-## Features
+## 🎯 Features
 
-- **AI Scene Generation**: Generate surgical simulation scenes from natural language descriptions or medical images
-- **Multi-Backend Simulation**: Support for both MuJoCo and PyBullet physics engines
-- **Dynamic Environments**: Real-time parameter modification for robust RL training
-- **Domain Randomization**: Automatic physics, visual, and dynamics randomization
-- **Curriculum Learning**: Progressive difficulty adjustment during training
-- **Extensible Architecture**: Modular design for easy extension
+- **🤖 Multi-Provider LLM Integration**: Generate surgical scenes from natural language using OpenAI, Anthropic, or local Ollama models
+- **🔬 Scene Generation**: Convert text descriptions or images into structured scene definitions
+- **🎮 Unified Simulator Interface**: Seamless switching between MuJoCo and PyBullet physics engines
+- **📦 Automatic Asset Fallbacks**: Scenes work even without mesh files—primitives are generated automatically
+- **🔄 Domain Randomization**: Built-in support for training robust policies
+- **📝 Comprehensive Schema**: Rich Pydantic models for surgical scene definitions
+- **🖥️ CLI Interface**: Easy-to-use command-line tools for scene generation and training
 
-## Project Structure
+---
 
-```
-RLProj/
-├── src/surg_rl/           # Main source code
-│   ├── scene_generation/  # Text/vision-based scene generation
-│   ├── scene_definition/  # Scene schema and validation
-│   ├── simulators/        # MuJoCo/PyBullet backends
-│   ├── dynamics/          # Environment randomization
-│   ├── rl/                # RL training pipeline
-│   └── utils/             # Configuration and utilities
-├── assets/                # Meshes, textures, materials
-├── scenes/                # Generated scene files
-├── configs/               # Configuration files
-├── tests/                 # Test suite
-└── examples/              # Example scripts and demos
-```
-
-## Installation
+## 📦 Installation
 
 ### Prerequisites
 
-- Python 3.10 or higher
-- pip or uv package manager
+- Python 3.11 or higher
+- pip package manager
 
-### Install
+### Quick Install
 
 ```bash
 # Clone the repository
-cd /Users/tt/Documents/RLProj
+git clone https://github.com/yourusername/surg-rl.git
+cd surg-rl
 
-# Create virtual environment (optional but recommended)
+# Create virtual environment
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Install the package
+# Install in development mode
 pip install -e ".[dev]"
-
-# For vision features (optional)
-pip install -e ".[vision]"
 ```
 
-## Quick Start
+### Optional: Local LLM Support
 
-```python
-from surg_rl import get_settings
-
-# Get configuration
-settings = get_settings()
-settings.ensure_directories()
-
-print(f"Surg-RL version: {settings.model_dump()}")
-```
-
-## Configuration
-
-Create a `.env` file in the project root:
+For local model inference without API keys:
 
 ```bash
-# Copy example config
-cp .env.example .env
+# Install Ollama (see https://ollama.ai for installation)
+ollama pull llama3.2
+ollama pull llava  # For vision models
+```
 
-# Edit with your settings
-nano .env
+---
+
+## 🚀 Quick Start
+
+### 1. Generate a Scene from Template
+
+```bash
+# Using a predefined template
+surg-rl generate --template suturing --output my_scene.json
+
+# Available templates: suturing, dissection, manipulation
+```
+
+### 2. Generate a Scene from Text (Requires LLM)
+
+```bash
+# Using OpenAI (set OPENAI_API_KEY environment variable)
+export OPENAI_API_KEY="your-api-key"
+surg-rl generate --text "Create a suturing scene with two robotic arms" --output scene.json
+
+# Using local Ollama
+surg-rl generate --text "Create a simple surgical training scene" --provider ollama
+```
+
+### 3. Use in Python
+
+```python
+from surg_rl.scene_definition import load_scene, SceneDefinition
+from surg_rl.scene_generation import TextParser
+from surg_rl.simulators import MuJoCoSimulator
+
+# Load a pre-defined scene
+scene = load_scene("scenes/simple_suturing.json")
+print(f"Scene: {scene.metadata.name}")
+print(f"Robots: {len(scene.robots)}")
+print(f"Tissues: {len(scene.tissues)}")
+
+# Generate a scene from text
+parser = TextParser(provider="ollama")
+scene = await parser.parse("Create a suturing practice scene")
+
+# Use in simulator
+sim = MuJoCoSimulator()
+sim.load_scene(scene)
+obs = sim.reset()
+result = sim.step(action)
+```
+
+---
+
+## 📖 Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Getting Started](docs/GETTING_STARTED.md) | Detailed setup and tutorial |
+| [Scene Format](docs/SCENE_FORMAT.md) | Scene definition schema and examples |
+| [API Reference](docs/API_REFERENCE.md) | Complete API documentation |
+| [Architecture](docs/ARCHITECTURE.md) | System architecture overview |
+| [Examples](docs/EXAMPLES.md) | Code examples and tutorials |
+| [Contributing](CONTRIBUTING.md) | How to contribute |
+
+---
+
+## 🏗️ Project Structure
+
+```
+surg-rl/
+├── src/surg_rl/
+│   ├── scene_generation/      # LLM/VLM scene generation
+│   │   ├── text_parser.py     # Text-to-scene parsing
+│   │   ├── vision_parser.py   # Image-to-scene parsing
+│   │   ├── templates.py       # Pre-defined scene templates
+│   │   └── prompts/           # LLM prompt templates
+│   ├── scene_definition/      # Scene schema and loading
+│   │   ├── schema.py          # Pydantic models
+│   │   └── loader.py          # Scene file loader
+│   ├── simulators/            # Physics simulators
+│   │   ├── base_simulator.py  # Abstract interface
+│   │   ├── mujoco_simulator.py
+│   │   ├── pybullet_simulator.py
+│   │   └── scene_builder.py   # Scene-to-simulator conversion
+│   ├── utils/                 # Utilities
+│   │   ├── config.py          # Configuration
+│   │   └── logging.py         # Logging
+│   └── cli.py                 # Command-line interface
+├── scenes/                    # Example scene files
+├── tests/                     # Test suite
+├── docs/                      # Documentation
+└── examples/                  # Example scripts
+```
+
+---
+
+## 🔧 Configuration
+
+Create a `.env` file from the template:
+
+```bash
+cp .env.example .env
 ```
 
 Key configuration options:
-- `LLM_PROVIDER`: LLM provider for scene generation (openai, anthropic)
-- `LLM_API_KEY`: Your API key
-- `DEFAULT_SIMULATOR`: Default simulator backend (mujoco, pybullet)
 
-## Usage
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `LLM_PROVIDER` | LLM provider (openai, anthropic, ollama) | `openai` |
+| `LLM_API_KEY` | API key for OpenAI/Anthropic | - |
+| `OLLAMA_BASE_URL` | Ollama server URL | `http://localhost:11434` |
+| `OLLAMA_MODEL` | Default Ollama model | `llama3.2` |
+| `DEFAULT_SIMULATOR` | Physics engine (mujoco, pybullet) | `mujoco` |
 
-### Generate Scene from Text
+---
 
-```bash
-surg-rl generate --text "Laparoscopic cholecystectomy with da Vinci robot" --output scene.json
+## 🎮 Scene Templates
+
+Pre-built templates for common surgical scenarios:
+
+### Suturing Template
+```python
+from surg_rl.scene_generation import get_template
+
+scene = get_template("suturing")
+# Includes: 1 robot, 1 tissue (skin), 1 instrument (needle driver)
 ```
 
-### Train RL Agent
-
-```bash
-surg-rl train --scene scene.json --algorithm PPO --timesteps 100000
+### Dissection Template
+```python
+scene = get_template("dissection")
+# Includes: 2 laparoscopic arms, 1 tissue (organ)
 ```
 
-### Evaluate Trained Agent
-
-```bash
-surg-rl evaluate --scene scene.json --model trained_model.zip --episodes 10
+### Manipulation Template
+```python
+scene = get_template("manipulation")
+# Includes: 1 robotic arm, pick-and-place task
 ```
 
-## Development
+---
 
-### Run Tests
+## 🤖 LLM Integration
+
+### Using OpenAI
+
+```python
+from surg_rl.scene_generation import TextParser
+
+parser = TextParser(provider="openai", model="gpt-4")
+scene = await parser.parse("Create a scene with a surgical robot and tissue sample")
+```
+
+### Using Anthropic
+
+```python
+parser = TextParser(provider="anthropic", model="claude-3-opus-20240229")
+scene = await parser.parse("Design a laparoscopic training scenario")
+```
+
+### Using Ollama (Local)
+
+```python
+parser = TextParser(
+    provider="ollama",
+    model="llama3.2",
+    ollama_base_url="http://localhost:11434"
+)
+scene = await parser.parse("Generate a basic surgical scene")
+```
+
+---
+
+## 🎮 Simulator Usage
+
+### MuJoCo
+
+```python
+from surg_rl.simulators import MuJoCoSimulator
+from surg_rl.scene_definition import load_scene
+
+scene = load_scene("my_scene.json")
+sim = MuJoCoSimulator(assets_dir="assets")
+
+sim.load_scene(scene)
+observation = sim.reset()
+
+# Run simulation
+for _ in range(100):
+    action = get_action(observation)  # Your policy
+    result = sim.step(action)
+    
+sim.close()
+```
+
+### PyBullet
+
+```python
+from surg_rl.simulators import PyBulletSimulator
+
+sim = PyBulletSimulator(render_mode="GUI")
+sim.load_scene(scene)
+observation = sim.reset()
+# ... simulation loop
+sim.close()
+```
+
+---
+
+## 📝 Scene Definition
+
+Scenes are defined using JSON or YAML files with comprehensive schema:
+
+```yaml
+# Example: surgical_scene.yaml
+metadata:
+  name: "Surgical Training Scene"
+  description: "Basic suturing practice"
+  
+physics:
+  gravity: [0.0, 0.0, -9.81]
+  timestep: 0.002
+
+robots:
+  - name: surgical_arm
+    type: robotic_arm
+    urdf_path: assets/robots/surgical_arm.urdf
+    base_pose:
+      position: {x: 0.0, y: 0.0, z: 0.0}
+    
+tissues:
+  - name: skin_pad
+    type: skin
+    geometry:
+      primitive: box
+      dimensions: [0.1, 0.1, 0.01]
+      
+task:
+  name: suturing
+  objectives:
+    - name: needle_pickup
+      description: "Pick up the surgical needle"
+      weight: 1.0
+```
+
+See [Scene Format Documentation](docs/SCENE_FORMAT.md) for complete schema reference.
+
+---
+
+## 🧪 Testing
 
 ```bash
+# Run all tests
 pytest tests/
+
+# Run specific test module
+pytest tests/test_simulators.py -v
+
+# Run with coverage
+pytest tests/ --cov=surg_rl
 ```
 
-### Format Code
+---
 
-```bash
-black src/
-ruff check src/
-```
+## 🤝 Contributing
 
-### Type Check
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
-```bash
-mypy src/
-```
+- Code of conduct
+- Development setup
+- Pull request process
+- Coding standards
 
-## Architecture
+---
 
-The system follows a layered architecture:
+## 📄 License
 
-1. **Scene Generation Layer**: LLM/VLM-based scene extraction from text/images
-2. **Scene Definition Layer**: Schema-based scene representation
-3. **Simulator Abstraction Layer**: Unified interface for physics engines
-4. **Dynamic Environment Controller**: Real-time modification and randomization
-5. **RL Training Pipeline**: Gymnasium environments and training integration
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Documentation
+---
 
-See the `docs/` directory for:
-- [Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
-- API Reference (coming soon)
-- Tutorials (coming soon)
+## 🙏 Acknowledgments
 
-## License
+- [MuJoCo](https://mujoco.org/) - Physics simulation
+- [PyBullet](https://pybullet.org/) - Physics simulation
+- [Pydantic](https://pydantic-docs.helpmanual.io/) - Data validation
+- [OpenAI](https://openai.com/) - GPT models
+- [Anthropic](https://www.anthropic.com/) - Claude models
+- [Ollama](https://ollama.ai/) - Local LLM inference
 
-MIT License
+---
 
-## Contributing
+## 📊 Project Status
 
-Contributions welcome! Please read the implementation plan for project structure and guidelines.
+| Component | Status |
+|-----------|--------|
+| Scene Schema | ✅ Complete |
+| Scene Generation | ✅ Complete |
+| Scene Loader | ✅ Complete |
+| Simulators | ✅ Complete |
+| Domain Randomization | 🔄 In Progress |
+| RL Training | 📋 Planned |
+| CLI Demos | 📋 Planned |
 
-## Status
+---
 
-This project is currently in active development. See the implementation plan for progress tracking.
+## 📧 Contact
 
-## ⚠️ Quick Start - Fix Test Errors
+- **Issues**: [GitHub Issues](https://github.com/yourusername/surg-rl/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yourusername/surg-rl/discussions)
 
-If you see `ModuleNotFoundError: No module named 'pydantic'` when running tests, install the required packages:
+---
 
-```bash
-pip install pydantic pydantic-settings pytest pyyaml rich typer
-```
-
-Then run tests:
-```bash
-pytest tests/ -v
-```
-
-For more details, see **FIX_TESTS.md** or **INSTALL.md**.
-
+*Built with ❤️ for advancing surgical robotics through AI*
