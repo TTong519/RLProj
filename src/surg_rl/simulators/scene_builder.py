@@ -488,8 +488,9 @@ f 5 1 4 8
         # Add simple geometry for now (box as placeholder)
         geom = ET.SubElement(body, "geom", name=f"{robot.name}_body", type="box", size="0.05 0.05 0.1")
 
-        # Add free joint
-        ET.SubElement(body, "freejoint", name=f"{robot.name}_root")
+        # Note: Robot is static for now (no joint control implemented yet)
+        # To make it dynamic with joints, add: <freejoint name="robot_root"/>
+        # ET.SubElement(body, "freejoint", name=f"{robot.name}_root")
 
     def _add_tissue_to_mjcf(
         self,
@@ -552,8 +553,8 @@ f 5 1 4 8
         # Add geometry based on type
         geom = ET.SubElement(body, "geom", name=f"{instrument.name}_geom", type="box", size="0.01 0.01 0.05")
 
-        # Add as free body
-        ET.SubElement(body, "freejoint", name=f"{instrument.name}_root")
+        # Note: Instrument is static for now (no control implemented yet)
+        # To make it dynamic, add: <freejoint name="instrument_root"/>
 
     def _add_ground_plane_to_mjcf(
         self,

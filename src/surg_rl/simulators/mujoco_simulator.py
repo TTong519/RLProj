@@ -1,5 +1,6 @@
 """MuJoCo simulator backend implementation."""
 
+import os
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -50,7 +51,9 @@ class MuJoCoSimulator(BaseSimulator):
         self._model = None
         self._data = None
         self._viewer = None
+        self._renderer = None
         self._mjcf_path: Optional[Path] = None
+        self._renderer_available: Optional[bool] = None
 
     def _check_mujoco(self) -> None:
         """Check if MuJoCo is available."""
@@ -61,6 +64,39 @@ class MuJoCoSimulator(BaseSimulator):
             raise ImportError(
                 "MuJoCo is not installed. Install it with: pip install mujoco"
             )
+
+    def _check_renderer_available(self) -> bool:
+        """Check if rendering is available (requires display or EGL)."""
+        if self._renderer_available is not None:
+            return self._renderer_available
+        
+        # Check if we have a display
+        if os.environ.get('DISPLAY') or os.environ.get('PYOPENGL_PLATFORM'):
+            self._renderer_available = True
+            return True
+        
+        # On macOS, check if we have a display connection
+        import platform
+        if platform.system() == 'Darwin':
+            # macOS uses CGL, not EGL
+            # If we're in a terminal without display, rendering won't work
+            # We'll try to detect this, but default to False for headless
+            import sys
+            if sys.stdout.isatty():
+                # We're in a terminal, likely no GUI
+                self._renderer_available = False
+            else:
+                self._renderer_available = True
+            return self._renderer_available
+        
+        # For Linux, try EGL for headless GPU rendering
+        try:
+            from OpenGL import EGL
+            self._renderer_available = True
+        except Exception:
+            self._renderer_available = False
+        
+        return self._renderer_available
 
     def load_scene(self, scene_definition: Any) -> None:
         """Load a scene definition into MuJoCo.
@@ -184,33 +220,53 @@ class MuJoCoSimulator(BaseSimulator):
         height = height or self.render_height
 
         if mode == "human":
-            # Enable GUI rendering
-            if self._viewer is None:
-                self._viewer = self._mujoco.MjViewer(self._model)
-            self._viewer.sync()
+            # Use passive viewer for GUI rendering
+            # This requires running in an event loop context
+            if self._viewer is not None:
+                self._viewer.sync()
             return None
 
-        # Offscreen rendering
-        if camera_name:
-            camera_id = self._mujoco.mj_name2id(
-                self._model, self._mujoco.mjtObj.mjOBJ_CAMERA, camera_name
-            )
-        else:
-            camera_id = -1  # Default camera
+        # Offscreen rendering using mujoco.Renderer (MuJoCo 3.x API)
+        if not self._check_renderer_available():
+            logger.debug("Rendering not available (no display)")
+            return None
 
-        rgb_array = self._mujoco.mj_renderOffscreen(
-            self._model, self._data, width=width, height=height, camera_id=camera_id
-        )
+        try:
+            # Initialize renderer if needed
+            if self._renderer is None:
+                self._renderer = self._mujoco.Renderer(
+                    self._model,
+                    height=height,
+                    width=width,
+                )
+            elif self._renderer.width != width or self._renderer.height != height:
+                # Recreate renderer with new dimensions
+                try:
+                    self._renderer.close()
+                except Exception:
+                    pass
+                self._renderer = self._mujoco.Renderer(
+                    self._model,
+                    height=height,
+                    width=width,
+                )
 
-        if mode == "depth_array":
-            # Return depth if requested
-            depth = self._mujoco.mj_renderOffscreen(
-                self._model, self._data, width=width, height=height, 
-                camera_id=camera_id, depth=True
-            )
-            return depth
+            # Update scene and render
+            self._mujoco.mj_forward(self._model, self._data)
+            self._renderer.update_scene(self._data)
+            
+            if mode == "depth_array":
+                # Get depth image
+                depth = self._renderer.render(depth=True)
+                return depth
+            else:
+                # Get RGB image
+                rgb = self._renderer.render()
+                return rgb
 
-        return rgb_array
+        except Exception as e:
+            logger.debug(f"Rendering failed: {e}")
+            return None
 
     def get_state(self) -> State:
         """Get current simulation state.
@@ -254,8 +310,14 @@ class MuJoCoSimulator(BaseSimulator):
     def close(self) -> None:
         """Clean up simulator resources."""
         if self._viewer is not None:
-            # MuJoCo viewer cleanup
             self._viewer = None
+
+        if self._renderer is not None:
+            try:
+                self._renderer.close()
+            except Exception:
+                pass
+            self._renderer = None
 
         self._model = None
         self._data = None
@@ -283,11 +345,12 @@ class MuJoCoSimulator(BaseSimulator):
         """
         obs = Observation()
 
-        # Render RGB image
-        try:
-            obs.rgb_image = self.render("rgb_array")
-        except Exception:
-            pass
+        # Only render if renderer is available
+        if self._check_renderer_available():
+            try:
+                obs.rgb_image = self.render("rgb_array")
+            except Exception:
+                pass
 
         # Get robot state
         if self._data.qpos is not None:
@@ -390,3 +453,36 @@ class MuJoCoSimulator(BaseSimulator):
             return True
         except (ValueError, KeyError):
             return False
+
+    def start_viewer(self):
+        """Start an interactive viewer for the simulation.
+        
+        This method launches a passive viewer that can be used for
+        real-time visualization. Must be called before the simulation loop.
+        
+        Example:
+            sim.load_scene(scene)
+            sim.start_viewer()
+            for i in range(1000):
+                sim.step(action)
+                sim.render(mode='human')
+            sim.close()
+        
+        Returns:
+            bool: True if viewer started successfully, False otherwise.
+        """
+        if not self._loaded:
+            raise RuntimeError("Scene not loaded. Call load_scene() first.")
+        
+        if not self._check_renderer_available():
+            logger.warning("Cannot start viewer: no display available")
+            return False
+        
+        if self._viewer is None:
+            try:
+                self._viewer = self._mujoco.viewer.launch_passive(self._model, self._data)
+                return True
+            except Exception as e:
+                logger.warning(f"Failed to start viewer: {e}")
+                return False
+        return True

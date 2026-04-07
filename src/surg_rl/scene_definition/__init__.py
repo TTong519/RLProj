@@ -83,6 +83,7 @@ from .loader import (
     reset_loader,
     load_scene,
     save_scene,
+    validate_scene,
 )
 
 __all__ = [
@@ -160,4 +161,5 @@ __all__ = [
     "reset_loader",
     "load_scene",
     "save_scene",
+    "validate_scene",
 ]

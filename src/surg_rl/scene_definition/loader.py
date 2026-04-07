@@ -832,3 +832,39 @@ def save_scene(
         format: Output format.
     """
     get_loader().save(scene, file_path, format=format)
+
+
+# Convenience function for validation
+def validate_scene(scene: SceneDefinition) -> bool:
+    """Validate a scene definition.
+    
+    Args:
+        scene: Scene definition to validate
+        
+    Returns:
+        True if scene is valid
+        
+    Raises:
+        SceneValidationError: If scene is invalid
+    """
+    try:
+        # Pydantic models are validated on construction
+        # This function exists for API consistency
+        if not isinstance(scene, SceneDefinition):
+            raise SceneValidationError(f"Expected SceneDefinition, got {type(scene)}")
+        
+        # Check required fields
+        if not scene.metadata:
+            raise SceneValidationError("Scene must have metadata")
+        
+        if not scene.physics:
+            raise SceneValidationError("Scene must have physics configuration")
+        
+        # Validate using Pydantic's built-in validation
+        # (already done during construction, but explicit check)
+        _ = scene.model_dump()
+        
+        return True
+        
+    except Exception as e:
+        raise SceneValidationError(f"Scene validation failed: {str(e)}") from e

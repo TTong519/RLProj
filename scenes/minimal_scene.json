@@ -1,0 +1,8 @@
+{
+  "metadata": {
+    "name": "Minimal Test Scene",
+    "description": "Simple scene for testing schema validation",
+    "version": "1.0.0"
+  },
+  "simulator": "mujoco"
+}

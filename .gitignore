@@ -53,18 +53,28 @@ logs/
 models/
 checkpoints/
 
-# Generated scenes (keep structure but ignore generated files)
-scenes/*.json
-scenes/*.yaml
-!scenes/.gitkeep
+# Generated scenes (keep example scenes)
+scenes/generated/
+scenes/output/
+!scenes/simple_suturing.json
+!scenes/laparoscopic_dissection.yaml
+!scenes/minimal_scene.json
 
-# Assets (keep structure but ignore binary files)
+# Assets (keep structure but ignore binary files - user provides these)
 assets/meshes/*.stl
 assets/meshes/*.obj
 assets/meshes/*.dae
+assets/meshes/*.fbx
 assets/textures/*.png
 assets/textures/*.jpg
+assets/textures/*.bmp
 !assets/.gitkeep
+!assets/meshes/.gitkeep
+!assets/textures/.gitkeep
+!assets/materials/.gitkeep
+
+# Temporary generated meshes
+src/surg_rl/simulators/temp_meshes/
 
 # OS
 .DS_Store
@@ -84,3 +94,7 @@ logs/
 # Local configuration
 .env.local
 .env.*.local
+
+# Temporary files
+demo_results/
+*.tmp

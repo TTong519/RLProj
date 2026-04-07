@@ -53,6 +53,8 @@ class PyBulletSimulator(BaseSimulator):
         self._physics_client = None
         self._body_ids: Dict[str, int] = {}
         self._joint_ids: Dict[str, Dict[str, int]] = {}
+        self._initial_positions: Dict[str, list] = {}  # Store initial positions
+        self._initial_orientations: Dict[str, list] = {}  # Store initial orientations
 
     def _check_pybullet(self) -> None:
         """Check if PyBullet is available."""
@@ -114,6 +116,12 @@ class PyBulletSimulator(BaseSimulator):
         self._load_environment(scene_definition)
 
         self._loaded = True
+        
+        # Let objects settle by stepping simulation a few times
+        # This prevents objects from having initial velocities that cause them to fly off
+        for _ in range(100):
+            self._pb.stepSimulation(physicsClientId=self._physics_client)
+        
         logger.info(f"Loaded scene: {scene_definition.metadata.name}")
 
     def _load_robot(self, robot: Any) -> None:
@@ -157,7 +165,7 @@ class PyBulletSimulator(BaseSimulator):
         )
 
         body_id = self._pb.createMultiBody(
-            baseMass=1.0,
+            baseMass=0.0,  # Static (no joint control implemented yet)
             baseCollisionShapeIndex=collision_shape,
             baseVisualShapeIndex=visual_shape,
             basePosition=[
@@ -190,30 +198,59 @@ class PyBulletSimulator(BaseSimulator):
             shape_type = self._pb.GEOM_BOX
             half_extents = [d / 2 for d in dims]
 
-        # Create shapes
-        collision_shape = self._pb.createCollisionShape(
-            shape_type,
-            halfExtents=half_extents if shape_type == self._pb.GEOM_BOX else None,
-            radius=half_extents[0] if shape_type in [self._pb.GEOM_SPHERE, self._pb.GEOM_CYLINDER] else None,
-            height=half_extents[0] if shape_type == self._pb.GEOM_CYLINDER else None,
-            physicsClientId=self._physics_client,
-        )
+        # Create shapes - only pass the relevant parameters for each shape type
+        if shape_type == self._pb.GEOM_BOX:
+            collision_shape = self._pb.createCollisionShape(
+                shape_type,
+                halfExtents=half_extents,
+                physicsClientId=self._physics_client,
+            )
+        elif shape_type == self._pb.GEOM_SPHERE:
+            collision_shape = self._pb.createCollisionShape(
+                shape_type,
+                radius=half_extents[0],
+                physicsClientId=self._physics_client,
+            )
+        elif shape_type == self._pb.GEOM_CYLINDER:
+            # For cylinder: half_extents = [height/2, radius]
+            collision_shape = self._pb.createCollisionShape(
+                shape_type,
+                radius=half_extents[1],  # radius
+                height=half_extents[0] * 2,  # full height
+                physicsClientId=self._physics_client,
+            )
 
         # Get color
         color = [0.95, 0.85, 0.8, 1.0]  # Default skin color
         if tissue.color:
             color = [tissue.color.r, tissue.color.g, tissue.color.b, tissue.color.a]
 
-        visual_shape = self._pb.createVisualShape(
-            shape_type,
-            halfExtents=half_extents if shape_type == self._pb.GEOM_BOX else None,
-            radius=half_extents[0] if shape_type in [self._pb.GEOM_SPHERE, self._pb.GEOM_CYLINDER] else None,
-            rgbaColor=color,
-            physicsClientId=self._physics_client,
-        )
+        # Create visual shape - only pass the relevant parameters for each shape type
+        if shape_type == self._pb.GEOM_BOX:
+            visual_shape = self._pb.createVisualShape(
+                shape_type,
+                halfExtents=half_extents,
+                rgbaColor=color,
+                physicsClientId=self._physics_client,
+            )
+        elif shape_type == self._pb.GEOM_SPHERE:
+            visual_shape = self._pb.createVisualShape(
+                shape_type,
+                radius=half_extents[0],
+                rgbaColor=color,
+                physicsClientId=self._physics_client,
+            )
+        elif shape_type == self._pb.GEOM_CYLINDER:
+            visual_shape = self._pb.createVisualShape(
+                shape_type,
+                radius=half_extents[1],
+                length=half_extents[0] * 2,  # PyBullet uses 'length' for cylinders
+                rgbaColor=color,
+                physicsClientId=self._physics_client,
+            )
 
         body_id = self._pb.createMultiBody(
-            baseMass=0.1,  # Static for now
+            baseMass=0.0,  # Static (attached to ground in scene)
             baseCollisionShapeIndex=collision_shape,
             baseVisualShapeIndex=visual_shape,
             basePosition=[
@@ -224,6 +261,18 @@ class PyBulletSimulator(BaseSimulator):
             physicsClientId=self._physics_client,
         )
         self._body_ids[tissue.name] = body_id
+        # Store initial position for reset
+        self._initial_positions[tissue.name] = [
+            tissue.pose.position.x,
+            tissue.pose.position.y,
+            tissue.pose.position.z,
+        ]
+        self._initial_orientations[tissue.name] = [
+            tissue.pose.orientation.w,
+            tissue.pose.orientation.x,
+            tissue.pose.orientation.y,
+            tissue.pose.orientation.z,
+        ]
 
     def _load_instrument(self, instrument: Any) -> None:
         """Load an instrument into the simulation."""
@@ -241,7 +290,7 @@ class PyBulletSimulator(BaseSimulator):
         )
 
         body_id = self._pb.createMultiBody(
-            baseMass=0.01,
+            baseMass=0.0,  # Static (no control implemented yet)
             baseCollisionShapeIndex=collision_shape,
             baseVisualShapeIndex=visual_shape,
             basePosition=[
@@ -252,12 +301,28 @@ class PyBulletSimulator(BaseSimulator):
             physicsClientId=self._physics_client,
         )
         self._body_ids[instrument.name] = body_id
+        # Store initial position for reset
+        self._initial_positions[instrument.name] = [
+            instrument.pose.position.x,
+            instrument.pose.position.y,
+            instrument.pose.position.z,
+        ]
+        self._initial_orientations[instrument.name] = [
+            instrument.pose.orientation.w,
+            instrument.pose.orientation.x,
+            instrument.pose.orientation.y,
+            instrument.pose.orientation.z,
+        ]
 
     def _load_environment(self, scene_definition: Any) -> None:
         """Load environment elements."""
         # Load ground plane
         if scene_definition.physics.ground_plane:
-            self._pb.setAdditionalSearchPath(str(self.scene_builder.temp_dir))
+            try:
+                import pybullet_data
+                self._pb.setAdditionalSearchPath(pybullet_data.getDataPath())
+            except ImportError:
+                pass
             ground_id = self._pb.loadURDF(
                 "plane.urdf",
                 physicsClientId=self._physics_client,
@@ -271,14 +336,18 @@ class PyBulletSimulator(BaseSimulator):
         if seed is not None:
             np.random.seed(seed)
 
-        # Reset all bodies to initial positions
+        # Reset all bodies to their initial positions
         for name, body_id in self._body_ids.items():
+            pos = self._initial_positions.get(name, [0, 0, 0])
+            orn = self._initial_orientations.get(name, [0, 0, 0, 1])
             self._pb.resetBasePositionAndOrientation(
                 body_id,
-                [0, 0, 0],
-                [0, 0, 0, 1],
+                pos,
+                orn,
                 physicsClientId=self._physics_client,
             )
+            # Also reset velocity
+            self._pb.resetBaseVelocity(body_id, [0, 0, 0], [0, 0, 0], physicsClientId=self._physics_client)
 
         self._simulation_time = 0.0
         return self._get_observation()
