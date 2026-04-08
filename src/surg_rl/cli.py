@@ -3,6 +3,7 @@
 import asyncio
 import json
 from pathlib import Path
+from typing import Optional
 
 import typer
 from rich.console import Console
@@ -39,21 +40,20 @@ def config() -> None:
     table.add_column("Setting", style="cyan")
     table.add_column("Value", style="green")
 
-    # Display key settings
     config_items = [
         ("Version", __version__),
         ("Project Root", str(settings.project_root)),
         ("Default Simulator", settings.default_simulator),
-        ("", ""),  # Separator
+        ("", ""),
         ("LLM Provider", settings.llm_provider),
         ("LLM Model", settings.llm_model),
         ("VLM Model", settings.vlm_model),
-        ("", ""),  # Separator
+        ("", ""),
         ("Ollama Base URL", settings.ollama_base_url),
         ("Ollama Model", settings.ollama_model),
         ("Ollama Vision Model", settings.ollama_vision_model),
         ("Ollama Timeout", f"{settings.ollama_timeout}s"),
-        ("", ""),  # Separator
+        ("", ""),
         ("Render Width", str(settings.render_width)),
         ("Render Height", str(settings.render_height)),
         ("RL Seed", str(settings.rl_seed)),
@@ -92,25 +92,8 @@ def generate(
     model: str = typer.Option(None, "--model", "-m", help="Model name to use"),
     ollama_url: str = typer.Option(None, "--ollama-url", help="Ollama API base URL (for ollama provider)"),
 ) -> None:
-    """Generate a scene from text, image, or template input.
-
-    Uses LLM/VLM to convert natural language descriptions or images into
-    structured scene definitions for surgical robotics simulation.
-
-    Supports multiple providers:
-    - openai: OpenAI GPT models (requires OPENAI_API_KEY)
-    - anthropic: Anthropic Claude models (requires ANTHROPIC_API_KEY)
-    - ollama: Local models via Ollama (requires Ollama server running)
-
-    Examples:
-        surg-rl generate --text "Create a suturing scene with two robotic arms"
-        surg-rl generate --image surgical_scene.jpg --output scene.json
-        surg-rl generate --template suturing --output my_suturing.json
-        surg-rl generate --text "Simple scene" --provider ollama --model llama3.2
-        surg-rl generate --text "Scene description" --provider ollama --ollama-url http://localhost:11434
-    """
+    """Generate a scene from text, image, or template input."""
     try:
-        # Handle template generation (no LLM needed)
         if template:
             console.print(f"[bold blue]Loading template:[/bold blue] {template}")
             try:
@@ -120,7 +103,6 @@ def generate(
                 console.print("[dim]Available templates: suturing, dissection, manipulation[/dim]")
                 raise typer.Exit(1)
 
-            # Save the scene
             output_path = Path(output)
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -138,23 +120,18 @@ def generate(
             console.print(f"  • Instruments: {len(scene.instruments)}")
             return
 
-        # Handle text generation
         if text:
             console.print(f"[bold blue]Generating scene from text...[/bold blue]")
             console.print(f"[dim]Provider: {provider or 'default'}[/dim]")
             console.print(f"[dim]Description: {text[:100]}{'...' if len(text) > 100 else ''}[/dim]")
 
-            # Create parser with specified provider
             parser = TextParser(
                 provider=provider,
                 model=model,
                 ollama_base_url=ollama_url,
             )
-
-            # Run async parse
             scene = asyncio.run(parser.parse(text))
 
-            # Save the scene
             output_path = Path(output)
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -172,23 +149,18 @@ def generate(
             console.print(f"  • Instruments: {len(scene.instruments)}")
             return
 
-        # Handle image generation
         if image:
             console.print("[bold blue]Generating scene from image...[/bold blue]")
             console.print(f"[dim]Provider: {provider or 'default'}[/dim]")
             console.print(f"[dim]Image: {image}[/dim]")
 
-            # Create parser with specified provider
             parser = VisionParser(
                 provider=provider,
                 model=model,
                 ollama_base_url=ollama_url,
             )
-
-            # Run async parse
             scene = asyncio.run(parser.parse(image))
 
-            # Save the scene
             output_path = Path(output)
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -206,14 +178,8 @@ def generate(
             console.print(f"  • Instruments: {len(scene.instruments)}")
             return
 
-        # No input provided
         console.print("[bold red]Error:[/bold red] No input provided.")
         console.print("[dim]Use --text, --image, or --template to specify input.[/dim]")
-        console.print("")
-        console.print("[bold]Examples:[/bold]")
-        console.print("  surg-rl generate --template suturing --output scene.json")
-        console.print("  surg-rl generate --text 'Create a suturing scene' --provider ollama")
-        console.print("  surg-rl generate --image scene.jpg --provider openai")
         raise typer.Exit(1)
 
     except Exception as e:
@@ -225,35 +191,140 @@ def generate(
 @app.command()
 def train(
     scene: str = typer.Option(..., "--scene", "-s", help="Path to scene file"),
-    algorithm: str = typer.Option("PPO", "--algorithm", "-a", help="RL algorithm"),
-    timesteps: int = typer.Option(100000, "--timesteps", "-t", help="Training timesteps"),
+    algorithm: str = typer.Option("PPO", "--algorithm", "-a", help="RL algorithm (PPO, SAC, TD3, DDPG, A2C)"),
+    timesteps: int = typer.Option(100000, "--timesteps", "-t", help="Total training timesteps"),
+    n_envs: int = typer.Option(1, "--n-envs", "-n", help="Number of parallel environments"),
+    seed: int = typer.Option(42, "--seed", help="Random seed"),
+    learning_rate: float = typer.Option(3e-4, "--lr", help="Learning rate"),
+    batch_size: int = typer.Option(64, "--batch-size", help="Batch size"),
+    device: str = typer.Option("auto", "--device", help="Device (auto, cpu, cuda, mps)"),
+    log_dir: str = typer.Option("logs/training", "--log-dir", help="Log directory"),
+    save_freq: int = typer.Option(50000, "--save-freq", help="Checkpoint save frequency"),
+    eval_freq: int = typer.Option(10000, "--eval-freq", help="Evaluation frequency"),
+    curriculum: bool = typer.Option(False, "--curriculum", help="Enable curriculum learning"),
+    adaptive: bool = typer.Option(False, "--adaptive", help="Enable adaptive difficulty"),
+    simulator: str = typer.Option("mujoco", "--simulator", help="Simulator backend (mujoco, pybullet)"),
+    max_episode_steps: int = typer.Option(1000, "--max-steps", help="Max steps per episode"),
+    verbose: int = typer.Option(1, "--verbose", "-v", help="Verbosity level (0, 1, 2)"),
 ) -> None:
-    """Train an RL agent on a scene.
+    """Train an RL agent on a surgical scene.
 
-    This command will be implemented in Step 7 (RL Training Pipeline).
+    Supports PPO, SAC, TD3, DDPG, and A2C algorithms via Stable-Baselines3.
+
+    Examples:
+        surg-rl train --scene scenes/suturing.json --algorithm PPO --timesteps 100000
+        surg-rl train --scene scenes/suturing.json --algorithm SAC --lr 1e-4 --curriculum
+        surg-rl train --scene scenes/suturing.json --algorithm PPO --n-envs 4 --device cuda
     """
-    console.print("[yellow]Training not yet implemented.[/yellow]")
-    console.print("[yellow]This feature will be available after Step 7.[/yellow]")
-    console.print(f"[dim]Scene: {scene}[/dim]")
-    console.print(f"[dim]Algorithm: {algorithm}[/dim]")
-    console.print(f"[dim]Timesteps: {timesteps}[/dim]")
+    from surg_rl.rl.training import TrainingConfig, AlgorithmConfig, TrainingManager
+
+    console.print("[bold blue]Starting RL Training[/bold blue]")
+    console.print(f"  • Scene: {scene}")
+    console.print(f"  • Algorithm: {algorithm}")
+    console.print(f"  • Timesteps: {timesteps:,}")
+    console.print(f"  • Seed: {seed}")
+
+    try:
+        algo_config = AlgorithmConfig(
+            name=algorithm.upper(),
+            learning_rate=learning_rate,
+            batch_size=batch_size,
+        )
+
+        config = TrainingConfig(
+            scene_path=scene,
+            algorithm=algo_config,
+            total_timesteps=timesteps,
+            n_envs=n_envs,
+            seed=seed,
+            device=device,
+            log_dir=log_dir,
+            save_freq=save_freq,
+            eval_freq=eval_freq,
+            use_curriculum=curriculum,
+            use_adaptive_difficulty=adaptive,
+            max_episode_steps=max_episode_steps,
+            verbose=verbose,
+        )
+
+        manager = TrainingManager(config)
+        model = manager.train()
+
+        console.print("[bold green]✓ Training complete![/bold green]")
+        console.print(f"  • Model saved to: {log_dir}/final_model")
+
+    except ImportError as e:
+        console.print(f"[bold red]Import Error:[/bold red] {e}")
+        console.print("[dim]Make sure stable-baselines3 is installed: pip install stable-baselines3[/dim]")
+        raise typer.Exit(1)
+    except Exception as e:
+        logger.error(f"Training failed: {e}")
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(1)
 
 
 @app.command()
 def evaluate(
     scene: str = typer.Option(..., "--scene", "-s", help="Path to scene file"),
     model: str = typer.Option(..., "--model", "-m", help="Path to trained model"),
-    episodes: int = typer.Option(10, "--episodes", "-e", help="Number of episodes"),
+    episodes: int = typer.Option(10, "--episodes", "-e", help="Number of evaluation episodes"),
+    render: bool = typer.Option(False, "--render", "-r", help="Render during evaluation"),
+    simulator: str = typer.Option("mujoco", "--simulator", help="Simulator backend"),
+    seed: int = typer.Option(42, "--seed", help="Random seed"),
+    verbose: int = typer.Option(1, "--verbose", "-v", help="Verbosity level"),
 ) -> None:
-    """Evaluate a trained agent.
+    """Evaluate a trained RL agent.
 
-    This command will be implemented in Step 7 (RL Training Pipeline).
+    Runs evaluation episodes and reports performance metrics.
+
+    Examples:
+        surg-rl evaluate --scene scenes/suturing.json --model logs/training/final_model
+        surg-rl evaluate --scene scenes/suturing.json --model model.zip --episodes 20 --render
     """
-    console.print("[yellow]Evaluation not yet implemented.[/yellow]")
-    console.print("[yellow]This feature will be available after Step 7.[/yellow]")
-    console.print(f"[dim]Scene: {scene}[/dim]")
-    console.print(f"[dim]Model: {model}[/dim]")
-    console.print(f"[dim]Episodes: {episodes}[/dim]")
+    from surg_rl.rl.training import TrainingConfig, TrainingManager
+
+    console.print("[bold blue]Starting Evaluation[/bold blue]")
+    console.print(f"  • Scene: {scene}")
+    console.print(f"  • Model: {model}")
+    console.print(f"  • Episodes: {episodes}")
+
+    try:
+        config = TrainingConfig(
+            scene_path=scene,
+            seed=seed,
+            verbose=verbose,
+        )
+
+        manager = TrainingManager(config)
+        results = manager.evaluate(
+            model_path=model,
+            n_episodes=episodes,
+            render=render,
+        )
+
+        # Display results
+        table = Table(title="Evaluation Results")
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="green")
+
+        table.add_row("Episodes", str(results["n_episodes"]))
+        table.add_row("Mean Reward", f"{results['mean_reward']:.2f}")
+        table.add_row("Std Reward", f"{results['std_reward']:.2f}")
+        table.add_row("Max Reward", f"{results['max_reward']:.2f}")
+        table.add_row("Min Reward", f"{results['min_reward']:.2f}")
+        table.add_row("Mean Length", f"{results['mean_episode_length']:.1f}")
+        table.add_row("Success Rate", f"{results['success_rate']:.1%}")
+
+        console.print(table)
+
+    except ImportError as e:
+        console.print(f"[bold red]Import Error:[/bold red] {e}")
+        console.print("[dim]Make sure stable-baselines3 is installed: pip install stable-baselines3[/dim]")
+        raise typer.Exit(1)
+    except Exception as e:
+        logger.error(f"Evaluation failed: {e}")
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":

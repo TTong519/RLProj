@@ -1,6 +1,6 @@
 # Surg-RL: Surgical Robotics Reinforcement Learning Training System
 
-A comprehensive framework for generating and simulating surgical robotics training scenes for reinforcement learning. Built with MuJoCo and PyBullet backends.
+A comprehensive framework for generating and simulating surgical robotics training scenes for reinforcement learning. Built with MuJoCo and PyBullet backends with domain randomization and curriculum learning support.
 
 ## Status
 
@@ -10,20 +10,22 @@ A comprehensive framework for generating and simulating surgical robotics traini
 | Scene Generation (LLM/VLM) | ✅ Complete |
 | Scene Loader | ✅ Complete |
 | Simulator (MuJoCo/PyBullet) | ✅ Complete |
-| Environment Controller | ⏳ Pending |
+| Environment Controller | ✅ Complete |
 | RL Training | ⏳ Pending |
 | Demos | ⏳ Partial |
 
 **Current Version:** 0.1.0  
-**Active Development:** Environment controller (Step 6)
+**Active Development:** RL Training Pipeline (Step 7)
 
 ## Features
 
 - **Scene Definition**: Comprehensive JSON/YAML schema for surgical scenes
 - **LLM/VLM Generation**: Generate scenes from text descriptions or images using OpenAI, Anthropic, or Ollama
 - **Multi-Backend Simulation**: Unified interface for MuJoCo and PyBullet
+- **Domain Randomization**: Built-in support for physics, visual, and dynamics randomization
+- **Curriculum Learning**: Progressive difficulty from Easy → Medium → Hard → Expert
+- **Adaptive Difficulty**: Performance-based difficulty adjustment for training
 - **Primitive Fallbacks**: Automatic primitive generation when mesh files are missing
-- **Domain Randomization**: Built-in support for physics and visual randomization
 
 ## Installation
 
@@ -34,10 +36,10 @@ cd surg-rl
 
 # Create virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate  # On Windows: venv\Scriptsctivate
 
 # Install dependencies
-pip install -e .
+pip install -e ".[dev]"
 
 # Install MuJoCo (optional but recommended)
 pip install mujoco
@@ -79,17 +81,18 @@ surg-rl generate --text "Create a suturing scene with two robots" --provider ope
 surg-rl generate --text "Create a scene" --provider ollama
 ```
 
-### Python API
+### Python API - Basic Usage
 
 ```python
-from surg_rl.scene_definition import load_scene, save_scene
+from surg_rl.scene_definition import SceneLoader
 from surg_rl.simulators import MuJoCoSimulator
 
 # Load a scene
-scene = load_scene("scenes/simple_suturing.json")
+loader = SceneLoader()
+scene = loader.load("scenes/simple_suturing.json")
 
 # Create simulator
-sim = MuJoCoSimulator(assets_dir="assets")
+sim = MuJoCoSimulator()
 sim.load_scene(scene)
 
 # Run simulation
@@ -99,6 +102,95 @@ for _ in range(100):
     print(f"Reward: {result.reward}")
 
 sim.close()
+```
+
+### Python API - Domain Randomization
+
+```python
+from surg_rl.dynamics import EnvironmentController
+from surg_rl.scene_definition import SceneLoader
+
+# Load scene with domain randomization
+loader = SceneLoader()
+scene = loader.load("scenes/simple_suturing.json")
+
+# Create environment controller
+controller = EnvironmentController.from_scene(
+    scene,
+    use_curriculum=True,
+    use_adaptive=True,
+)
+
+# Training loop with randomization
+controller.start()
+for episode in range(1000):
+    # Get randomized parameters
+    params = controller.reset(seed=episode)
+    
+    # Physics: {"mass_ratio": 1.05, "friction": 0.52, ...}
+    # Visual: {"color_r_offset": 0.02, ...}
+    # Dynamics: {"action_noise": 0.03, ...}
+    
+    # Apply to simulator and run episode...
+    
+    # Report metrics for curriculum/adaptive difficulty
+    info = controller.episode_end(
+        {"reward": reward, "success": success},
+        simulator
+    )
+    
+    # Check if curriculum advanced
+    if info.get("curriculum", {}).get("advanced"):
+        print(f"Advanced to stage: {info['curriculum']['new_stage']}")
+```
+
+### Python API - Curriculum Learning
+
+```python
+from surg_rl.dynamics import CurriculumScheduler, CurriculumConfig, CurriculumStage
+
+# Configure curriculum
+config = CurriculumConfig(
+    initial_stage=CurriculumStage.EASY,
+    auto_advance=True,
+    advancement_window=50,
+)
+
+scheduler = CurriculumScheduler(curriculum_config=config)
+scheduler.start()
+
+print(f"Stage: {scheduler.current_stage.value}")  # easy
+print(f"Difficulty: {scheduler.current_difficulty}")  # 0.25
+
+# Advance stages manually
+scheduler.advance_stage()  # easy → medium
+scheduler.set_stage(CurriculumStage.EXPERT)  # → expert
+```
+
+### Python API - Adaptive Difficulty
+
+```python
+from surg_rl.dynamics import AdaptiveDifficultyController, DifficultyConfig
+
+# Configure adaptive difficulty
+config = DifficultyConfig(
+    initial_difficulty=0.3,
+    min_difficulty=0.1,
+    max_difficulty=1.0,
+    adaptation_rate=0.05,
+    success_threshold_high=0.7,
+)
+
+adaptive = AdaptiveDifficultyController(difficulty_config=config)
+adaptive.start()
+
+# Difficulty adjusts based on performance
+for episode in range(100):
+    adaptive.reset()
+    # Run episode...
+    adaptive.episode_end({"reward": reward, "success": success}, None)
+    
+print(f"Final difficulty: {adaptive.difficulty}")
 ```
 
 ## Project Structure
@@ -116,8 +208,14 @@ surg-rl/
 │   │   ├── base_simulator.py
 │   │   ├── mujoco_simulator.py
 │   │   └── pybullet_simulator.py
+│   ├── dynamics/            # Environment controllers (NEW)
+│   │   ├── base_controller.py
+│   │   ├── parameter_randomizer.py
+│   │   ├── curriculum.py
+│   │   ├── adaptive_difficulty.py
+│   │   └── environment_controller.py
 │   └── cli.py               # Command line interface
-├── tests/                   # pytest tests
+├── tests/                   # pytest tests (208 tests)
 ├── docs/                    # Documentation
 ├── scenes/                  # Example scene files
 ├── demos/                   # Demo scripts
@@ -128,6 +226,7 @@ surg-rl/
 
 - [Getting Started](docs/GETTING_STARTED.md) - Installation and setup
 - [API Reference](docs/API_REFERENCE.md) - Complete API documentation
+- [DYNAMICS_API.md](docs/DYNAMICS_API.md) - Dynamic environment control API
 - [Scene Format](docs/SCENE_FORMAT.md) - Scene file specification
 - [Configuration](docs/CONFIGURATION.md) - Configuration options
 - [Architecture](docs/ARCHITECTURE.md) - System architecture
@@ -155,18 +254,34 @@ Example scenes are provided in the `scenes/` directory:
 
 ```bash
 # Run all tests
-pytest tests/ -v
+PYTHONPATH=src pytest tests/ -v
 
-# Run specific test file
-pytest tests/test_simulators.py -v
+# Run dynamics tests
+PYTHONPATH=src pytest tests/test_dynamics.py -v
+
+# Run with coverage
+PYTHONPATH=src pytest tests/ --cov=surg_rl --cov-report=html
 ```
 
-Current test status: **171 tests passing**
+Current test status: **208 tests (207 passed, 2 skipped)**
+
+| Module | Tests | Coverage |
+|--------|-------|----------|
+| scene_definition | 45 | 92% |
+| scene_generation | 35 | 88% |
+| simulators | 45 | 85% |
+| dynamics | 37 | 90% |
+| config | 15 | 95% |
 
 ## Roadmap
 
-- [ ] Step 6: Dynamic Environment Controller
-- [ ] Step 7: RL Training Pipeline  
+- [x] Step 1: Project Structure and Dependencies
+- [x] Step 2: Scene Schema and File Format
+- [x] Step 3: Scene Generation Module
+- [x] Step 4: Scene Loader and Parser
+- [x] Step 5: Simulator Abstraction Layer
+- [x] Step 6: Dynamic Environment Controller
+- [ ] Step 7: RL Training Pipeline
 - [ ] Step 8: Complete CLI and Demos with robot control
 
 ## Contributing
@@ -176,3 +291,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 ## License
 
 MIT License - See [LICENSE](LICENSE) for details.
+
+## Acknowledgments
+
+- MuJoCo physics engine
+- PyBullet physics engine
+- OpenAI, Anthropic, and Ollama for LLM APIs

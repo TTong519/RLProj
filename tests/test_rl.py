@@ -1,0 +1,689 @@
+"""Tests for the RL training module.
+
+Tests cover observation spaces, action spaces, reward functions,
+the Gymnasium environment wrapper, training configuration, and callbacks.
+"""
+
+import json
+import os
+import tempfile
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import numpy as np
+import pytest
+
+from surg_rl.rl.observation import (
+    ObservationBuilder,
+    ObservationConfig,
+    ObservationSpec,
+    ObservationType,
+    JOINT_POSITIONS_SPEC,
+    JOINT_VELOCITIES_SPEC,
+    ENDEFFECTOR_POS_SPEC,
+    FORCE_TORQUE_SPEC,
+    TARGET_POS_SPEC,
+    DISTANCE_TO_TARGET_SPEC,
+)
+from surg_rl.rl.action import (
+    ActionBuilder,
+    ActionConfig,
+    ActionScaling,
+    ActionSpec,
+    ActionType,
+    GRIPPER_SPEC,
+)
+from surg_rl.rl.rewards import (
+    BaseRewardFunction,
+    CollisionPenalty,
+    CompositeReward,
+    DistanceReward,
+    OrientationReward,
+    ActionPenalty,
+    TimePenalty,
+    RewardConfig,
+    RewardResult,
+    RewardType,
+    SuccessReward,
+    create_default_reward,
+)
+from surg_rl.rl.environment import (
+    SurgicalEnv,
+    SurgicalEnvConfig,
+    make_env,
+)
+from surg_rl.rl.training import (
+    AlgorithmConfig,
+    TrainingConfig,
+    TrainingManager,
+)
+from surg_rl.rl.callbacks import (
+    CheckpointCallback,
+    TrainingProgressCallback,
+    EvaluationCallback,
+)
+
+
+# ============================================================================
+# Observation Tests
+# ============================================================================
+
+
+class TestObservationType:
+    """Tests for ObservationType enum."""
+
+    def test_observation_types_exist(self):
+        """Test that all observation types are defined."""
+        assert ObservationType.JOINT_POSITIONS == "joint_positions"
+        assert ObservationType.JOINT_VELOCITIES == "joint_velocities"
+        assert ObservationType.ENDEFFECTOR_POS == "endeffector_pos"
+        assert ObservationType.FORCE_TORQUE == "force_torque"
+        assert ObservationType.RGB_IMAGE == "rgb_image"
+        assert ObservationType.DISTANCE_TO_TARGET == "distance_to_target"
+
+    def test_all_spec_types_are_valid(self):
+        """Test that all default specs reference valid observation types."""
+        specs = [
+            JOINT_POSITIONS_SPEC,
+            JOINT_VELOCITIES_SPEC,
+            ENDEFFECTOR_POS_SPEC,
+            FORCE_TORQUE_SPEC,
+            TARGET_POS_SPEC,
+            DISTANCE_TO_TARGET_SPEC,
+        ]
+        for spec in specs:
+            assert isinstance(spec.obs_type, ObservationType)
+
+
+class TestObservationSpec:
+    """Tests for ObservationSpec."""
+
+    def test_spec_creation(self):
+        """Test creating an observation spec."""
+        spec = ObservationSpec(
+            name="test_obs",
+            obs_type=ObservationType.JOINT_POSITIONS,
+            shape=(7,),
+            low=-np.pi * np.ones(7),
+            high=np.pi * np.ones(7),
+        )
+        assert spec.name == "test_obs"
+        assert spec.shape == (7,)
+        assert spec.normalize is False
+
+    def test_get_space(self):
+        """Test getting a Gymnasium space from a spec."""
+        spec = ObservationSpec(
+            name="test",
+            obs_type=ObservationType.JOINT_POSITIONS,
+            shape=(3,),
+            low=-np.ones(3),
+            high=np.ones(3),
+        )
+        space = spec.get_space()
+        assert space.shape == (3,)
+        assert space.low[0] == -1.0
+        assert space.high[0] == 1.0
+
+    def test_get_space_unbounded(self):
+        """Test getting an unbounded space from a spec without bounds."""
+        spec = ObservationSpec(
+            name="test",
+            obs_type=ObservationType.CUSTOM,
+            shape=(5,),
+        )
+        space = spec.get_space()
+        assert space.shape == (5,)
+        assert np.isinf(space.low[0])
+        assert np.isinf(space.high[0])
+
+
+class TestObservationBuilder:
+    """Tests for ObservationBuilder."""
+
+    def test_default_config(self):
+        """Test creating an observation builder with defaults."""
+        builder = ObservationBuilder()
+        space = builder.get_observation_space()
+        from gymnasium import spaces; assert isinstance(space, spaces.Dict)
+        assert "joint_positions" in space.spaces
+        assert "joint_velocities" in space.spaces
+        assert "endeffector_pos" in space.spaces
+        assert "target_pos" in space.spaces
+        assert "distance_to_target" in space.spaces
+
+    def test_custom_config(self):
+        """Test creating an observation builder with custom config."""
+        config = ObservationConfig(
+            observation_types=[
+                ObservationType.JOINT_POSITIONS,
+                ObservationType.ENDEFFECTOR_POS,
+            ],
+            include_force=True,
+        )
+        builder = ObservationBuilder(config=config)
+        space = builder.get_observation_space()
+        assert "joint_positions" in space.spaces
+        assert "endeffector_pos" in space.spaces
+        assert "force_torque" in space.spaces
+
+    def test_get_observation_size(self):
+        """Test getting observation vector size."""
+        config = ObservationConfig(
+            observation_types=[
+                ObservationType.JOINT_POSITIONS,
+                ObservationType.ENDEFFECTOR_POS,
+            ],
+        )
+        builder = ObservationBuilder(config=config, num_joints=7)
+        size = builder.get_observation_size()
+        assert size == 7 + 3  # 7 joints + 3 position
+
+    def test_extract_observation(self):
+        """Test extracting observation from simulator data."""
+        from surg_rl.simulators.base_simulator import Observation
+
+        config = ObservationConfig(
+            observation_types=[
+                ObservationType.JOINT_POSITIONS,
+                ObservationType.ENDEFFECTOR_POS,
+            ],
+        )
+        builder = ObservationBuilder(config=config, num_joints=7)
+
+        sim_obs = Observation(
+            robot_state=np.random.randn(14),
+            end_effector_pos=np.array([0.3, 0.0, 0.5]),
+        )
+
+        obs = builder.extract_observation(sim_obs, target_pos=np.array([0.5, 0.0, 0.5]))
+        assert "joint_positions" in obs
+        assert "endeffector_pos" in obs
+        assert obs["joint_positions"].shape == (7,)
+        assert obs["endeffector_pos"].shape == (3,)
+
+    def test_flatten_observation(self):
+        """Test flattening observation dict to vector."""
+        config = ObservationConfig(
+            observation_types=[
+                ObservationType.JOINT_POSITIONS,
+                ObservationType.ENDEFFECTOR_POS,
+            ],
+        )
+        builder = ObservationBuilder(config=config, num_joints=7)
+
+        from surg_rl.simulators.base_simulator import Observation
+        sim_obs = Observation(
+            robot_state=np.random.randn(14),
+            end_effector_pos=np.array([0.3, 0.0, 0.5]),
+        )
+
+        obs = builder.extract_observation(sim_obs)
+        flat = builder.flatten_observation(obs)
+        assert flat.shape == (10,)  # 7 + 3
+
+    def test_num_joints_override(self):
+        """Test that number of joints can be overridden."""
+        config = ObservationConfig(
+            observation_types=[ObservationType.JOINT_POSITIONS],
+        )
+        builder = ObservationBuilder(config=config, num_joints=6)
+        space = builder.get_observation_space()
+        assert space["joint_positions"].shape == (6,)
+
+
+# ============================================================================
+# Action Tests
+# ============================================================================
+
+
+class TestActionType:
+    """Tests for ActionType enum."""
+
+    def test_action_types_exist(self):
+        """Test that all action types are defined."""
+        assert ActionType.JOINT_POSITIONS == "joint_positions"
+        assert ActionType.JOINT_VELOCITIES == "joint_velocities"
+        assert ActionType.ENDEFFECTOR_POSE == "endeffector_pose"
+        assert ActionType.GRIPPER == "gripper"
+
+    def test_action_scaling_types(self):
+        """Test that all action scaling types are defined."""
+        assert ActionScaling.NORMALIZE == "normalize"
+        assert ActionScaling.TANH == "tanh"
+        assert ActionScaling.NONE == "none"
+
+
+class TestActionConfig:
+    """Tests for ActionConfig."""
+
+    def test_default_config(self):
+        """Test default action configuration."""
+        config = ActionConfig()
+        assert config.action_type == ActionType.JOINT_POSITIONS
+        assert config.num_joints == 7
+        assert config.include_gripper is True
+
+    def test_custom_config(self):
+        """Test custom action configuration."""
+        config = ActionConfig(
+            action_type=ActionType.ENDEFFECTOR_DELTA,
+            include_gripper=False,
+        )
+        assert config.action_type == ActionType.ENDEFFECTOR_DELTA
+        assert config.include_gripper is False
+
+
+class TestActionBuilder:
+    """Tests for ActionBuilder."""
+
+    def test_default_builder(self):
+        """Test creating an action builder with defaults."""
+        builder = ActionBuilder()
+        space = builder.get_action_space()
+        assert space.shape == (8,)  # 7 joints + 1 gripper
+
+    def test_no_gripper(self):
+        """Test action builder without gripper."""
+        config = ActionConfig(include_gripper=False)
+        builder = ActionBuilder(config=config)
+        space = builder.get_action_space()
+        assert space.shape == (7,)  # Just joints
+
+    def test_process_action(self):
+        """Test action processing."""
+        builder = ActionBuilder()
+        action = np.zeros(8, dtype=np.float32)
+        processed = builder.process_action(action)
+        assert processed is not None
+        assert processed.shape == (8,)
+
+    def test_split_action(self):
+        """Test splitting action into components."""
+        builder = ActionBuilder()
+        action = np.zeros(8, dtype=np.float32)
+        split = builder.split_action(action)
+        assert "joint_positions" in split
+        assert "gripper" in split
+        assert split["joint_positions"].shape == (7,)
+        assert split["gripper"].shape == (1,)
+
+    def test_get_action_size(self):
+        """Test getting action size."""
+        builder = ActionBuilder()
+        assert builder.get_action_size() == 8  # 7 + 1
+
+    def test_reset(self):
+        """Test resetting action builder."""
+        builder = ActionBuilder()
+        action = np.ones(8, dtype=np.float32) * 0.5
+        builder.process_action(action)
+        builder.reset()
+        assert builder._last_action is None
+
+
+# ============================================================================
+# Reward Tests
+# ============================================================================
+
+
+class TestRewardResult:
+    """Tests for RewardResult."""
+
+    def test_creation(self):
+        """Test creating a reward result."""
+        result = RewardResult(total=1.0, components={"distance": 0.5, "shaping": 0.5})
+        assert result.total == 1.0
+        assert any("distance" in k for k in result.components)
+
+    def test_addition(self):
+        """Test adding two reward results."""
+        r1 = RewardResult(total=1.0, components={"a": 1.0})
+        r2 = RewardResult(total=2.0, components={"b": 2.0})
+        combined = r1 + r2
+        assert combined.total == 3.0
+        assert "a" in combined.components
+        assert "b" in combined.components
+
+    def test_scaling(self):
+        """Test scaling a reward result."""
+        result = RewardResult(total=2.0, components={"a": 1.0, "b": 1.0})
+        scaled = result * 0.5
+        assert scaled.total == 1.0
+        assert scaled.components["a"] == 0.5
+
+
+class TestDistanceReward:
+    """Tests for DistanceReward."""
+
+    def test_exponential_reward(self):
+        """Test exponential distance reward."""
+        reward_fn = DistanceReward(weight=1.0, shape="exponential")
+        obs = {"distance_to_target": np.array([0.1])}
+        result = reward_fn.compute(obs, np.zeros(7), {})
+        assert result.total > 0  # Should be positive for exponential
+        reward_fn.reset()
+
+    def test_linear_reward(self):
+        """Test linear distance reward."""
+        reward_fn = DistanceReward(weight=1.0, shape="linear")
+        obs = {"distance_to_target": np.array([0.5])}
+        result = reward_fn.compute(obs, np.zeros(7), {})
+        assert result.total < 0  # Should be negative for linear
+        reward_fn.reset()
+
+    def test_gaussian_reward(self):
+        """Test Gaussian distance reward."""
+        reward_fn = DistanceReward(weight=1.0, shape="gaussian", sigma=0.1)
+        # At distance 0 (target), reward should be ~1
+        obs = {"distance_to_target": np.array([0.0])}
+        result = reward_fn.compute(obs, np.zeros(7), {})
+        assert result.total > 0.9  # Gaussian at 0 should be close to 1
+        reward_fn.reset()
+
+    def test_shaping_reward(self):
+        """Test that shaping reward is positive when approaching."""
+        reward_fn = DistanceReward(weight=1.0, shape="exponential")
+
+        # First step - far from target
+        obs1 = {"distance_to_target": np.array([0.5])}
+        reward_fn.compute(obs1, np.zeros(7), {})
+
+        # Second step - closer to target
+        obs2 = {"distance_to_target": np.array([0.3])}
+        result = reward_fn.compute(obs2, np.zeros(7), {})
+        assert result.info.get("approaching", False)
+        reward_fn.reset()
+
+
+class TestActionPenalty:
+    """Tests for ActionPenalty."""
+
+    def test_l2_penalty(self):
+        """Test L2 action penalty."""
+        reward_fn = ActionPenalty(weight=0.01, penalty_type="l2")
+        action = np.array([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        result = reward_fn.compute({}, action, {})
+        assert result.total < 0  # Penalty should be negative
+
+    def test_l1_penalty(self):
+        """Test L1 action penalty."""
+        reward_fn = ActionPenalty(weight=0.01, penalty_type="l1")
+        action = np.array([1.0, 0.0, 0.0])
+        result = reward_fn.compute({}, action, {})
+        assert result.total < 0
+
+    def test_zero_action(self):
+        """Test penalty with zero action."""
+        reward_fn = ActionPenalty(weight=0.01)
+        action = np.zeros(7)
+        result = reward_fn.compute({}, action, {})
+        assert result.total == 0.0  # No penalty for zero action
+
+
+class TestTimePenalty:
+    """Tests for TimePenalty."""
+
+    def test_time_penalty(self):
+        """Test that time penalty is applied each step."""
+        reward_fn = TimePenalty(weight=0.001)
+        result = reward_fn.compute({}, np.zeros(7), {})
+        assert result.total == -0.001
+
+    def test_time_penalty_accumulates(self):
+        """Test that step counter increments."""
+        reward_fn = TimePenalty(weight=0.001)
+        reward_fn.compute({}, np.zeros(7), {})
+        reward_fn.compute({}, np.zeros(7), {})
+        assert reward_fn._step == 2
+
+    def test_reset(self):
+        """Test resetting time penalty."""
+        reward_fn = TimePenalty(weight=0.001)
+        reward_fn.compute({}, np.zeros(7), {})
+        reward_fn.reset()
+        assert reward_fn._step == 0
+
+
+class TestSuccessReward:
+    """Tests for SuccessReward."""
+
+    def test_success(self):
+        """Test reward on task success."""
+        reward_fn = SuccessReward(success_reward=100.0)
+        obs = {"distance_to_target": np.array([0.005])}
+        result = reward_fn.compute(obs, np.zeros(7), {"terminated": True, "success": True})
+        assert result.total == 100.0
+
+    def test_failure(self):
+        """Test penalty on task failure."""
+        reward_fn = SuccessReward(failure_penalty=-50.0)
+        obs = {"distance_to_target": np.array([0.5])}
+        result = reward_fn.compute(obs, np.zeros(7), {"terminated": True, "success": False})
+        assert result.total == -50.0
+
+    def test_no_terminal(self):
+        """Test no reward when not terminal."""
+        reward_fn = SuccessReward(success_reward=100.0)
+        obs = {}
+        result = reward_fn.compute(obs, np.zeros(7), {"terminated": False})
+        assert result.total == 0.0
+
+
+class TestCollisionPenalty:
+    """Tests for CollisionPenalty."""
+
+    def test_collision(self):
+        """Test penalty on collision."""
+        reward_fn = CollisionPenalty(weight=10.0)
+        result = reward_fn.compute({}, np.zeros(7), {"collision": True})
+        assert result.total < 0
+
+    def test_no_collision(self):
+        """Test no penalty without collision."""
+        reward_fn = CollisionPenalty(weight=10.0)
+        result = reward_fn.compute({}, np.zeros(7), {"collision": False})
+        assert result.total == 0.0
+
+    def test_tissue_damage(self):
+        """Test penalty with tissue damage."""
+        reward_fn = CollisionPenalty(weight=10.0, tissue_weight=5.0)
+        result = reward_fn.compute({}, np.zeros(7), {"collision": True, "tissue_damage": 2.0})
+        assert result.total < -10.0  # Collision + tissue damage
+
+
+class TestCompositeReward:
+    """Tests for CompositeReward."""
+
+    def test_composite_reward(self):
+        """Test combining multiple reward functions."""
+        reward_fn = CompositeReward([
+            (DistanceReward(weight=1.0, shape="exponential"), 1.0),
+            (ActionPenalty(weight=0.01), 1.0),
+            (TimePenalty(weight=0.001), 1.0),
+        ])
+
+        obs = {"distance_to_target": np.array([0.1])}
+        action = np.ones(7) * 0.1
+        result = reward_fn.compute(obs, action, {})
+
+        assert result.total != 0  # Should be non-zero
+        assert any("distance" in k for k in result.components)
+        assert any("action_penalty" in k for k in result.components)
+
+    def test_create_default_reward(self):
+        """Test creating default reward function."""
+        reward_fn = create_default_reward()
+        assert isinstance(reward_fn, CompositeReward)
+
+    def test_composite_reset(self):
+        """Test resetting composite reward."""
+        reward_fn = CompositeReward([
+            (TimePenalty(), 1.0),
+        ])
+        reward_fn.compute({}, np.zeros(7), {})
+        reward_fn.reset()
+        # TimePenalty should reset to 0 steps
+        result = reward_fn.compute({}, np.zeros(7), {})
+        assert any("time_penalty" in k for k in result.components)
+
+
+# ============================================================================
+# Training Configuration Tests
+# ============================================================================
+
+
+class TestAlgorithmConfig:
+    """Tests for AlgorithmConfig."""
+
+    def test_default_config(self):
+        """Test default algorithm configuration."""
+        config = AlgorithmConfig()
+        assert config.name == "PPO"
+        assert config.learning_rate == 3e-4
+        assert config.gamma == 0.99
+
+    def test_custom_config(self):
+        """Test custom algorithm configuration."""
+        config = AlgorithmConfig(
+            name="SAC",
+            learning_rate=1e-4,
+            buffer_size=500_000,
+        )
+        assert config.name == "SAC"
+        assert config.learning_rate == 1e-4
+        assert config.buffer_size == 500_000
+
+    def test_to_dict(self):
+        """Test converting to dictionary."""
+        config = AlgorithmConfig()
+        d = config.to_dict()
+        assert "name" in d
+        assert "learning_rate" in d
+        assert d["name"] == "PPO"
+
+
+class TestTrainingConfig:
+    """Tests for TrainingConfig."""
+
+    def test_default_config(self):
+        """Test default training configuration."""
+        config = TrainingConfig()
+        assert config.total_timesteps == 1_000_000
+        assert config.algorithm.name == "PPO"
+        assert config.seed == 42
+
+    def test_save_load(self):
+        """Test saving and loading configuration."""
+        config = TrainingConfig(
+            scene_path="scenes/test.json",
+            total_timesteps=50000,
+        )
+
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            config.save(f.name)
+            loaded = TrainingConfig.load(f.name)
+            assert loaded.scene_path == "scenes/test.json"
+            assert loaded.total_timesteps == 50000
+            os.unlink(f.name)
+
+    def test_to_dict(self):
+        """Test converting to dictionary."""
+        config = TrainingConfig()
+        d = config.to_dict()
+        assert "algorithm" in d
+        assert "scene_path" in d
+        assert "total_timesteps" in d
+
+
+# ============================================================================
+# Callback Tests
+# ============================================================================
+
+
+class TestTrainingProgressCallback:
+    """Tests for TrainingProgressCallback."""
+
+    def test_creation(self):
+        """Test creating a progress callback."""
+        callback = TrainingProgressCallback(verbose=0)
+        assert callback.verbose == 0
+        assert callback._step == 0
+
+    def test_get_stats_initial(self):
+        """Test getting initial stats."""
+        callback = TrainingProgressCallback()
+        stats = callback.get_stats()
+        assert stats["step"] == 0
+        assert stats["episodes"] == 0
+
+
+class TestCheckpointCallback:
+    """Tests for CheckpointCallback."""
+
+    def test_creation(self):
+        """Test creating a checkpoint callback."""
+        callback = CheckpointCallback(
+            save_freq=10000,
+            save_path="/tmp/checkpoints",
+            name_prefix="test",
+        )
+        assert callback.save_freq == 10000
+        assert callback.name_prefix == "test"
+
+
+# ============================================================================
+# Integration Tests
+# ============================================================================
+
+
+class TestObservationActionIntegration:
+    """Integration tests for observation and action spaces."""
+
+    def test_obs_action_sizes_match(self):
+        """Test that observation and action builder produce consistent sizes."""
+        obs_config = ObservationConfig(
+            observation_types=[
+                ObservationType.JOINT_POSITIONS,
+                ObservationType.JOINT_VELOCITIES,
+                ObservationType.ENDEFFECTOR_POS,
+                ObservationType.DISTANCE_TO_TARGET,
+            ],
+        )
+        act_config = ActionConfig(
+            action_type=ActionType.JOINT_POSITIONS,
+            num_joints=7,
+            include_gripper=True,
+        )
+
+        obs_builder = ObservationBuilder(config=obs_config, num_joints=7)
+        act_builder = ActionBuilder(config=act_config)
+
+        obs_space = obs_builder.get_observation_space()
+        act_space = act_builder.get_action_space()
+
+        assert obs_space is not None
+        assert act_space.shape == (8,)  # 7 joints + 1 gripper
+        assert obs_builder.get_observation_size() == 7 + 7 + 3 + 1  # joints + vel + pos + dist
+
+    def test_reward_with_observation(self):
+        """Test reward computation with observation data."""
+        reward_fn = create_default_reward(RewardConfig(
+            distance_weight=1.0,
+            action_penalty_weight=0.01,
+            time_penalty_weight=0.001,
+        ))
+
+        obs = {
+            "distance_to_target": np.array([0.1]),
+            "joint_positions": np.random.randn(7),
+        }
+        action = np.random.randn(8)
+
+        result = reward_fn.compute(obs, action, {"terminated": False})
+        assert result.total != 0
+        reward_fn.reset()
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
