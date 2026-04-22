@@ -291,7 +291,7 @@ class TrainingManager:
         }
 
         # Algorithm-specific parameters
-        if algo_name in ("PPO", "A2C"):
+        if algo_config.name.upper() in ("PPO", "A2C"):
             common_kwargs.update({
                 "n_steps": algo_config.n_steps,
                 "batch_size": algo_config.batch_size,
