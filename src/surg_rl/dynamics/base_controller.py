@@ -291,6 +291,10 @@ class BaseController(ABC):
             value = self._rng.normal(mean, std)
             return np.clip(value, bounds.min_value, bounds.max_value)
         elif bounds.distribution == "log_uniform":
+            if bounds.min_value <= 0:
+                raise ValueError(
+                    f"log_uniform requires positive min_value, got {bounds.min_value}"
+                )
             log_min = np.log(bounds.min_value)
             log_max = np.log(bounds.max_value)
             return np.exp(self._rng.uniform(log_min, log_max))
