@@ -285,11 +285,7 @@ class SurgicalEnv(gym.Env):
             self._controller.apply_parameters(params, self._simulator)
 
         # Reset simulator
-        try:
-            sim_obs = self._simulator.reset(seed=seed)
-        except Exception as e:
-            logger.warning(f"Simulator reset failed, using zero observation: {e}")
-            sim_obs = Observation()
+        sim_obs = self._simulator.reset(seed=seed)
 
         # Set random target position for task
         self._target_pos = np.array([0.3, 0.0, 0.5]) + np.random.uniform(
