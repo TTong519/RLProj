@@ -450,5 +450,4 @@ class EnvironmentController:
             parts.append(f"curriculum={self._curriculum.current_stage.value}")
         if self._adaptive:
             parts.append(f"difficulty={self._adaptive.difficulty:.2f}")
-        parts.append(")")
-        return " ".join(parts)
+        return ", ".join(parts) + ")"
