@@ -114,7 +114,7 @@ class TestSceneBuilder:
         test_file = tmp_path / "test.obj"
         test_file.write_text("mesh")
 
-        resolved = builder._resolve_asset_path(str(test_file))
+        resolved = builder.resolve_asset_path(str(test_file))
         assert resolved == test_file
 
     def test_resolve_asset_path_relative(self, tmp_path: Path):
@@ -125,14 +125,14 @@ class TestSceneBuilder:
         test_file = tmp_path / "test.obj"
         test_file.write_text("mesh")
 
-        resolved = builder._resolve_asset_path("test.obj")
+        resolved = builder.resolve_asset_path("test.obj")
         assert resolved == test_file
 
     def test_resolve_asset_path_not_found(self, tmp_path: Path):
         """Test resolving missing asset path."""
         builder = SceneBuilder(assets_dir=tmp_path)
 
-        resolved = builder._resolve_asset_path("nonexistent.obj")
+        resolved = builder.resolve_asset_path("nonexistent.obj")
         assert resolved is None
 
     def test_create_box_mesh(self, tmp_path: Path):

@@ -78,7 +78,7 @@ class SceneBuilder:
             self._temp_dir = Path(tempfile.mkdtemp(prefix="surg_rl_"))
         return self._temp_dir
 
-    def _resolve_asset_path(self, asset_path: str) -> Optional[Path]:
+    def resolve_asset_path(self, asset_path: str) -> Optional[Path]:
         """Resolve an asset path to an absolute path.
 
         Args:
@@ -345,7 +345,7 @@ f 5 1 4 8
         """
         # Try to load existing mesh
         if mesh_path:
-            resolved = self._resolve_asset_path(mesh_path)
+            resolved = self.resolve_asset_path(mesh_path)
             if resolved:
                 logger.debug(f"Using mesh asset: {resolved}")
                 return resolved, False
@@ -465,7 +465,7 @@ f 5 1 4 8
 
         # Get robot mesh or create primitive
         if robot.urdf_path:
-            resolved = self._resolve_asset_path(robot.urdf_path)
+            resolved = self.resolve_asset_path(robot.urdf_path)
             if resolved:
                 # Include URDF as mesh
                 mesh_name = f"robot_{index}"

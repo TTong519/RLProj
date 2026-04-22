@@ -580,7 +580,7 @@ class ObservationBuilder:
         elif obs_type == ObservationType.DEPTH_IMAGE:
             if observation.depth_image is not None:
                 return observation.depth_image[:, :, np.newaxis]
-            return np.zeros(spec.shape)
+            return np.zeros(spec.shape, dtype=spec.dtype)
 
         elif obs_type == ObservationType.SEGMENTATION:
             if observation.segmentation is not None:

@@ -135,7 +135,7 @@ class PyBulletSimulator(BaseSimulator):
         """Load a robot into the simulation."""
         # Try to load URDF or use primitive
         if robot.urdf_path:
-            resolved = self.scene_builder._resolve_asset_path(robot.urdf_path)
+            resolved = self.scene_builder.resolve_asset_path(robot.urdf_path)
             if resolved:
                 try:
                     body_id = self._pb.loadURDF(
