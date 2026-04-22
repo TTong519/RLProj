@@ -169,6 +169,7 @@ class CurriculumScheduler(BaseController):
         self._current_stage = self.curriculum_config.initial_stage
         self._stage_history: List[CurriculumStage] = []
         self._performance_history: List[Dict[str, float]] = []
+        self._stage_entry_episode: int = 0
         
         # Stage order
         self._stage_order = [
@@ -195,21 +196,26 @@ class CurriculumScheduler(BaseController):
 
     def set_stage(self, stage: CurriculumStage) -> None:
         """Manually set the curriculum stage.
-        
+
         Args:
             stage: Stage to set.
         """
+        if stage != self._current_stage:
+            self._stage_entry_episode = self._episode
         self._current_stage = stage
         self._stage_history.append(stage)
 
     def advance_stage(self) -> bool:
         """Advance to the next curriculum stage.
-        
+
         Returns:
             True if advanced, False if already at max stage.
         """
+        if self._current_stage not in self._stage_order:
+            return False
         current_idx = self._stage_order.index(self._current_stage)
         if current_idx < len(self._stage_order) - 1:
+            self._stage_entry_episode = self._episode
             self._current_stage = self._stage_order[current_idx + 1]
             self._stage_history.append(self._current_stage)
             return True
@@ -217,12 +223,15 @@ class CurriculumScheduler(BaseController):
 
     def regress_stage(self) -> bool:
         """Regress to the previous curriculum stage.
-        
+
         Returns:
             True if regressed, False if already at min stage.
         """
+        if self._current_stage not in self._stage_order:
+            return False
         current_idx = self._stage_order.index(self._current_stage)
         if current_idx > 0:
+            self._stage_entry_episode = self._episode
             self._current_stage = self._stage_order[current_idx - 1]
             self._stage_history.append(self._current_stage)
             return True
@@ -336,8 +345,9 @@ class CurriculumScheduler(BaseController):
         """
         stage_cfg = self._stages[self._current_stage]
         
-        # Check episode threshold
-        if self._episode < stage_cfg.episode_threshold:
+        # Check episode threshold (per-stage count)
+        episodes_at_stage = self._episode - self._stage_entry_episode
+        if episodes_at_stage < stage_cfg.episode_threshold:
             return False
         
         # Check if already at max stage
@@ -386,10 +396,7 @@ class CurriculumScheduler(BaseController):
             "total_stages": len(self._stage_order),
             "progress": progress,
             "difficulty": self.current_difficulty,
-            "episodes_at_stage": self._episode - (
-                self._stages[self._current_stage].episode_threshold
-                if self._stage_history else 0
-            ),
+            "episodes_at_stage": self._episode - self._stage_entry_episode,
         }
 
     def get_performance_summary(self) -> Dict[str, float]:
@@ -417,6 +424,7 @@ class CurriculumScheduler(BaseController):
         self._stage_history.clear()
         self._performance_history.clear()
         self._episode = 0
+        self._stage_entry_episode = 0
         self._stages = copy.deepcopy(self.DEFAULT_STAGES)
         if self.curriculum_config.stage_configs:
             self._stages.update(self.curriculum_config.stage_configs)
