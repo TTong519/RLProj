@@ -262,6 +262,15 @@ class SoftBodyPhysics(BaseModel):
     youngs_modulus: float = Field(
         default=10000.0, ge=0.0, description="Young's modulus (Pa)"
     )
+    elasticity: float = Field(
+        default=0.5, ge=0.0, le=1.0, description="Elasticity factor (0-1)"
+    )
+    bending_stiffness: float = Field(
+        default=100.0, ge=0.0, description="Bending stiffness (N·m)"
+    )
+    self_collision: bool = Field(
+        default=False, description="Enable self-collision for soft body"
+    )
     yield_stress: Optional[float] = Field(
         default=None, ge=0.0, description="Yield stress for plastic deformation"
     )
@@ -481,6 +490,9 @@ class TissueConfig(BaseModel):
     geometry: TissueMeshDefinition = Field(description="Tissue geometry definition")
 
     # Physics
+    soft_body: bool = Field(
+        default=False, description="Whether tissue uses soft body physics"
+    )
     physics: SoftBodyPhysics = Field(
         default_factory=SoftBodyPhysics, description="Soft body physics"
     )

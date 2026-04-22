@@ -424,6 +424,43 @@ class MuJoCoSimulator(BaseSimulator):
         except (ValueError, KeyError):
             return None
 
+    def get_tissue_deformation(self, tissue_name: str) -> Optional[np.ndarray]:
+        """Get vertex displacements for a soft body tissue.
+
+        Args:
+            tissue_name: Name of the tissue.
+
+        Returns:
+            Array of vertex displacements from rest shape (N, 3) or None.
+        """
+        if not self._loaded:
+            return None
+
+        try:
+            # MuJoCo flex bodies store vertices in the flex data
+            flex_id = self._mujoco.mj_name2id(
+                self._model,
+                self._mujoco.mjtObj.mjOBJ_FLEX,
+                f"{tissue_name}_flex",
+            )
+            if flex_id < 0:
+                return None
+
+            # Get flex vertex positions
+            flex_start = self._model.flex_vertadr[flex_id]
+            flex_num = self._model.flex_vertnum[flex_id]
+            current_pos = self._data.flexvert_xpos[flex_start : flex_start + flex_num].copy()
+
+            # Rest positions are stored in model
+            rest_pos = self._model.flex_vert[flex_start : flex_start + flex_num].copy()
+
+            # Compute displacement
+            displacements = current_pos - rest_pos
+            return displacements
+        except (ValueError, KeyError, AttributeError):
+            # Fallback: flex API may not be available in all MuJoCo versions
+            return None
+
     def apply_force(
         self,
         body_name: str,

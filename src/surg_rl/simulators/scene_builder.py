@@ -414,6 +414,10 @@ f 5 1 4 8
         ET.SubElement(asset, "texture", name="groundplane", type="2d", builtin="checker", width="512", height="512")
         ET.SubElement(asset, "material", name="groundplane", texture="groundplane", texrepeat="5 5")
 
+        # Add worldbody before entities so that robot/tissue/instrument
+        # helpers can append children to it.
+        worldbody = ET.SubElement(mujoco, "worldbody")
+
         # Add robots
         for i, robot in enumerate(scene_definition.robots):
             self._add_robot_to_mjcf(mujoco, robot, i, asset)
@@ -425,9 +429,6 @@ f 5 1 4 8
         # Add instruments
         for i, instrument in enumerate(scene_definition.instruments):
             self._add_instrument_to_mjcf(mujoco, instrument, i, asset)
-
-        # Add worldbody
-        worldbody = ET.SubElement(mujoco, "worldbody")
 
         # Add ground plane if enabled
         if scene_definition.physics.ground_plane:
@@ -508,31 +509,70 @@ f 5 1 4 8
         pos = f"{tissue.pose.position.x} {tissue.pose.position.y} {tissue.pose.position.z}"
         body.set("pos", pos)
 
-        # Get geometry
-        geom_type = tissue.geometry.primitive or "box"
-        if geom_type == "box":
+        if getattr(tissue, "soft_body", False):
+            # Soft body tissue using MuJoCo flexcomp (grid-based deformable object)
             dims = tissue.geometry.dimensions or (0.1, 0.1, 0.01)
-            size = f"{dims[0]/2} {dims[1]/2} {dims[2]/2}"
-            geom = ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="box", size=size)
-        elif geom_type == "sphere":
-            r = tissue.geometry.radius or 0.05
-            geom = ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="sphere", size=str(r))
-        elif geom_type == "cylinder":
-            dims = tissue.geometry.dimensions or (0.05, 0.1)
-            r = dims[0] / 2 if len(dims) > 0 else 0.025
-            h = dims[1] / 2 if len(dims) > 1 else 0.05
-            geom = ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="cylinder", size=f"{r} {h}")
+            # flexcomp generates a 3D grid of vertices
+            flexcomp = ET.SubElement(
+                body,
+                "flexcomp",
+                name=f"{tissue.name}_flex",
+                type="grid",
+                dim="3",
+                count="5 5 2",
+                spacing=f"{dims[0]/4} {dims[1]/4} {dims[2]/2}",
+                pos="0 0 0",
+            )
+            # Add material properties for the soft body
+            flexcomp.set("radius", "0.002")
+            flexcomp.set("mass", str(tissue.physics.density * dims[0] * dims[1] * dims[2] / 50))
+            # Contact properties
+            ET.SubElement(
+                flexcomp,
+                "contact",
+                selfcollide="true" if tissue.physics.self_collision else "false",
+                solref="0.01 1",
+            )
+            # Edge stiffness (Young's modulus proxy)
+            ET.SubElement(
+                flexcomp,
+                "edge",
+                stiffness=str(tissue.physics.youngs_modulus),
+                damping=str(tissue.physics.damping),
+            )
+            # Bending stiffness (if supported by the simulator)
+            if tissue.physics.bending_stiffness > 0:
+                ET.SubElement(
+                    flexcomp,
+                    "plugin",
+                    plugin="mujoco.elasticity.cable",
+                )
         else:
-            # Default to box
-            dims = tissue.geometry.dimensions or (0.1, 0.1, 0.01)
-            size = f"{dims[0]/2} {dims[1]/2} {dims[2]/2}"
-            geom = ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="box", size=size)
+            # Rigid body tissue
+            geom_type = tissue.geometry.primitive or "box"
+            if geom_type == "box":
+                dims = tissue.geometry.dimensions or (0.1, 0.1, 0.01)
+                size = f"{dims[0]/2} {dims[1]/2} {dims[2]/2}"
+                geom = ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="box", size=size)
+            elif geom_type == "sphere":
+                r = tissue.geometry.radius or 0.05
+                geom = ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="sphere", size=str(r))
+            elif geom_type == "cylinder":
+                dims = tissue.geometry.dimensions or (0.05, 0.1)
+                r = dims[0] / 2 if len(dims) > 0 else 0.025
+                h = dims[1] / 2 if len(dims) > 1 else 0.05
+                geom = ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="cylinder", size=f"{r} {h}")
+            else:
+                # Default to box
+                dims = tissue.geometry.dimensions or (0.1, 0.1, 0.01)
+                size = f"{dims[0]/2} {dims[1]/2} {dims[2]/2}"
+                geom = ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="box", size=size)
 
-        # Add physics properties
-        if tissue.physics:
-            if tissue.physics.stiffness:
-                # Soft body properties (simplified)
-                pass  # MuJoCo soft bodies require more complex setup
+            # Add physics properties
+            if tissue.physics:
+                if tissue.physics.stiffness:
+                    # Soft body properties (simplified)
+                    pass  # MuJoCo soft bodies require more complex setup
 
     def _add_instrument_to_mjcf(
         self,
