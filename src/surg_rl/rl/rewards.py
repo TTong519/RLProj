@@ -566,6 +566,7 @@ def create_default_reward(config: Optional[RewardConfig] = None) -> CompositeRew
         (DistanceReward(
             weight=config.distance_weight,
             shape=config.shape,
+            scale=config.scale,
             threshold=config.distance_threshold,
         ), 1.0),
         (OrientationReward(
@@ -581,8 +582,8 @@ def create_default_reward(config: Optional[RewardConfig] = None) -> CompositeRew
             angle_threshold=config.angle_threshold,
         ), 1.0),
         (CollisionPenalty(
-            weight=config.collision_penalty,
-            tissue_weight=config.tissue_damage_penalty,
+            weight=abs(config.collision_penalty),
+            tissue_weight=abs(config.tissue_damage_penalty),
         ), 1.0),
     ])
 
