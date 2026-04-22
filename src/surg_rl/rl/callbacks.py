@@ -48,13 +48,16 @@ class TrainingProgressCallback:
         self._episode_lengths: List[int] = []
         self._start_time = time.time()
 
-    def __call__(self, **kwargs) -> None:
+    def __call__(self, *args, **kwargs) -> None:
         """Called by SB3 during training.
 
         Args:
-            **kwargs: Callback arguments from SB3.
+            *args: Positional arguments from SB3 (locals, globals).
+            **kwargs: Callback keyword arguments from SB3.
         """
         locals_dict = kwargs.get("locals", {})
+        if not locals_dict and len(args) > 0 and isinstance(args[0], dict):
+            locals_dict = args[0]
 
         # Track steps
         self._step += 1
@@ -159,13 +162,16 @@ class CheckpointCallback:
         self.verbose = verbose
         self._last_save_step = 0
 
-    def __call__(self, **kwargs) -> None:
+    def __call__(self, *args, **kwargs) -> None:
         """Called by SB3 during training.
 
         Args:
-            **kwargs: Callback arguments from SB3.
+            *args: Positional arguments from SB3 (locals, globals).
+            **kwargs: Callback keyword arguments from SB3.
         """
         locals_dict = kwargs.get("locals", {})
+        if not locals_dict and len(args) > 0 and isinstance(args[0], dict):
+            locals_dict = args[0]
         model = locals_dict.get("self")
         step = locals_dict.get("num_collected_steps", 0)
 
@@ -221,16 +227,19 @@ class CurriculumCallback:
         self.verbose = verbose
         self._episode_count = 0
 
-    def __call__(self, **kwargs) -> None:
+    def __call__(self, *args, **kwargs) -> None:
         """Called by SB3 during training.
 
         Args:
-            **kwargs: Callback arguments from SB3.
+            *args: Positional arguments from SB3 (locals, globals).
+            **kwargs: Callback keyword arguments from SB3.
         """
         if self.controller is None:
             return
 
         locals_dict = kwargs.get("locals", {})
+        if not locals_dict and len(args) > 0 and isinstance(args[0], dict):
+            locals_dict = args[0]
         done = locals_dict.get("done", False)
 
         if done:
@@ -294,13 +303,16 @@ class EvaluationCallback:
         self._last_eval_step = 0
         self._eval_results: List[Dict[str, Any]] = []
 
-    def __call__(self, **kwargs) -> None:
+    def __call__(self, *args, **kwargs) -> None:
         """Called by SB3 during training.
 
         Args:
-            **kwargs: Callback arguments from SB3.
+            *args: Positional arguments from SB3 (locals, globals).
+            **kwargs: Callback keyword arguments from SB3.
         """
         locals_dict = kwargs.get("locals", {})
+        if not locals_dict and len(args) > 0 and isinstance(args[0], dict):
+            locals_dict = args[0]
         model = locals_dict.get("self")
         step = locals_dict.get("num_collected_steps", 0)
 
