@@ -90,6 +90,13 @@ class PyBulletSimulator(BaseSimulator):
                 self._physics_client = self._pb.connect(self._pb.GUI)
             else:
                 self._physics_client = self._pb.connect(self._pb.DIRECT)
+        else:
+            # Clear previous bodies if reloading
+            self._pb.resetSimulation(physicsClientId=self._physics_client)
+            self._body_ids.clear()
+            self._joint_ids.clear()
+            self._initial_positions.clear()
+            self._initial_orientations.clear()
 
         # Configure physics
         self._pb.setGravity(
