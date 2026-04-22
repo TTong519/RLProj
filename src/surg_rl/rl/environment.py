@@ -268,9 +268,6 @@ class SurgicalEnv(gym.Env):
         """
         super().reset(seed=seed)
 
-        if seed is not None:
-            np.random.seed(seed)
-
         # Reset episode state
         self._step_count = 0
         self._episode_count += 1
