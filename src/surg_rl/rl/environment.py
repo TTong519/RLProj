@@ -147,7 +147,10 @@ class SurgicalEnv(gym.Env):
         self.action_space = self._action_builder.get_action_space()
 
         # Initialize reward function
-        self._reward_fn = create_default_reward(self.config.reward_config)
+        task_name = None
+        if self._scene.task is not None:
+            task_name = self._scene.task.name
+        self._reward_fn = create_default_reward(self.config.reward_config, task_name=task_name)
 
         # Initialize environment controller
         self._controller: Optional[EnvironmentController] = None
@@ -268,6 +271,9 @@ class SurgicalEnv(gym.Env):
         """
         super().reset(seed=seed)
 
+        if seed is not None:
+            np.random.seed(seed)
+
         # Reset episode state
         self._step_count = 0
         self._episode_count += 1
@@ -285,7 +291,11 @@ class SurgicalEnv(gym.Env):
             self._controller.apply_parameters(params, self._simulator)
 
         # Reset simulator
-        sim_obs = self._simulator.reset(seed=seed)
+        try:
+            sim_obs = self._simulator.reset(seed=seed)
+        except Exception as e:
+            logger.warning(f"Simulator reset failed, using zero observation: {e}")
+            sim_obs = Observation()
 
         # Set random target position for task
         self._target_pos = np.array([0.3, 0.0, 0.5]) + np.random.uniform(
@@ -511,8 +521,6 @@ class SurgicalEnv(gym.Env):
             state["sim_time"] = sim_state.time
             state["qpos"] = sim_state.qpos
             state["qvel"] = sim_state.qvel
-            state["body_positions"] = sim_state.body_positions
-            state["body_orientations"] = sim_state.body_orientations
 
         # Save controller state
         if self._controller is not None:
@@ -532,15 +540,13 @@ class SurgicalEnv(gym.Env):
         self._target_quat = state.get("target_quat")
 
         # Restore simulator state
-        if self._simulator is not None:
+        if self._simulator is not None and "qpos" in state:
             from surg_rl.simulators.base_simulator import State
 
             sim_state = State(
                 time=state.get("sim_time", 0.0),
                 qpos=state.get("qpos"),
                 qvel=state.get("qvel"),
-                body_positions=state.get("body_positions", {}),
-                body_orientations=state.get("body_orientations", {}),
             )
             self._simulator.set_state(sim_state)
 

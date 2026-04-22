@@ -23,6 +23,9 @@ class RewardType(str, Enum):
     ACTION_PENALTY = "action_penalty"
     TIME_PENALTY = "time_penalty"
     ORIENTATION = "orientation"
+    SUTURING = "suturing"
+    DISSECTION = "dissection"
+    NEEDLE_PASSING = "needle_passing"
     COMPOSITE = "composite"
     CUSTOM = "custom"
 
@@ -483,6 +486,252 @@ class CollisionPenalty(BaseRewardFunction):
         pass
 
 
+class SuturingReward(BaseRewardFunction):
+    """Task-specific reward for suturing tasks.
+
+    Rewards proper needle positioning relative to tissue entry/exit points,
+    appropriate thread tension, and stitch completion. Penalizes dropping
+    the needle or excessive tissue deformation.
+    """
+
+    def __init__(
+        self,
+        weight: float = 1.0,
+        position_threshold: float = 0.005,
+        tension_threshold: float = 0.5,
+        completion_bonus: float = 50.0,
+        drop_penalty: float = -20.0,
+    ):
+        """Initialize suturing reward.
+
+        Args:
+            weight: Weight for this reward component.
+            position_threshold: Distance threshold for needle positioning (m).
+            tension_threshold: Threshold beyond which tension is penalized.
+            completion_bonus: Reward per completed stitch.
+            drop_penalty: Penalty for dropping the needle.
+        """
+        self.weight = weight
+        self.position_threshold = position_threshold
+        self.tension_threshold = tension_threshold
+        self.completion_bonus = completion_bonus
+        self.drop_penalty = drop_penalty
+        self._stitches_completed: int = 0
+
+    def compute(
+        self,
+        observation: Dict[str, np.ndarray],
+        action: np.ndarray,
+        info: Dict[str, Any],
+    ) -> RewardResult:
+        """Compute suturing task reward."""
+        reward = 0.0
+        components: Dict[str, float] = {}
+
+        # Needle positioning reward
+        needle_pos = observation.get("needle_pos")
+        entry_point = observation.get("entry_point")
+        if needle_pos is not None and entry_point is not None:
+            distance = float(np.linalg.norm(needle_pos - entry_point))
+            position_reward = float(np.exp(-distance * 100.0))
+            if distance < self.position_threshold:
+                position_reward += 1.0
+            reward += position_reward
+            components["needle_position"] = position_reward
+
+        # Thread tension penalty
+        thread_tension = observation.get("thread_tension")
+        if thread_tension is not None:
+            tension = float(thread_tension.item() if thread_tension.size == 1 else thread_tension[0])
+            tension_penalty = -max(0.0, tension - self.tension_threshold)
+            reward += tension_penalty
+            components["thread_tension"] = tension_penalty
+
+        # Stitch completion bonus
+        stitches = int(info.get("stitches_completed", 0))
+        if stitches > self._stitches_completed:
+            new_stitches = stitches - self._stitches_completed
+            completion_reward = new_stitches * self.completion_bonus
+            reward += completion_reward
+            components["stitch_completion"] = completion_reward
+            self._stitches_completed = stitches
+
+        # Needle drop penalty
+        if info.get("needle_dropped", False):
+            reward += self.drop_penalty
+            components["needle_drop"] = self.drop_penalty
+
+        total = reward * self.weight
+        return RewardResult(
+            total=total,
+            components={k: v * self.weight for k, v in components.items()},
+            info={"stitches_completed": self._stitches_completed},
+        )
+
+    def reset(self) -> None:
+        """Reset stitch counter."""
+        self._stitches_completed = 0
+
+
+class DissectionReward(BaseRewardFunction):
+    """Task-specific reward for tissue dissection tasks.
+
+    Rewards progress along the planned incision path, clean cuts with
+    appropriate force, and penalizes collateral tissue damage.
+    """
+
+    def __init__(
+        self,
+        weight: float = 1.0,
+        progress_scale: float = 10.0,
+        damage_penalty: float = -5.0,
+        force_threshold: float = 2.0,
+        clean_cut_bonus: float = 2.0,
+    ):
+        """Initialize dissection reward.
+
+        Args:
+            weight: Weight for this reward component.
+            progress_scale: Scale factor for incision progress reward.
+            damage_penalty: Penalty per unit of collateral damage.
+            force_threshold: Force threshold for clean-cut bonus.
+            clean_cut_bonus: Bonus for cutting below force threshold.
+        """
+        self.weight = weight
+        self.progress_scale = progress_scale
+        self.damage_penalty = damage_penalty
+        self.force_threshold = force_threshold
+        self.clean_cut_bonus = clean_cut_bonus
+        self._prev_progress: float = 0.0
+
+    def compute(
+        self,
+        observation: Dict[str, np.ndarray],
+        action: np.ndarray,
+        info: Dict[str, Any],
+    ) -> RewardResult:
+        """Compute dissection task reward."""
+        reward = 0.0
+        components: Dict[str, float] = {}
+
+        # Incision progress reward
+        progress = observation.get("incision_progress")
+        if progress is not None:
+            current = float(progress.item() if progress.size == 1 else progress[0])
+            delta = current - self._prev_progress
+            if delta > 0:
+                progress_reward = delta * self.progress_scale
+                reward += progress_reward
+                components["incision_progress"] = progress_reward
+            self._prev_progress = current
+
+        # Collateral damage penalty
+        damage = float(info.get("collateral_damage", 0.0))
+        if damage > 0:
+            damage_pen = damage * self.damage_penalty
+            reward += damage_pen
+            components["collateral_damage"] = damage_pen
+
+        # Clean cut bonus
+        if info.get("cutting", False):
+            cut_force = observation.get("cut_force")
+            if cut_force is not None:
+                force = float(cut_force.item() if cut_force.size == 1 else cut_force[0])
+                if force < self.force_threshold:
+                    reward += self.clean_cut_bonus
+                    components["clean_cut"] = self.clean_cut_bonus
+
+        total = reward * self.weight
+        return RewardResult(
+            total=total,
+            components={k: v * self.weight for k, v in components.items()},
+            info={"incision_progress": self._prev_progress},
+        )
+
+    def reset(self) -> None:
+        """Reset progress tracking."""
+        self._prev_progress = 0.0
+
+
+class NeedlePassingReward(BaseRewardFunction):
+    """Task-specific reward for needle passing/handoff tasks.
+
+    Rewards proximity of the needle to the receiving instrument,
+    successful handoffs, and penalizes dropping the needle.
+    """
+
+    def __init__(
+        self,
+        weight: float = 1.0,
+        handoff_threshold: float = 0.02,
+        handoff_bonus: float = 30.0,
+        drop_penalty: float = -20.0,
+        proximity_scale: float = 50.0,
+    ):
+        """Initialize needle passing reward.
+
+        Args:
+            weight: Weight for this reward component.
+            handoff_threshold: Distance threshold for successful handoff (m).
+            handoff_bonus: Reward for each successful handoff.
+            drop_penalty: Penalty for dropping the needle.
+            proximity_scale: Scale for exponential proximity reward.
+        """
+        self.weight = weight
+        self.handoff_threshold = handoff_threshold
+        self.handoff_bonus = handoff_bonus
+        self.drop_penalty = drop_penalty
+        self.proximity_scale = proximity_scale
+        self._handoffs_completed: int = 0
+
+    def compute(
+        self,
+        observation: Dict[str, np.ndarray],
+        action: np.ndarray,
+        info: Dict[str, Any],
+    ) -> RewardResult:
+        """Compute needle passing task reward."""
+        reward = 0.0
+        components: Dict[str, float] = {}
+
+        # Proximity reward
+        needle_pos = observation.get("needle_pos")
+        receiver_pos = observation.get("receiver_pos")
+        if needle_pos is not None and receiver_pos is not None:
+            distance = float(np.linalg.norm(needle_pos - receiver_pos))
+            if distance < self.handoff_threshold:
+                proximity_reward = 1.0
+            else:
+                proximity_reward = float(np.exp(-distance * self.proximity_scale))
+            reward += proximity_reward
+            components["handoff_proximity"] = proximity_reward
+
+        # Successful handoff bonus
+        handoffs = int(info.get("handoffs_completed", 0))
+        if handoffs > self._handoffs_completed:
+            new_handoffs = handoffs - self._handoffs_completed
+            bonus = new_handoffs * self.handoff_bonus
+            reward += bonus
+            components["handoff_success"] = bonus
+            self._handoffs_completed = handoffs
+
+        # Dropped needle penalty
+        if info.get("needle_dropped", False):
+            reward += self.drop_penalty
+            components["needle_drop"] = self.drop_penalty
+
+        total = reward * self.weight
+        return RewardResult(
+            total=total,
+            components={k: v * self.weight for k, v in components.items()},
+            info={"handoffs_completed": self._handoffs_completed},
+        )
+
+    def reset(self) -> None:
+        """Reset handoff counter."""
+        self._handoffs_completed = 0
+
+
 class CompositeReward(BaseRewardFunction):
     """Composite reward function combining multiple reward components.
 
@@ -551,11 +800,15 @@ class CompositeReward(BaseRewardFunction):
 # Factory Function
 # ============================================================================
 
-def create_default_reward(config: Optional[RewardConfig] = None) -> CompositeReward:
+def create_default_reward(
+    config: Optional[RewardConfig] = None,
+    task_name: Optional[str] = None,
+) -> CompositeReward:
     """Create a default composite reward function for surgical tasks.
 
     Args:
         config: Reward configuration. Uses defaults if None.
+        task_name: Optional task name to include task-specific rewards.
 
     Returns:
         CompositeReward with standard surgical task reward components.
@@ -566,7 +819,6 @@ def create_default_reward(config: Optional[RewardConfig] = None) -> CompositeRew
         (DistanceReward(
             weight=config.distance_weight,
             shape=config.shape,
-            scale=config.scale,
             threshold=config.distance_threshold,
         ), 1.0),
         (OrientationReward(
@@ -582,9 +834,18 @@ def create_default_reward(config: Optional[RewardConfig] = None) -> CompositeRew
             angle_threshold=config.angle_threshold,
         ), 1.0),
         (CollisionPenalty(
-            weight=abs(config.collision_penalty),
-            tissue_weight=abs(config.tissue_damage_penalty),
+            weight=config.collision_penalty,
+            tissue_weight=config.tissue_damage_penalty,
         ), 1.0),
     ])
+
+    # Add task-specific rewards based on task name
+    task_lower = (task_name or "").lower()
+    if "sutur" in task_lower:
+        reward.add(SuturingReward(weight=1.0), 1.0)
+    elif "dissect" in task_lower:
+        reward.add(DissectionReward(weight=1.0), 1.0)
+    elif "needle_pass" in task_lower or "needlepass" in task_lower or "handoff" in task_lower:
+        reward.add(NeedlePassingReward(weight=1.0), 1.0)
 
     return reward

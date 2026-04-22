@@ -37,58 +37,32 @@ Example:
 """
 
 # Observation spaces
-from .observation import (
-    ObservationBuilder,
-    ObservationConfig,
-    ObservationSpec,
-    ObservationType,
-    DEFAULT_SPECS,
-    # Default specs
-    JOINT_POSITIONS_SPEC,
-    JOINT_VELOCITIES_SPEC,
-    ENDEFFECTOR_POS_SPEC,
-    ENDEFFECTOR_QUAT_SPEC,
-    FORCE_TORQUE_SPEC,
-    TISSUE_STATE_SPEC,
-    TARGET_POS_SPEC,
-    TARGET_QUAT_SPEC,
-    DISTANCE_TO_TARGET_SPEC,
-    ANGLE_TO_TARGET_SPEC,
-    RGB_IMAGE_SPEC,
-    DEPTH_IMAGE_SPEC,
-    SEGMENTATION_SPEC,
-)
-
 # Action spaces
 from .action import (
+    DEFAULT_ACTION_SPECS,
+    ENDEFFECTOR_DELTA_SPEC,
+    ENDEFFECTOR_POSE_SPEC,
+    GRIPPER_SPEC,
+    JOINT_TORQUES_SPEC,
     ActionBuilder,
     ActionConfig,
     ActionScaling,
     ActionSpec,
     ActionType,
-    DEFAULT_ACTION_SPECS,
+)
+from .action import (
     JOINT_POSITIONS_SPEC as ACTION_JOINT_POSITIONS_SPEC,
+)
+from .action import (
     JOINT_VELOCITIES_SPEC as ACTION_JOINT_VELOCITIES_SPEC,
-    JOINT_TORQUES_SPEC,
-    ENDEFFECTOR_POSE_SPEC,
-    ENDEFFECTOR_DELTA_SPEC,
-    GRIPPER_SPEC,
 )
 
-# Reward functions
-from .rewards import (
-    BaseRewardFunction,
-    CollisionPenalty,
-    CompositeReward,
-    DistanceReward,
-    OrientationReward,
-    ActionPenalty,
-    TimePenalty,
-    RewardConfig,
-    RewardResult,
-    RewardType,
-    SuccessReward,
-    create_default_reward,
+# Callbacks
+from .callbacks import (
+    CheckpointCallback,
+    CurriculumCallback,
+    EvaluationCallback,
+    TrainingProgressCallback,
 )
 
 # Environment
@@ -98,20 +72,52 @@ from .environment import (
     make_env,
     make_vec_env,
 )
+from .observation import (
+    ANGLE_TO_TARGET_SPEC,
+    DEFAULT_SPECS,
+    DEPTH_IMAGE_SPEC,
+    DISTANCE_TO_TARGET_SPEC,
+    ENDEFFECTOR_POS_SPEC,
+    ENDEFFECTOR_QUAT_SPEC,
+    FORCE_TORQUE_SPEC,
+    # Default specs
+    JOINT_POSITIONS_SPEC,
+    JOINT_VELOCITIES_SPEC,
+    RGB_IMAGE_SPEC,
+    SEGMENTATION_SPEC,
+    TARGET_POS_SPEC,
+    TARGET_QUAT_SPEC,
+    TISSUE_STATE_SPEC,
+    ObservationBuilder,
+    ObservationConfig,
+    ObservationSpec,
+    ObservationType,
+)
+
+# Reward functions
+from .rewards import (
+    ActionPenalty,
+    BaseRewardFunction,
+    CollisionPenalty,
+    CompositeReward,
+    DissectionReward,
+    DistanceReward,
+    NeedlePassingReward,
+    OrientationReward,
+    RewardConfig,
+    RewardResult,
+    RewardType,
+    SuccessReward,
+    SuturingReward,
+    TimePenalty,
+    create_default_reward,
+)
 
 # Training
 from .training import (
     AlgorithmConfig,
     TrainingConfig,
     TrainingManager,
-)
-
-# Callbacks
-from .callbacks import (
-    CheckpointCallback,
-    CurriculumCallback,
-    EvaluationCallback,
-    TrainingProgressCallback,
 )
 
 __all__ = [
@@ -150,17 +156,20 @@ __all__ = [
     "GRIPPER_SPEC",
 
     # Reward
+    "ActionPenalty",
     "BaseRewardFunction",
     "CollisionPenalty",
     "CompositeReward",
+    "DissectionReward",
     "DistanceReward",
+    "NeedlePassingReward",
     "OrientationReward",
-    "ActionPenalty",
-    "TimePenalty",
     "RewardConfig",
     "RewardResult",
     "RewardType",
     "SuccessReward",
+    "SuturingReward",
+    "TimePenalty",
     "create_default_reward",
 
     # Environment
