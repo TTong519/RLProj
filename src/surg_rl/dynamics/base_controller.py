@@ -212,7 +212,7 @@ class BaseController(ABC):
         self._step = 0
         self._episode += 1
         
-        if self.config.enabled and self._episode >= self.config.warmup_episodes:
+        if self.config.enabled and self._episode > self.config.warmup_episodes:
             self._current_params = self.sample_parameters()
         else:
             self._current_params = ParameterSnapshot(episode=self._episode)
@@ -239,7 +239,7 @@ class BaseController(ABC):
         if not self.config.enabled:
             return self._current_params
         
-        if self._step < self.config.warmup_episodes:
+        if self._episode <= self.config.warmup_episodes:
             return self._current_params
         
         if self._step % self.config.update_frequency == 0:
@@ -349,8 +349,9 @@ class BaseController(ABC):
         for callback in self._callbacks.get(event, []):
             try:
                 callback(*args, **kwargs)
-            except Exception:
-                pass
+            except Exception as e:
+                import warnings
+                warnings.warn(f"Callback error in {event}: {e}")
 
     def get_history(self, last_n: int = 10) -> List[ParameterSnapshot]:
         """Get recent parameter history.
