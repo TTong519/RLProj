@@ -277,13 +277,82 @@ class MuJoCoSimulator(BaseSimulator):
         if not self._loaded:
             return State()
 
+        # Collect body positions/orientations
+        body_positions: Dict[str, np.ndarray] = {}
+        body_orientations: Dict[str, np.ndarray] = {}
+        if self._scene:
+            for robot in self._scene.robots:
+                pose = self.get_body_pose(robot.name)
+                if pose is not None:
+                    body_positions[robot.name] = pose[0]
+                    body_orientations[robot.name] = pose[1]
+            for tissue in self._scene.tissues:
+                pose = self.get_body_pose(tissue.name)
+                if pose is not None:
+                    body_positions[tissue.name] = pose[0]
+                    body_orientations[tissue.name] = pose[1]
+            for instrument in self._scene.instruments:
+                pose = self.get_body_pose(instrument.name)
+                if pose is not None:
+                    body_positions[instrument.name] = pose[0]
+                    body_orientations[instrument.name] = pose[1]
+
         return State(
             time=self._simulation_time,
             qpos=self._data.qpos.copy() if self._data.qpos is not None else None,
             qvel=self._data.qvel.copy() if self._data.qvel is not None else None,
             mocap_pos=self._data.mocap_pos.copy() if hasattr(self._data, 'mocap_pos') else None,
             mocap_quat=self._data.mocap_quat.copy() if hasattr(self._data, 'mocap_quat') else None,
+            body_positions=body_positions,
+            body_orientations=body_orientations,
         )
+
+    def get_joint_states(self) -> Dict[str, Dict[str, np.ndarray]]:
+        """Get joint positions and velocities for all robots.
+
+        Returns:
+            Dictionary mapping robot name to {'positions': array, 'velocities': array}.
+        """
+        result: Dict[str, Dict[str, np.ndarray]] = {}
+        if not self._loaded or self._scene is None:
+            return result
+
+        for robot in self._scene.robots:
+            # Map robot joints to qpos indices
+            # For MVP, assume a single joint per robot; in full implementation
+            # we would parse joint addresses from the model.
+            joint_positions = []
+            joint_velocities = []
+            if robot.joints:
+                for joint in robot.joints:
+                    try:
+                        joint_id = self._mujoco.mj_name2id(
+                            self._model, self._mujoco.mjtObj.mjOBJ_JOINT, joint.name
+                        )
+                        qpos_adr = self._model.jnt_qposadr[joint_id]
+                        qvel_adr = self._model.jnt_dofadr[joint_id]
+                        joint_positions.append(self._data.qpos[qpos_adr])
+                        joint_velocities.append(self._data.qvel[qvel_adr])
+                    except (ValueError, KeyError):
+                        continue
+            else:
+                # Default single joint fallback
+                try:
+                    joint_id = self._mujoco.mj_name2id(
+                        self._model, self._mujoco.mjtObj.mjOBJ_JOINT, f"{robot.name}_joint"
+                    )
+                    qpos_adr = self._model.jnt_qposadr[joint_id]
+                    qvel_adr = self._model.jnt_dofadr[joint_id]
+                    joint_positions.append(self._data.qpos[qpos_adr])
+                    joint_velocities.append(self._data.qvel[qvel_adr])
+                except (ValueError, KeyError):
+                    continue
+            if joint_positions:
+                result[robot.name] = {
+                    "positions": np.array(joint_positions, dtype=np.float32),
+                    "velocities": np.array(joint_velocities, dtype=np.float32),
+                }
+        return result
 
     def set_state(self, state: State) -> None:
         """Restore simulation state.
@@ -332,6 +401,9 @@ class MuJoCoSimulator(BaseSimulator):
         Args:
             action: Action vector.
         """
+        if action is None or len(action) == 0:
+            return
+
         # Apply to controls (if defined)
         if hasattr(self._data, 'ctrl') and len(self._data.ctrl) > 0:
             n_controls = min(len(action), len(self._data.ctrl))
@@ -353,7 +425,14 @@ class MuJoCoSimulator(BaseSimulator):
                 pass
 
         # Get robot state
-        if self._data.qpos is not None:
+        joint_states = self.get_joint_states()
+        if joint_states:
+            all_positions = []
+            for robot_name in sorted(joint_states.keys()):
+                all_positions.append(joint_states[robot_name]["positions"])
+            if all_positions:
+                obs.robot_state = np.concatenate(all_positions)
+        elif self._data.qpos is not None:
             obs.robot_state = self._data.qpos.copy()
 
         # Get end effector position (simplified)

@@ -414,6 +414,9 @@ f 5 1 4 8
         ET.SubElement(asset, "texture", name="groundplane", type="2d", builtin="checker", width="512", height="512")
         ET.SubElement(asset, "material", name="groundplane", texture="groundplane", texrepeat="5 5")
 
+        # Add worldbody first so _add_* methods can populate it
+        worldbody = ET.SubElement(mujoco, "worldbody")
+
         # Add robots
         for i, robot in enumerate(scene_definition.robots):
             self._add_robot_to_mjcf(mujoco, robot, i, asset)
@@ -426,9 +429,6 @@ f 5 1 4 8
         for i, instrument in enumerate(scene_definition.instruments):
             self._add_instrument_to_mjcf(mujoco, instrument, i, asset)
 
-        # Add worldbody
-        worldbody = ET.SubElement(mujoco, "worldbody")
-
         # Add ground plane if enabled
         if scene_definition.physics.ground_plane:
             self._add_ground_plane_to_mjcf(worldbody, scene_definition)
@@ -440,10 +440,6 @@ f 5 1 4 8
         # Add lights
         for light in scene_definition.environment.lights:
             self._add_light_to_mjcf(worldbody, light)
-
-        # Add actuators
-        actuator = ET.SubElement(mujoco, "actuator")
-        # Motors will be added per robot
 
         # Write to file
         tree = ET.ElementTree(mujoco)
@@ -488,9 +484,53 @@ f 5 1 4 8
         # Add simple geometry for now (box as placeholder)
         geom = ET.SubElement(body, "geom", name=f"{robot.name}_body", type="box", size="0.05 0.05 0.1")
 
-        # Note: Robot is static for now (no joint control implemented yet)
-        # To make it dynamic with joints, add: <freejoint name="robot_root"/>
-        # ET.SubElement(body, "freejoint", name=f"{robot.name}_root")
+        # Add joints
+        if robot.joints:
+            for joint in robot.joints:
+                joint_type = "hinge" if joint.type.value == "revolute" else "slide"
+                joint_elem = ET.SubElement(
+                    body,
+                    "joint",
+                    name=joint.name,
+                    type=joint_type,
+                    axis="0 1 0",
+                    range=f"{joint.limits.lower} {joint.limits.upper}",
+                    damping=str(joint.damping),
+                )
+        else:
+            # Default 1-DOF revolute joint for MVP
+            ET.SubElement(
+                body,
+                "joint",
+                name=f"{robot.name}_joint",
+                type="hinge",
+                axis="0 1 0",
+                range="-1.57 1.57",
+                damping="0.1",
+            )
+
+        # Add actuators
+        actuator = mujoco.find("actuator")
+        if actuator is None:
+            actuator = ET.SubElement(mujoco, "actuator")
+
+        if robot.joints:
+            for joint in robot.joints:
+                ET.SubElement(
+                    actuator,
+                    "motor",
+                    name=f"{joint.name}_motor",
+                    joint=joint.name,
+                    gear="100",
+                )
+        else:
+            ET.SubElement(
+                actuator,
+                "motor",
+                name=f"{robot.name}_motor",
+                joint=f"{robot.name}_joint",
+                gear="100",
+            )
 
     def _add_tissue_to_mjcf(
         self,

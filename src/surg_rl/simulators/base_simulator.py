@@ -238,6 +238,31 @@ class BaseSimulator(ABC):
         """Clean up simulator resources."""
         pass
 
+    @abstractmethod
+    def get_joint_states(self) -> Dict[str, Dict[str, np.ndarray]]:
+        """Get joint positions and velocities for all robots.
+
+        Returns:
+            Dictionary mapping robot name to a dict with 'positions'
+            and 'velocities' arrays.
+        """
+        pass
+
+    def apply_action(self, action: np.ndarray) -> None:
+        """Apply an action to the simulation.
+
+        Args:
+            action: Action vector (robot joint targets or end effector pose).
+        """
+        self._apply_action(action)
+
+    def _apply_action(self, action: np.ndarray) -> None:
+        """Internal implementation of action application.
+
+        Subclasses may override this instead of apply_action.
+        """
+        pass
+
     # Optional methods with default implementations
 
     def get_robot_state(self, robot_name: str) -> Optional[np.ndarray]:

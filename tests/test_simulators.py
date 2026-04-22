@@ -1,5 +1,6 @@
 """Tests for simulator module."""
 
+import numpy as np
 import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -310,3 +311,211 @@ class TestWithSceneDefinition:
         # Cleanup
         builder.cleanup()
         assert not mesh_path.exists()
+
+    def test_mjcf_includes_joints_and_actuators(self, tmp_path: Path):
+        """Test that MJCF contains joints and actuators for robots."""
+        from surg_rl.scene_definition import RobotConfig, RobotType
+
+        scene = SceneDefinition(
+            metadata=Metadata(name="Joint Test Scene"),
+            simulator=SimulatorType.MUJOCO,
+            robots=[
+                RobotConfig(
+                    name="test_robot",
+                    type=RobotType.ROBOTIC_ARM,
+                    joints=[
+                        {
+                            "name": "shoulder",
+                            "type": "revolute",
+                            "limits": {"lower": -1.57, "upper": 1.57},
+                        }
+                    ],
+                )
+            ],
+        )
+
+        builder = SceneBuilder(use_primitive_fallback=True)
+        mjcf_path = builder.create_mjcf(scene, output_path=tmp_path / "test.xml")
+        content = mjcf_path.read_text()
+
+        assert "actuator" in content
+        assert "shoulder" in content
+        assert "motor" in content
+        assert 'joint="shoulder"' in content
+
+
+class TestMuJoCoJointControl:
+    """Tests for MuJoCo joint control."""
+
+    def test_load_scene_creates_joints(self, tmp_path: Path):
+        """Test that loading a scene creates controllable joints."""
+        from surg_rl.scene_definition import RobotConfig, RobotType
+
+        scene = SceneDefinition(
+            metadata=Metadata(name="Joint Scene"),
+            simulator=SimulatorType.MUJOCO,
+            robots=[
+                RobotConfig(
+                    name="arm",
+                    type=RobotType.ROBOTIC_ARM,
+                    urdf_path="dummy.urdf",
+                )
+            ],
+        )
+
+        sim = MuJoCoSimulator()
+        sim.load_scene(scene)
+
+        # Should have at least one joint state entry
+        joint_states = sim.get_joint_states()
+        assert "arm" in joint_states
+        assert "positions" in joint_states["arm"]
+        assert "velocities" in joint_states["arm"]
+
+        sim.close()
+
+    def test_apply_action_sets_ctrl(self, tmp_path: Path):
+        """Test that applying an action sets MuJoCo controls."""
+        from surg_rl.scene_definition import RobotConfig, RobotType
+
+        scene = SceneDefinition(
+            metadata=Metadata(name="Action Scene"),
+            simulator=SimulatorType.MUJOCO,
+            robots=[
+                RobotConfig(
+                    name="arm",
+                    type=RobotType.ROBOTIC_ARM,
+                    urdf_path="dummy.urdf",
+                )
+            ],
+        )
+
+        sim = MuJoCoSimulator()
+        sim.load_scene(scene)
+
+        # Apply a non-zero action
+        action = np.array([0.5], dtype=np.float32)
+        sim.apply_action(action)
+
+        # Verify ctrl was set
+        assert sim._data.ctrl[0] == pytest.approx(0.5)
+
+        sim.close()
+
+    def test_get_state_includes_qpos_qvel(self, tmp_path: Path):
+        """Test that get_state includes joint positions and velocities."""
+        from surg_rl.scene_definition import RobotConfig, RobotType
+
+        scene = SceneDefinition(
+            metadata=Metadata(name="State Scene"),
+            simulator=SimulatorType.MUJOCO,
+            robots=[
+                RobotConfig(
+                    name="arm",
+                    type=RobotType.ROBOTIC_ARM,
+                    urdf_path="dummy.urdf",
+                )
+            ],
+        )
+
+        sim = MuJoCoSimulator()
+        sim.load_scene(scene)
+
+        state = sim.get_state()
+        assert state.qpos is not None
+        assert state.qvel is not None
+        assert state.body_positions is not None
+
+        sim.close()
+
+    def test_step_with_action(self, tmp_path: Path):
+        """Test that step applies action and advances simulation."""
+        from surg_rl.scene_definition import RobotConfig, RobotType
+
+        scene = SceneDefinition(
+            metadata=Metadata(name="Step Scene"),
+            simulator=SimulatorType.MUJOCO,
+            robots=[
+                RobotConfig(
+                    name="arm",
+                    type=RobotType.ROBOTIC_ARM,
+                    urdf_path="dummy.urdf",
+                )
+            ],
+        )
+
+        sim = MuJoCoSimulator()
+        sim.load_scene(scene)
+
+        initial_qpos = sim._data.qpos.copy()
+        action = np.array([0.1], dtype=np.float32)
+        result = sim.step(action)
+
+        # Simulation should have advanced
+        assert sim.simulation_time > 0.0
+        assert result.observation is not None
+
+        sim.close()
+
+
+class TestPyBulletJointControl:
+    """Tests for PyBullet joint control (mocked)."""
+
+    def test_collect_joint_info(self):
+        """Test that joint info is collected after loading a body."""
+        import unittest.mock as mock
+
+        sim = PyBulletSimulator()
+        sim._physics_client = 0
+        sim._pb = mock.MagicMock()
+        sim._pb.getNumJoints.return_value = 2
+        sim._pb.getJointInfo.side_effect = [
+            (0, b"joint_a", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+            (1, b"joint_b", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+        ]
+
+        sim._collect_joint_info("robot", body_id=1)
+
+        assert "robot" in sim._joint_ids
+        assert sim._joint_ids["robot"]["joint_a"] == 0
+        assert sim._joint_ids["robot"]["joint_b"] == 1
+        assert sim._pb.setJointMotorControl2.call_count == 2
+
+    def test_apply_action(self):
+        """Test that apply_action sends targets to joints."""
+        import unittest.mock as mock
+
+        sim = PyBulletSimulator()
+        sim._physics_client = 0
+        sim._pb = mock.MagicMock()
+        sim._body_ids = {"robot": 1}
+        sim._joint_ids = {"robot": {"joint_0": 0, "joint_1": 1}}
+        sim._loaded = True
+
+        action = np.array([0.1, 0.2], dtype=np.float32)
+        sim.apply_action(action)
+
+        assert sim._pb.setJointMotorControl2.call_count == 2
+        # First call: body_id=1, joint=0, target=0.1
+        first_call = sim._pb.setJointMotorControl2.call_args_list[0]
+        assert first_call[0][0] == 1
+        assert first_call[0][1] == 0
+        assert first_call[1]["targetPosition"] == pytest.approx(0.1)
+
+    def test_get_joint_states(self):
+        """Test that get_joint_states returns positions and velocities."""
+        import unittest.mock as mock
+
+        sim = PyBulletSimulator()
+        sim._physics_client = 0
+        sim._pb = mock.MagicMock()
+        sim._body_ids = {"robot": 1}
+        sim._joint_ids = {"robot": {"joint_0": 0}}
+        sim._loaded = True
+
+        sim._pb.getJointState.return_value = (0.5, 0.1, [], [])
+
+        states = sim.get_joint_states()
+        assert "robot" in states
+        assert states["robot"]["positions"][0] == pytest.approx(0.5)
+        assert states["robot"]["velocities"][0] == pytest.approx(0.1)
