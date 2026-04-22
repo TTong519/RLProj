@@ -417,3 +417,6 @@ class CurriculumScheduler(BaseController):
         self._stage_history.clear()
         self._performance_history.clear()
         self._episode = 0
+        self._stages = copy.deepcopy(self.DEFAULT_STAGES)
+        if self.curriculum_config.stage_configs:
+            self._stages.update(self.curriculum_config.stage_configs)
