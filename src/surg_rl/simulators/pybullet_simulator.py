@@ -506,10 +506,7 @@ class PyBulletSimulator(BaseSimulator):
         obs.tissue_state = {}
         for name, body_id in self._body_ids.items():
             pos, orn = self._pb.getBasePositionAndOrientation(body_id, physicsClientId=self._physics_client)
-            obs.tissue_state[name] = {
-                "position": np.array(pos),
-                "orientation": np.array(orn),
-            }
+            obs.tissue_state[name] = np.concatenate([np.array(pos), np.array(orn)])
 
         return obs
 
