@@ -279,6 +279,79 @@ class TestSceneComposer:
                 merge_strategy="invalid",
             )
 
+    def test_merge_scenes_null_physics(self):
+        """Test merging scenes where one has no physics config."""
+        composer = SceneComposer()
+
+        scene1 = SceneDefinition(
+            metadata=Metadata(name="Scene1"),
+        )
+        scene2 = SceneDefinition(
+            metadata=Metadata(name="Scene2"),
+            simulator=SimulatorType.PYBULLET,
+        )
+        # Force physics to None by using model_construct
+        from surg_rl.scene_definition import SceneDefinition as SD
+        scene1_none_physics = SD.model_construct(
+            metadata=Metadata(name="Scene1"),
+            physics=None,
+        )
+
+        merged = composer._merge_two_scenes(scene1_none_physics, scene2)
+        assert merged.metadata.name == "Scene2"
+        assert merged.simulator == SimulatorType.PYBULLET
+
+    def test_merge_scenes_both_null_physics(self):
+        """Test merging scenes where both have no physics config."""
+        composer = SceneComposer()
+
+        from surg_rl.scene_definition import SceneDefinition as SD
+        scene1 = SD.model_construct(
+            metadata=Metadata(name="Scene1"),
+            physics=None,
+        )
+        scene2 = SD.model_construct(
+            metadata=Metadata(name="Scene2"),
+            physics=None,
+        )
+
+        merged = composer._merge_two_scenes(scene1, scene2)
+        assert merged.metadata.name == "Scene2"
+
+    def test_merge_scenes_null_environment(self):
+        """Test merging scenes where one has no environment config."""
+        composer = SceneComposer()
+
+        from surg_rl.scene_definition import SceneDefinition as SD
+        scene1 = SD.model_construct(
+            metadata=Metadata(name="Scene1"),
+            environment=None,
+        )
+        scene2 = SceneDefinition(
+            metadata=Metadata(name="Scene2"),
+        )
+
+        merged = composer._merge_two_scenes(scene1, scene2)
+        assert merged.metadata.name == "Scene2"
+
+    def test_merge_scenes_physics_averaging(self):
+        """Test that differing physics timesteps use scene2's physics."""
+        composer = SceneComposer()
+
+        from surg_rl.scene_definition import PhysicsConfig
+
+        scene1 = SceneDefinition(
+            metadata=Metadata(name="Scene1"),
+            physics=PhysicsConfig(timestep=0.002),
+        )
+        scene2 = SceneDefinition(
+            metadata=Metadata(name="Scene2"),
+            physics=PhysicsConfig(timestep=0.001),
+        )
+
+        merged = composer._merge_two_scenes(scene1, scene2)
+        assert merged.physics.timestep == pytest.approx(0.001)
+
 
 class TestParserErrors:
     """Tests for parser error classes."""
