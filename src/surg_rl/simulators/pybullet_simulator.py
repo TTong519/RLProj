@@ -517,7 +517,7 @@ class PyBulletSimulator(BaseSimulator):
     def _check_truncation(self) -> bool:
         """Check truncation."""
         if self._scene and hasattr(self._scene, 'task') and self._scene.task:
-            max_time = self._scene.task.time_limit or 120.0
+            max_time = 120.0 if self._scene.task.time_limit is None else self._scene.task.time_limit
             if self._simulation_time >= max_time:
                 return True
         return False
