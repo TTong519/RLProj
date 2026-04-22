@@ -249,25 +249,30 @@ class SceneComposer:
             **scene2.model_dump().get("metadata", {}),
         }
 
-        # Use scene2's physics if different
+        # Merge physics configs safely
         scene2_data = scene2.model_dump()
-        if scene2.physics.timestep != scene1.physics.timestep:
+        if scene1.physics is not None and scene2.physics is not None:
+            if scene2.physics.timestep != scene1.physics.timestep:
+                merged_data["physics"] = scene2_data["physics"]
+        elif scene2.physics is not None:
             merged_data["physics"] = scene2_data["physics"]
+        elif scene1.physics is not None:
+            merged_data["physics"] = scene1.model_dump().get("physics")
 
         # Concatenate lists
         for field in ["robots", "tissues", "instruments"]:
             merged_data[field] = merged_data.get(field, []) + scene2_data.get(field, [])
 
         # Merge environment (scene2's cameras/lights added)
-        if "environment" in scene2_data:
-            env1 = merged_data.get("environment", {})
+        if "environment" in scene2_data and scene2_data["environment"] is not None:
+            env1 = merged_data.get("environment") or {}
             env2 = scene2_data["environment"]
 
             # Merge cameras and lights
             merged_env = {
                 **env1,
-                "cameras": env1.get("cameras", []) + env2.get("cameras", []),
-                "lights": env1.get("lights", []) + env2.get("lights", []),
+                "cameras": (env1.get("cameras") or []) + (env2.get("cameras") or []),
+                "lights": (env1.get("lights") or []) + (env2.get("lights") or []),
             }
 
             # Use scene2's other environment settings
@@ -278,7 +283,7 @@ class SceneComposer:
             merged_data["environment"] = merged_env
 
         # Use scene2's task if defined
-        if scene2.task:
+        if scene2.task is not None:
             merged_data["task"] = scene2_data.get("task")
 
         # Merge domain randomization
@@ -295,6 +300,15 @@ class SceneComposer:
             **merged_data.get("custom", {}),
             **scene2_data.get("custom", {}),
         }
+
+        # Remove None-valued keys that have default factories to avoid
+        # Pydantic validation errors
+        if merged_data.get("physics") is None:
+            merged_data.pop("physics", None)
+        if merged_data.get("environment") is None:
+            merged_data.pop("environment", None)
+        if merged_data.get("task") is None:
+            merged_data.pop("task", None)
 
         return SceneDefinition(**merged_data)
 
