@@ -520,7 +520,7 @@ f 5 1 4 8
         elif geom_type == "cylinder":
             dims = tissue.geometry.dimensions or (0.05, 0.1)
             r = dims[0] / 2 if len(dims) > 0 else 0.025
-            h = dims[2] / 2 if len(dims) > 2 else 0.05
+            h = dims[1] / 2 if len(dims) > 1 else 0.05
             geom = ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="cylinder", size=f"{r} {h}")
         else:
             # Default to box
