@@ -273,22 +273,20 @@ class ParameterRandomizer(BaseController):
         simulator: Any,
     ) -> bool:
         """Apply randomized parameters to the simulator.
-        
-        This method applies physics and dynamics parameters to the simulator.
-        Visual parameters are typically applied during rendering and may need
-        special handling.
-        
+
+        This method applies physics, visual, and dynamics parameters to the simulator.
+
         Args:
             snapshot: Parameters to apply.
             simulator: Simulator instance (MuJoCo or PyBullet).
-            
+
         Returns:
             True if successful, False otherwise.
         """
         try:
             # Apply physics parameters based on simulator type
             sim_type = type(simulator).__name__
-            
+
             # Apply gravity changes
             if any(k.startswith("gravity_") for k in snapshot.physics):
                 gravity = [
@@ -297,33 +295,37 @@ class ParameterRandomizer(BaseController):
                     snapshot.physics.get("gravity_z", -9.81),
                 ]
                 self._apply_gravity(simulator, gravity)
-            
+
             # Apply mass scaling
             if "mass_ratio" in snapshot.physics:
                 self._apply_mass_scaling(
                     simulator, snapshot.physics["mass_ratio"]
                 )
-            
+
             # Apply friction
             if "friction" in snapshot.physics:
                 self._apply_friction(
                     simulator, snapshot.physics["friction"]
                 )
-            
+
             # Apply damping
             if "damping" in snapshot.physics:
                 self._apply_damping(
                     simulator, snapshot.physics["damping"]
                 )
-            
+
             # Apply stiffness (soft body parameters)
             if "stiffness" in snapshot.physics:
                 self._apply_stiffness(
                     simulator, snapshot.physics["stiffness"]
                 )
-            
+
+            # Apply visual parameters
+            if snapshot.visual:
+                self._apply_visual_parameters(simulator, snapshot.visual)
+
             return True
-            
+
         except Exception as e:
             # Log error and return False
             import warnings
@@ -351,42 +353,160 @@ class ParameterRandomizer(BaseController):
 
     def _apply_mass_scaling(self, simulator: Any, ratio: float) -> None:
         """Apply mass scaling to bodies.
-        
+
         Args:
             simulator: Simulator instance.
             ratio: Mass ratio multiplier.
         """
-        # This would need to be implemented based on the specific simulator
-        # and what bodies to scale
-        pass
+        try:
+            # MuJoCo
+            if hasattr(simulator, "_model") and simulator._model is not None:
+                model = simulator._model
+                if hasattr(model, "body_mass") and model.body_mass is not None:
+                    model.body_mass[:] = model.body_mass * ratio
+            # PyBullet
+            elif hasattr(simulator, "_physics_client") and hasattr(simulator, "_body_ids"):
+                import pybullet as p
+                for body_id in simulator._body_ids.values():
+                    dynamics = p.getDynamicsInfo(body_id, -1, physicsClientId=simulator._physics_client)
+                    new_mass = dynamics[0] * ratio
+                    p.changeDynamics(
+                        body_id, -1, mass=new_mass,
+                        physicsClientId=simulator._physics_client,
+                    )
+        except Exception:
+            pass
 
     def _apply_friction(self, simulator: Any, friction: float) -> None:
         """Apply friction coefficient.
-        
+
         Args:
             simulator: Simulator instance.
             friction: Friction coefficient.
         """
-        # This would need to be implemented based on the specific simulator
-        pass
+        try:
+            # MuJoCo
+            if hasattr(simulator, "_model") and simulator._model is not None:
+                model = simulator._model
+                if hasattr(model, "geom_friction") and model.geom_friction is not None:
+                    # Set sliding friction (first column)
+                    model.geom_friction[:, 0] = friction
+            # PyBullet
+            elif hasattr(simulator, "_physics_client") and hasattr(simulator, "_body_ids"):
+                import pybullet as p
+                for body_id in simulator._body_ids.values():
+                    p.changeDynamics(
+                        body_id, -1, lateralFriction=friction,
+                        physicsClientId=simulator._physics_client,
+                    )
+        except Exception:
+            pass
 
     def _apply_damping(self, simulator: Any, damping: float) -> None:
         """Apply damping coefficient.
-        
+
         Args:
             simulator: Simulator instance.
             damping: Damping coefficient.
         """
-        pass
+        try:
+            # MuJoCo
+            if hasattr(simulator, "_model") and simulator._model is not None:
+                model = simulator._model
+                if hasattr(model, "dof_damping") and model.dof_damping is not None:
+                    model.dof_damping[:] = damping
+            # PyBullet
+            elif hasattr(simulator, "_physics_client") and hasattr(simulator, "_body_ids"):
+                import pybullet as p
+                for body_id in simulator._body_ids.values():
+                    p.changeDynamics(
+                        body_id, -1,
+                        linearDamping=damping,
+                        angularDamping=damping,
+                        physicsClientId=simulator._physics_client,
+                    )
+        except Exception:
+            pass
 
     def _apply_stiffness(self, simulator: Any, stiffness: float) -> None:
         """Apply stiffness for soft bodies.
-        
+
         Args:
             simulator: Simulator instance.
             stiffness: Stiffness value.
         """
-        pass
+        try:
+            # MuJoCo: modify tendon stiffness or actuator gains if present
+            if hasattr(simulator, "_model") and simulator._model is not None:
+                model = simulator._model
+                if hasattr(model, "tendon_stiffness") and model.tendon_stiffness is not None:
+                    model.tendon_stiffness[:] = stiffness
+                if hasattr(model, "actuator_gainprm") and model.actuator_gainprm is not None:
+                    model.actuator_gainprm[:, 0] = stiffness
+            # PyBullet: no direct soft body stiffness control at runtime
+        except Exception:
+            pass
+
+    def _apply_visual_parameters(
+        self, simulator: Any, params: Dict[str, float]
+    ) -> None:
+        """Apply visual randomization parameters to simulator.
+
+        Args:
+            simulator: Simulator instance.
+            params: Visual parameter dictionary.
+        """
+        try:
+            r_offset = params.get("color_r_offset", 0.0)
+            g_offset = params.get("color_g_offset", 0.0)
+            b_offset = params.get("color_b_offset", 0.0)
+            lighting = params.get("lighting_intensity")
+
+            # MuJoCo
+            if hasattr(simulator, "_model") and simulator._model is not None:
+                model = simulator._model
+                if hasattr(model, "geom_rgba") and model.geom_rgba is not None:
+                    model.geom_rgba[:, 0] = np.clip(
+                        model.geom_rgba[:, 0] + r_offset, 0.0, 1.0
+                    )
+                    model.geom_rgba[:, 1] = np.clip(
+                        model.geom_rgba[:, 1] + g_offset, 0.0, 1.0
+                    )
+                    model.geom_rgba[:, 2] = np.clip(
+                        model.geom_rgba[:, 2] + b_offset, 0.0, 1.0
+                    )
+                if lighting is not None and hasattr(model, "vis"):
+                    # Scale headlight intensity
+                    if hasattr(model.vis, "headlight"):
+                        model.vis.headlight[:] = [
+                            0.1 * lighting, 0.15 * lighting, 0.3 * lighting
+                        ]
+
+            # PyBullet
+            elif hasattr(simulator, "_physics_client") and hasattr(simulator, "_body_ids"):
+                import pybullet as p
+                for body_id in simulator._body_ids.values():
+                    # Get current color and apply offset
+                    # PyBullet doesn't provide a getVisualShapeData that easily
+                    # gives rgba, so we use a default base and apply offsets
+                    p.changeVisualShape(
+                        body_id, -1,
+                        rgbaColor=[
+                            np.clip(0.5 + r_offset, 0.0, 1.0),
+                            np.clip(0.5 + g_offset, 0.0, 1.0),
+                            np.clip(0.5 + b_offset, 0.0, 1.0),
+                            1.0,
+                        ],
+                        physicsClientId=simulator._physics_client,
+                    )
+                if lighting is not None:
+                    p.configureDebugVisualizer(
+                        p.COV_ENABLE_SHADOWS, 1 if lighting > 0.8 else 0,
+                        lightPosition=[1.0 * lighting, 1.0 * lighting, 5.0 * lighting],
+                        physicsClientId=simulator._physics_client,
+                    )
+        except Exception:
+            pass
 
     def update_curriculum(
         self,
