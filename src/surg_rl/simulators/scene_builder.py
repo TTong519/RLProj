@@ -547,7 +547,10 @@ f 5 1 4 8
             return
 
         body = ET.SubElement(worldbody, "body", name=instrument.name)
-        pos = f"{instrument.pose.position.x} {instrument.pose.position.y} {instrument.pose.position.z}"
+        if instrument.pose is not None:
+            pos = f"{instrument.pose.position.x} {instrument.pose.position.y} {instrument.pose.position.z}"
+        else:
+            pos = "0 0 0"
         body.set("pos", pos)
 
         # Add geometry based on type

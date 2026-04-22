@@ -1,242 +1,410 @@
 #!/usr/bin/env python3
-"""Interactive scene visualization demo for Surg-RL.
+"""Suturing RL training demo for Surg-RL.
 
-This demo opens a window to visualize surgical scenes using MuJoCo or PyBullet.
-Run with: python demos/demo.py --scene scenes/simple_suturing.json
+Trains a PPO agent to perform a multi-stage suturing task:
+  1. Approach and pick up a surgical needle
+  2. Transport the needle to the tissue
+  3. Drive the needle through both skin patches
+  4. Complete the suture connecting both patches
+
+Usage:
+  python demos/demo.py --headless --steps 10000
+  python demos/demo.py --scene scenes/suturing_demo.json --algo PPO
 """
 
 import argparse
 import sys
 import time
 from pathlib import Path
+from typing import Optional, Tuple
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import numpy as np
 
+from surg_rl.rl.environment import SurgicalEnv, SurgicalEnvConfig, make_env
+from surg_rl.rl.training import TrainingManager, TrainingConfig, AlgorithmConfig
+from surg_rl.rl.observation import ObservationConfig, ObservationType
+from surg_rl.rl.action import ActionConfig, ActionType
+from surg_rl.rl.rewards import (
+    CompositeReward,
+    DistanceReward,
+    OrientationReward,
+    ActionPenalty,
+    TimePenalty,
+    SuccessReward,
+    CollisionPenalty,
+)
 from surg_rl.scene_definition import load_scene
-from surg_rl.simulators import MuJoCoSimulator, PyBulletSimulator
 
 
-def run_mujoco_demo(scene_file: str, headless: bool = False, steps: int = 1000):
-    """Run visualization demo using MuJoCo backend.
-    
+def build_suturing_reward() -> CompositeReward:
+    """Build a composite reward function for the multi-stage suturing task.
+
+    Components:
+    - DistanceReward: Dense shaping for needle approach and transport
+    - OrientationReward: Alignment of end effector with needle/tissue
+    - ActionPenalty: Smooth, energy-efficient motions
+    - TimePenalty: Efficiency pressure
+    - SuccessReward: Sparse bonus on task completion
+    - CollisionPenalty: Avoid unintended tissue damage
+
+    Returns:
+        CompositeReward configured for suturing.
+    """
+    reward = CompositeReward()
+    reward.add(DistanceReward(weight=1.0, shape="exponential", scale=10.0), 1.0)
+    reward.add(OrientationReward(weight=0.5, scale=5.0), 1.0)
+    reward.add(ActionPenalty(weight=0.01, penalty_type="l2"), 1.0)
+    reward.add(TimePenalty(weight=0.001), 1.0)
+    reward.add(SuccessReward(), 1.0)
+    reward.add(CollisionPenalty(weight=0.5), 1.0)
+    return reward
+
+
+def build_observation_config() -> ObservationConfig:
+    """Build observation configuration for suturing.
+
+    Includes joint state, end effector pose, target info, and distance/angle
+    metrics needed for the multi-stage task.
+
+    Returns:
+        ObservationConfig for the suturing environment.
+    """
+    return ObservationConfig(
+        observation_types=[
+            ObservationType.JOINT_POSITIONS,
+            ObservationType.JOINT_VELOCITIES,
+            ObservationType.ENDEFFECTOR_POS,
+            ObservationType.ENDEFFECTOR_QUAT,
+            ObservationType.TARGET_POS,
+            ObservationType.DISTANCE_TO_TARGET,
+            ObservationType.ANGLE_TO_TARGET,
+        ],
+        include_force=False,
+        include_tissue=False,
+        normalize=True,
+        flatten=True,
+    )
+
+
+def run_training(args: argparse.Namespace) -> Tuple[TrainingManager, object]:
+    """Run the RL training loop.
+
     Args:
-        scene_file: Path to scene JSON/YAML file.
-        headless: If True, run without GUI (for testing).
-        steps: Number of simulation steps to run.
+        args: Parsed command-line arguments.
+
+    Returns:
+        Tuple of (TrainingManager, trained model).
+    """
+    algo_config = AlgorithmConfig(
+        name=args.algo,
+        learning_rate=3e-4,
+        n_steps=2048,
+        batch_size=64,
+        n_epochs=10,
+        gamma=0.99,
+        gae_lambda=0.95,
+        clip_range=0.2,
+        ent_coef=0.01,
+    )
+
+    training_config = TrainingConfig(
+        scene_path=args.scene,
+        algorithm=algo_config,
+        total_timesteps=args.steps,
+        n_envs=args.n_envs,
+        seed=args.seed,
+        device=args.device,
+        log_dir=args.log_dir,
+        save_freq=max(args.steps // 10, 1000),
+        eval_freq=max(args.steps // 20, 500),
+        n_eval_episodes=args.eval_episodes,
+        verbose=1,
+        max_episode_steps=args.max_episode_steps,
+        use_curriculum=args.use_curriculum,
+        use_adaptive_difficulty=args.use_adaptive,
+    )
+
+    print(f"\n{'='*60}")
+    print("  Phase 1: Training")
+    print(f"{'='*60}")
+    print(f"  Algorithm:     {args.algo}")
+    print(f"  Timesteps:     {args.steps:,}")
+    print(f"  Scene:         {args.scene}")
+    print(f"  Max ep steps:  {args.max_episode_steps}")
+    print(f"  Seed:          {args.seed}")
+    print(f"  Curriculum:    {args.use_curriculum}")
+    print(f"  Adaptive:      {args.use_adaptive}")
+    print(f"  Log dir:       {args.log_dir}")
+    print()
+
+    manager = TrainingManager(training_config)
+    start = time.time()
+    model = manager.train()
+    elapsed = time.time() - start
+
+    print(f"\n  Training completed in {elapsed:.1f}s")
+    print(f"  Model saved to: {args.log_dir}/final_model")
+
+    return manager, model
+
+
+def run_evaluation(
+    manager: TrainingManager,
+    n_episodes: int,
+    headless: bool = True,
+) -> dict:
+    """Evaluate the trained model.
+
+    Args:
+        manager: TrainingManager with a trained model.
+        n_episodes: Number of evaluation episodes.
+        headless: Whether to suppress rendering.
+
+    Returns:
+        Evaluation results dictionary.
     """
     print(f"\n{'='*60}")
-    print("  MuJoCo Scene Visualization Demo")
+    print("  Phase 2: Evaluation")
     print(f"{'='*60}")
-    
-    # Load scene
-    print(f"\n📂 Loading scene: {scene_file}")
-    scene = load_scene(scene_file)
-    print(f"   ✓ Scene: {scene.metadata.name}")
-    print(f"   ✓ Robots: {len(scene.robots)}")
-    print(f"   ✓ Tissues: {len(scene.tissues)}")
-    print(f"   ✓ Instruments: {len(scene.instruments)}")
-    
-    # Create simulator
-    print("\n🎮 Initializing MuJoCo simulator...")
-    assets_dir = Path(__file__).parent.parent / "assets"
-    sim = MuJoCoSimulator(
-        timestep=scene.physics.timestep if hasattr(scene, 'physics') else 0.002,
-        render_width=640,
-        render_height=480,
-        assets_dir=assets_dir,
-    )
-    
-    # Load scene into simulator
-    print("   ✓ Building scene...")
-    sim.load_scene(scene)
-    
-    # Reset to initial state
-    print("   ✓ Resetting simulation...")
-    obs = sim.reset()
-    
-    print("\n🚀 Starting visualization...")
-    print("   Controls:")
-    print("   - Close window to exit")
-    print("   - The scene will animate for demonstration")
-    print(f"   - Running {steps} simulation steps")
+    print(f"  Episodes: {n_episodes}")
     print()
-    
-    if headless:
-        # Just run steps without rendering to window
-        for i in range(steps):
-            # Small random action for demo
-            action = np.zeros(7)  # Placeholder action
-            result = sim.step(action)
-            if i % 100 == 0:
-                print(f"   Step {i}/{steps}")
-        print("   ✓ Completed headless run")
-    else:
-        # Interactive visualization using passive viewer
-        try:
-            # Start the passive viewer
-            print("   Launching viewer window...")
-            sim.start_viewer()
-            
-            for i in range(steps):
-                # Small random action for demonstration
-                action = np.zeros(7)  # Placeholder action
-                result = sim.step(action)
-                
-                # Sync the viewer
-                sim.render(mode="human")
-                
-                # Small delay for visualization
-                time.sleep(0.01)
-                
-                if i % 100 == 0:
-                    print(f"   Step {i}/{steps} - Reward: {result.reward:.4f}")
-                    
-        except KeyboardInterrupt:
-            print("\n   Interrupted by user")
-        finally:
-            sim.close()
-    
-    print("\n✓ Demo completed")
+
+    results = manager.evaluate(
+        n_episodes=n_episodes,
+        render=not headless,
+    )
+
+    print(f"\n  {'Metric':<25} {'Value':>12}")
+    print(f"  {'-'*25} {'-'*12}")
+    print(f"  {'Mean reward':<25} {results['mean_reward']:>12.2f}")
+    print(f"  {'Std reward':<25} {results['std_reward']:>12.2f}")
+    print(f"  {'Max reward':<25} {results['max_reward']:>12.2f}")
+    print(f"  {'Min reward':<25} {results['min_reward']:>12.2f}")
+    print(f"  {'Mean episode length':<25} {results['mean_episode_length']:>12.1f}")
+    print(f"  {'Success rate':<25} {results['success_rate']:>11.1%}")
+
+    return results
 
 
-def run_pybullet_demo(scene_file: str, headless: bool = False, steps: int = 1000):
-    """Run visualization demo using PyBullet backend.
-    
+def run_interactive(
+    env: SurgicalEnv,
+    model: Optional[object] = None,
+    steps: int = 1000,
+) -> None:
+    """Run an interactive episode with the trained model or random actions.
+
     Args:
-        scene_file: Path to scene JSON/YAML file.
-        headless: If True, run without GUI (DIRECT mode).
-        steps: Number of simulation steps to run.
+        env: SurgicalEnv instance.
+        model: Trained SB3 model (None for random actions).
+        steps: Maximum number of steps.
     """
     print(f"\n{'='*60}")
-    print("  PyBullet Scene Visualization Demo")
+    print("  Phase 3: Interactive Demo")
     print(f"{'='*60}")
-    
-    # Load scene
-    print(f"\n📂 Loading scene: {scene_file}")
-    scene = load_scene(scene_file)
-    print(f"   ✓ Scene: {scene.metadata.name}")
-    print(f"   ✓ Robots: {len(scene.robots)}")
-    print(f"   ✓ Tissues: {len(scene.tissues)}")
-    print(f"   ✓ Instruments: {len(scene.instruments)}")
-    
-    # Create simulator
-    print("\n🎮 Initializing PyBullet simulator...")
-    assets_dir = Path(__file__).parent.parent / "assets"
-    
-    render_mode = "DIRECT" if headless else "GUI"
-    sim = PyBulletSimulator(
-        timestep=scene.physics.timestep if hasattr(scene, 'physics') else 0.002,
-        render_width=640,
-        render_height=480,
-        assets_dir=assets_dir,
-        render_mode=render_mode,
-    )
-    
-    # Load scene into simulator
-    print("   ✓ Building scene...")
-    sim.load_scene(scene)
-    
-    # Reset to initial state
-    print("   ✓ Resetting simulation...")
-    obs = sim.reset()
-    
-    print("\n🚀 Starting visualization...")
-    print("   Controls:")
-    print("   - Close window to exit")
-    print("   - Mouse drag to rotate view")
-    print("   - Scroll to zoom")
-    print(f"   - Running {steps} simulation steps")
+
+    obs, info = env.reset()
+    total_reward = 0.0
+    mode = "model" if model is not None else "random"
+    print(f"  Action mode: {mode}")
+    print(f"  Max steps:   {steps}")
     print()
-    
-    try:
-        for i in range(steps):
-            # Small random action for demonstration
-            action = np.zeros(7)  # Placeholder action
-            result = sim.step(action)
-            
-            if not headless:
-                # PyBullet GUI mode handles rendering automatically
-                sim.render(mode="human")
-            
-            # Small delay for visualization
-            time.sleep(0.01)
-            
-            if i % 100 == 0:
-                print(f"   Step {i}/{steps} - Reward: {result.reward:.4f}")
-                
-    except KeyboardInterrupt:
-        print("\n   Interrupted by user")
-    finally:
-        sim.close()
-    
-    print("\n✓ Demo completed")
+
+    for step in range(steps):
+        if model is not None:
+            action, _ = model.predict(obs, deterministic=True)
+        else:
+            action = env.action_space.sample()
+
+        obs, reward, terminated, truncated, info = env.step(action)
+        total_reward += reward
+
+        dist = info.get("distance_to_target", float("nan"))
+
+        if step % 100 == 0 or terminated or truncated:
+            print(
+                f"  Step {step:>5} | "
+                f"reward: {reward:+.4f} | "
+                f"total: {total_reward:+.2f} | "
+                f"dist: {dist:.4f} | "
+                f"{'DONE' if terminated or truncated else ''}"
+            )
+
+        if terminated or truncated:
+            success = info.get("task_success", False)
+            print(f"\n  Episode ended at step {step}")
+            print(f"  Total reward: {total_reward:.2f}")
+            print(f"  Success: {success}")
+            break
+
+    env.close()
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Visualize surgical robotics scenes",
+        description="Suturing RL training demo - train an agent to pick up a "
+        "needle and suture two skin patches together",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # View scene with MuJoCo (default)
-  python demos/demo.py --scene scenes/simple_suturing.json
-  
-  # View scene with PyBullet
-  python demos/demo.py --scene scenes/simple_suturing.json --backend pybullet
-  
-  # Run headless (no GUI, for testing)
-  python demos/demo.py --scene scenes/minimal_scene.json --headless
-  
-  # Run for more steps
-  python demos/demo.py --scene scenes/simple_suturing.json --steps 5000
+  # Quick training run (headless)
+  python demos/demo.py --headless --steps 10000
+
+  # Full PPO training
+  python demos/demo.py --scene scenes/suturing_demo.json --algo PPO --steps 100000
+
+  # Training with curriculum learning
+  python demos/demo.py --steps 50000 --use-curriculum
+
+  # Evaluate only (requires a trained model)
+  python demos/demo.py --steps 0 --eval-episodes 20
         """,
     )
-    
+
     parser.add_argument(
         "--scene", "-s",
         type=str,
-        default="scenes/simple_suturing.json",
-        help="Path to scene file (JSON or YAML)",
+        default="scenes/suturing_demo.json",
+        help="Path to scene file (default: scenes/suturing_demo.json)",
     )
     parser.add_argument(
-        "--backend", "-b",
+        "--algo", "-a",
         type=str,
-        choices=["mujoco", "pybullet"],
-        default="mujoco",
-        help="Simulator backend to use (default: mujoco)",
-    )
-    parser.add_argument(
-        "--headless",
-        action="store_true",
-        help="Run without GUI window (for testing)",
+        choices=["PPO", "SAC", "A2C"],
+        default="PPO",
+        help="RL algorithm (default: PPO)",
     )
     parser.add_argument(
         "--steps",
         type=int,
-        default=1000,
-        help="Number of simulation steps to run (default: 1000)",
+        default=50000,
+        help="Total training timesteps (default: 50000)",
     )
-    
+    parser.add_argument(
+        "--eval-episodes",
+        type=int,
+        default=5,
+        help="Number of evaluation episodes (default: 5)",
+    )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run without GUI rendering",
+    )
+    parser.add_argument(
+        "--max-episode-steps",
+        type=int,
+        default=2000,
+        help="Max steps per episode (default: 2000)",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed (default: 42)",
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="auto",
+        help="Training device: auto, cpu, cuda, mps (default: auto)",
+    )
+    parser.add_argument(
+        "--n-envs",
+        type=int,
+        default=1,
+        help="Number of parallel environments (default: 1)",
+    )
+    parser.add_argument(
+        "--use-curriculum",
+        action="store_true",
+        help="Enable curriculum learning",
+    )
+    parser.add_argument(
+        "--use-adaptive",
+        action="store_true",
+        help="Enable adaptive difficulty",
+    )
+    parser.add_argument(
+        "--log-dir",
+        type=str,
+        default="logs/suturing_demo",
+        help="Directory for logs and checkpoints (default: logs/suturing_demo)",
+    )
+
     args = parser.parse_args()
-    
-    # Check if scene file exists
+
+    # Resolve scene path
     scene_path = Path(args.scene)
     if not scene_path.exists():
-        # Try relative to project root
         project_root = Path(__file__).parent.parent
         scene_path = project_root / args.scene
         if not scene_path.exists():
             print(f"Error: Scene file not found: {args.scene}")
             sys.exit(1)
-    
-    # Run appropriate demo
-    if args.backend == "mujoco":
-        run_mujoco_demo(str(scene_path), headless=args.headless, steps=args.steps)
+    args.scene = str(scene_path)
+
+    # Print banner
+    print(f"\n{'='*60}")
+    print("  Suturing RL Training Demo")
+    print(f"{'='*60}")
+    print()
+    print("  Task stages:")
+    print("    1. Approach the surgical needle")
+    print("    2. Grasp and pick up the needle")
+    print("    3. Drive the needle through both skin patches")
+    print("    4. Complete the suture connecting both patches")
+    print()
+
+    # Load and display scene info
+    try:
+        scene = load_scene(args.scene)
+        print(f"  Scene:  {scene.metadata.name}")
+        print(f"  Robots: {len(scene.robots)}")
+        print(f"  Tissues: {len(scene.tissues)}")
+        print(f"  Instruments: {len(scene.instruments)}")
+        if scene.task:
+            print(f"  Task: {scene.task.name}")
+            for obj in scene.task.objectives:
+                print(f"    - {obj.name} (weight={obj.weight})")
+    except Exception as e:
+        print(f"  Warning: Could not load scene for info display: {e}")
+
+    # Training phase
+    if args.steps > 0:
+        manager, model = run_training(args)
+
+        # Evaluation phase
+        eval_results = run_evaluation(
+            manager,
+            n_episodes=args.eval_episodes,
+            headless=args.headless,
+        )
+
+        # Interactive demo
+        if not args.headless:
+            print()
+            try:
+                response = input("  Run interactive demo? [y/N]: ").strip().lower()
+            except EOFError:
+                response = "n"
+            if response == "y":
+                from surg_rl.rl.environment import make_env as _make_env
+
+                env = _make_env(
+                    scene_path=args.scene,
+                    max_episode_steps=args.max_episode_steps,
+                    seed=args.seed + 100,
+                )
+                run_interactive(env, model=model, steps=args.max_episode_steps)
     else:
-        run_pybullet_demo(str(scene_path), headless=args.headless, steps=args.steps)
+        print("\n  Skipping training (--steps 0)")
+
+    print(f"\n{'='*60}")
+    print("  Demo complete")
+    print(f"{'='*60}\n")
 
 
 if __name__ == "__main__":

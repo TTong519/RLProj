@@ -14,6 +14,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 import numpy as np
 
+import gymnasium as gym
+
 from surg_rl.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -269,9 +271,16 @@ class TrainingManager:
         if not policy_kwargs.get("net_arch"):
             policy_kwargs["net_arch"] = [256, 256]
 
+        # Select policy type based on observation space
+        policy_type = "MlpPolicy"
+        if hasattr(env, "observation_space") and isinstance(
+            env.observation_space, gym.spaces.Dict
+        ):
+            policy_type = "MultiInputPolicy"
+
         # Create model with common parameters
         common_kwargs = {
-            "policy": "MlpPolicy",
+            "policy": policy_type,
             "env": env,
             "learning_rate": algo_config.learning_rate,
             "gamma": algo_config.gamma,
@@ -282,7 +291,7 @@ class TrainingManager:
         }
 
         # Algorithm-specific parameters
-        if algo_config.name in ("PPO", "A2C"):
+        if algo_name in ("PPO", "A2C"):
             common_kwargs.update({
                 "n_steps": algo_config.n_steps,
                 "batch_size": algo_config.batch_size,

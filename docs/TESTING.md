@@ -35,8 +35,8 @@ Surg-RL uses `pytest` as its testing framework. The test suite includes:
 | scene_generation | 35 | 88% |
 | simulators | 45 | 85% |
 | dynamics | 37 | 90% |
+| rl | 54 | 88% |
 | config | 15 | 95% |
-| **Total** | **208** | **89%** |
 
 ### Test Dependencies
 

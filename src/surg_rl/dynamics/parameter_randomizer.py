@@ -339,8 +339,8 @@ class ParameterRandomizer(BaseController):
         """
         try:
             # MuJoCo
-            if hasattr(simulator, "model") and hasattr(simulator.model, "opt"):
-                simulator.model.opt.gravity[:] = gravity
+            if hasattr(simulator, "_model") and simulator._model is not None and hasattr(simulator._model, "opt"):
+                simulator._model.opt.gravity[:] = gravity
             # PyBullet
             elif hasattr(simulator, "_physics_client"):
                 import pybullet as p

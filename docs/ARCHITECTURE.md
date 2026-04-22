@@ -63,8 +63,8 @@ This document describes the architecture of Surg-RL.
 └───────────────────────────────────────────────────────────────────────┘
                                 │
 ┌───────────────────────────────┴───────────────────────────────────┐
-│              RL Training Pipeline (PLANNED)                         │
-│  - Stable-Baselines3 / RLlib integration                           │
+│              RL Training Pipeline                                    │
+│  - Stable-Baselines3 integration (PPO, SAC, TD3, DDPG, A2C)       │
 │  - Custom reward functions for surgical tasks                      │
 │  - Observation and action space definitions                        │
 │  - Training monitoring and logging                                 │
@@ -119,7 +119,7 @@ This document describes the architecture of Surg-RL.
 - Rendering support
 - Primitive fallbacks for missing assets
 
-### 4. Dynamic Environment Controller (NEW)
+### 4. Dynamic Environment Controller
 
 **Purpose:** Provide dynamic environment modification for RL training.
 
@@ -177,8 +177,8 @@ for episode in range(1000):
 - `surg-rl config`: Display configuration
 - `surg-rl setup`: Create directories
 - `surg-rl generate`: Generate scenes from text/image/template
-- `surg-rl train`: Train RL agents (planned)
-- `surg-rl evaluate`: Evaluate trained agents (planned)
+- `surg-rl train`: Train RL agents (PPO, SAC, TD3, DDPG, A2C)
+- `surg-rl evaluate`: Evaluate trained agents
 
 ## Data Flow
 
@@ -231,7 +231,7 @@ User Input (Text/Image/Template)
          ▼
 ┌─────────────────────┐
 │   RL Training       │
-│   (Future: Step 7)  │
+│   (Complete)        │
 └─────────────────────┘
 ```
 

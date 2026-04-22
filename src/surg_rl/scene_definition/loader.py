@@ -570,7 +570,7 @@ class SceneLoader:
 
         # Validate and create scene
         try:
-            scene = SceneDefinition(**data) if validate else SceneDefinition.model_validate(data)
+            scene = SceneDefinition(**data) if validate else SceneDefinition.model_construct(**data)
         except ValidationError as e:
             formatted_errors = self._format_validation_errors(e)
             raise SceneValidationError(
@@ -589,7 +589,10 @@ class SceneLoader:
         if use_cache:
             self.cache.put(file_path, scene)
 
-        logger.info(f"Loaded scene: {scene.metadata.name}")
+        scene_name = getattr(scene.metadata, "name", None) or (
+            scene.metadata.get("name", "unknown") if isinstance(scene.metadata, dict) else "unknown"
+        )
+        logger.info(f"Loaded scene: {scene_name}")
         return scene.model_copy(deep=True)
 
     def load_from_string(
@@ -623,7 +626,7 @@ class SceneLoader:
             )
 
         try:
-            scene = SceneDefinition(**data) if validate else SceneDefinition.model_validate(data)
+            scene = SceneDefinition(**data) if validate else SceneDefinition.model_construct(**data)
         except ValidationError as e:
             formatted_errors = self._format_validation_errors(e)
             raise SceneValidationError(
@@ -651,7 +654,7 @@ class SceneLoader:
             SceneValidationError: If validation fails.
         """
         try:
-            scene = SceneDefinition(**data) if validate else SceneDefinition.model_validate(data)
+            scene = SceneDefinition(**data) if validate else SceneDefinition.model_construct(**data)
         except ValidationError as e:
             formatted_errors = self._format_validation_errors(e)
             raise SceneValidationError(

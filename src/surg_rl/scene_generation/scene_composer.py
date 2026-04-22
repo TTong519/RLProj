@@ -219,7 +219,7 @@ class SceneComposer:
         merged = base_scene or scenes[0]
 
         # Merge remaining scenes
-        for scene in scenes[1:] if base_scene else scenes[1:]:
+        for scene in scenes if base_scene else scenes[1:]:
             merged = self._merge_two_scenes(merged, scene)
 
         return merged

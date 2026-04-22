@@ -159,9 +159,9 @@ def benchmark_simulator(scene_path, backend, steps=1000):
     scene = load_scene(scene_path)
 
     if backend == "mujoco":
-        sim = MuJoCoSimulator(assets_dir=Path("assets"))
+        sim = MuJoCoSimulator(assets_dir=Path(__file__).parent.parent / "assets")
     else:
-        sim = PyBulletSimulator(assets_dir=Path("assets"), render_mode="DIRECT")
+        sim = PyBulletSimulator(assets_dir=Path(__file__).parent.parent / "assets", render_mode="DIRECT")
 
     # Load and reset
     sim.load_scene(scene)

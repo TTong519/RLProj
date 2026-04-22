@@ -93,12 +93,12 @@ class TestBaseParser:
 
     def test_validate_scene(self):
         """Test scene validation."""
-        # Call validate_scene as a static method since BaseParser is abstract
+        # validate_scene is now a static method
         scene_data = {
             "metadata": {"name": "Test"},
             "simulator": "mujoco"
         }
-        scene = BaseParser.validate_scene(None, scene_data)
+        scene = BaseParser.validate_scene(scene_data)
         assert isinstance(scene, SceneDefinition)
         assert scene.metadata.name == "Test"
 

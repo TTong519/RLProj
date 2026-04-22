@@ -1,0 +1,274 @@
+{
+  "metadata": {
+    "name": "Suturing Training Demo",
+    "description": "Multi-stage suturing task: pick up needle, suture two skin patches together",
+    "version": "1.0.0",
+    "author": "SurgRL Team",
+    "created": "2026-04-12",
+    "tags": ["suturing", "needle-pickup", "tissue-connection", "training"]
+  },
+  "physics": {
+    "gravity": [0.0, 0.0, -9.81],
+    "timestep": 0.002,
+    "solver_iterations": 50,
+    "integrator": "implicit",
+    "contact_model": "constraint",
+    "ground_plane": true,
+    "ground_friction": 0.8,
+    "materials": [
+      {
+        "name": "tissue_material",
+        "friction": 0.3,
+        "restitution": 0.0,
+        "damping": 0.5
+      },
+      {
+        "name": "instrument_material",
+        "friction": 0.6,
+        "restitution": 0.1,
+        "damping": 0.2
+      }
+    ]
+  },
+  "environment": {
+    "name": "operating_room",
+    "lights": [
+      {
+        "name": "overhead_light",
+        "type": "directional",
+        "direction": [0.0, 0.0, -1.0],
+        "color": {"r": 1.0, "g": 1.0, "b": 1.0, "a": 1.0},
+        "intensity": 1.0,
+        "cast_shadows": true
+      },
+      {
+        "name": "fill_light",
+        "type": "point",
+        "position": {"x": 0.5, "y": 0.5, "z": 1.0},
+        "color": {"r": 0.8, "g": 0.8, "b": 0.8, "a": 1.0},
+        "intensity": 0.5,
+        "cast_shadows": false
+      }
+    ],
+    "cameras": [
+      {
+        "name": "main_camera",
+        "type": "perspective",
+        "pose": {
+          "position": {"x": 0.0, "y": -0.3, "z": 0.8},
+          "orientation": {"w": 0.924, "x": 0.383, "y": 0.0, "z": 0.0}
+        },
+        "fov": 50.0,
+        "active": true
+      }
+    ],
+    "ground_plane": {
+      "enabled": true,
+      "size": [2.0, 2.0],
+      "color": {"r": 0.3, "g": 0.3, "b": 0.3, "a": 1.0},
+      "friction": 0.8
+    },
+    "background_color": {"r": 0.05, "g": 0.05, "b": 0.05, "a": 1.0}
+  },
+  "robots": [
+    {
+      "name": "surgical_arm_1",
+      "type": "robotic_arm",
+      "description": "Primary surgical manipulator with needle driver end effector",
+      "urdf_path": "assets/robots/surgical_arm.urdf",
+      "base_pose": {
+        "position": {"x": 0.0, "y": 0.0, "z": 0.0},
+        "orientation": {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0}
+      },
+      "control_mode": "position",
+      "control_rate": 100.0,
+      "max_linear_velocity": 0.5,
+      "max_angular_velocity": 1.0,
+      "joints": [
+        {"name": "joint_1", "type": "revolute", "limits": {"lower": -3.14, "upper": 3.14, "effort": 100.0, "velocity": 1.0}, "initial_position": 0.0, "damping": 1.0},
+        {"name": "joint_2", "type": "revolute", "limits": {"lower": -1.57, "upper": 1.57, "effort": 100.0, "velocity": 1.0}, "initial_position": 0.0, "damping": 1.0},
+        {"name": "joint_3", "type": "revolute", "limits": {"lower": -3.14, "upper": 3.14, "effort": 100.0, "velocity": 1.0}, "initial_position": 0.0, "damping": 1.0},
+        {"name": "joint_4", "type": "revolute", "limits": {"lower": -1.57, "upper": 1.57, "effort": 100.0, "velocity": 1.0}, "initial_position": 0.0, "damping": 1.0},
+        {"name": "joint_5", "type": "revolute", "limits": {"lower": -3.14, "upper": 3.14, "effort": 50.0, "velocity": 1.0}, "initial_position": 0.0, "damping": 0.5},
+        {"name": "joint_6", "type": "revolute", "limits": {"lower": -1.57, "upper": 1.57, "effort": 50.0, "velocity": 1.0}, "initial_position": 0.0, "damping": 0.5},
+        {"name": "joint_7", "type": "revolute", "limits": {"lower": -3.14, "upper": 3.14, "effort": 20.0, "velocity": 1.0}, "initial_position": 0.0, "damping": 0.1}
+      ],
+      "end_effectors": [
+        {
+          "name": "needle_driver",
+          "type": "needle_driver",
+          "max_aperture": 0.02,
+          "force_limit": 10.0
+        }
+      ]
+    }
+  ],
+  "tissues": [
+    {
+      "name": "skin_patch_left",
+      "type": "skin",
+      "description": "Left skin patch to be sutured",
+      "geometry": {
+        "primitive": "box",
+        "dimensions": [0.08, 0.06, 0.008]
+      },
+      "physics": {
+        "stiffness": 5000.0,
+        "damping": 0.15,
+        "density": 1100.0,
+        "poissons_ratio": 0.45,
+        "youngs_modulus": 15000.0,
+        "tear_threshold": 5000.0
+      },
+      "pose": {
+        "position": {"x": -0.04, "y": 0.02, "z": 0.4},
+        "orientation": {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0}
+      },
+      "attachments": [
+        {
+          "name": "left_corner_far",
+          "position": {"x": -0.08, "y": 0.05, "z": 0.0},
+          "fixed": true
+        },
+        {
+          "name": "left_corner_near",
+          "position": {"x": -0.08, "y": -0.01, "z": 0.0},
+          "fixed": true
+        }
+      ],
+      "color": {"r": 0.95, "g": 0.85, "b": 0.8, "a": 1.0}
+    },
+    {
+      "name": "skin_patch_right",
+      "type": "skin",
+      "description": "Right skin patch to be sutured",
+      "geometry": {
+        "primitive": "box",
+        "dimensions": [0.08, 0.06, 0.008]
+      },
+      "physics": {
+        "stiffness": 5000.0,
+        "damping": 0.15,
+        "density": 1100.0,
+        "poissons_ratio": 0.45,
+        "youngs_modulus": 15000.0,
+        "tear_threshold": 5000.0
+      },
+      "pose": {
+        "position": {"x": 0.04, "y": 0.02, "z": 0.4},
+        "orientation": {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0}
+      },
+      "attachments": [
+        {
+          "name": "right_corner_far",
+          "position": {"x": 0.08, "y": 0.05, "z": 0.0},
+          "fixed": true
+        },
+        {
+          "name": "right_corner_near",
+          "position": {"x": 0.08, "y": -0.01, "z": 0.0},
+          "fixed": true
+        }
+      ],
+      "color": {"r": 0.95, "g": 0.85, "b": 0.8, "a": 1.0}
+    }
+  ],
+  "instruments": [
+    {
+      "name": "curved_suturing_needle",
+      "type": "custom",
+      "description": "Curved suturing needle placed between tissue patches",
+      "mesh": {
+        "path": "assets/instruments/suturing_needle.obj",
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "dimensions": [0.012, 0.006, 0.002],
+      "physics": {
+        "mass": 0.001,
+        "friction": 0.2,
+        "damping": 0.01
+      },
+      "pose": {
+        "position": {"x": 0.0, "y": 0.05, "z": 0.41},
+        "orientation": {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0}
+      },
+      "sterile": true
+    }
+  ],
+  "task": {
+    "name": "multi_stage_suturing",
+    "description": "Pick up a needle and suture two skin patches together",
+    "objectives": [
+      {
+        "name": "needle_approach",
+        "description": "Approach the surgical needle with the needle driver",
+        "success_criteria": "End effector within 0.02m of needle",
+        "weight": 0.5
+      },
+      {
+        "name": "needle_pickup",
+        "description": "Grasp and lift the surgical needle",
+        "success_criteria": "Needle grasped and lifted above tissue",
+        "weight": 1.0
+      },
+      {
+        "name": "tissue_penetration",
+        "description": "Drive the needle through both skin patches",
+        "success_criteria": "Needle passes through left and right tissue",
+        "weight": 2.0
+      },
+      {
+        "name": "suture_completion",
+        "description": "Complete the suture connecting both patches",
+        "success_criteria": "Suture holds both patches together",
+        "weight": 3.0
+      }
+    ],
+    "constraints": [
+      {
+        "name": "force_limit",
+        "type": "force",
+        "target_entity": "surgical_arm_1",
+        "limits": [0.0, 5.0],
+        "penalty_weight": 5.0
+      },
+      {
+        "name": "workspace_limit",
+        "type": "position",
+        "target_entity": "surgical_arm_1",
+        "limits": [-0.5, 0.5],
+        "penalty_weight": 10.0
+      }
+    ],
+    "reward_shaping": {
+      "success_reward": 100.0,
+      "failure_penalty": -100.0,
+      "time_penalty": -0.01,
+      "distance_reward_scale": 1.0,
+      "collision_penalty": -10.0,
+      "tissue_damage_penalty": -50.0
+    },
+    "max_episode_length": 2000,
+    "time_limit": 240.0,
+    "success_threshold": 0.8
+  },
+  "domain_randomization": {
+    "physics": {
+      "enabled": true,
+      "mass_range": [0.9, 1.1],
+      "friction_range": [0.4, 0.6],
+      "stiffness_range": [4500.0, 5500.0]
+    },
+    "visual": {
+      "enabled": true,
+      "color_range": [0.9, 1.1],
+      "lighting_variation": [0.8, 1.2]
+    },
+    "dynamics": {
+      "enabled": false
+    },
+    "randomize_each_episode": true,
+    "seed": 42
+  },
+  "simulator": "mujoco"
+}

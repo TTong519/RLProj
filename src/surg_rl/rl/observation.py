@@ -68,9 +68,11 @@ class ObservationSpec:
             Gymnasium Space object.
         """
         if self.low is not None and self.high is not None:
+            low = np.asarray(self.low, dtype=self.dtype)
+            high = np.asarray(self.high, dtype=self.dtype)
             return gym.spaces.Box(
-                low=self.low.astype(self.dtype),
-                high=self.high.astype(self.dtype),
+                low=low,
+                high=high,
                 shape=self.shape,
                 dtype=self.dtype,
             )
@@ -178,8 +180,8 @@ TISSUE_STATE_SPEC = ObservationSpec(
     name="tissue_state",
     obs_type=ObservationType.TISSUE_STATE,
     shape=(12,),  # Position + velocity for tissue nodes
-    low=-np.inf,
-    high=np.inf,
+    low=np.full(12, -np.inf),
+    high=np.full(12, np.inf),
     normalize=False,
     description="Tissue node positions and velocities",
 )
@@ -612,10 +614,12 @@ class ObservationBuilder:
             return value
 
         # Min-max normalization to [-1, 1]
-        range_val = spec.high.flatten() - spec.low.flatten()
+        low = np.asarray(spec.low).flatten()
+        high = np.asarray(spec.high).flatten()
+        range_val = high - low
         range_val = np.where(range_val == 0, 1.0, range_val)
 
-        normalized = 2.0 * (value.flatten() - spec.low.flatten()) / range_val - 1.0
+        normalized = 2.0 * (value.flatten() - low) / range_val - 1.0
         return normalized.reshape(value.shape)
 
     @staticmethod
@@ -659,3 +663,27 @@ class ObservationBuilder:
         if parts:
             return np.concatenate(parts)
         return np.array([], dtype=np.float32)
+
+    def unflatten_observation(
+        self,
+        flat_obs: np.ndarray,
+        template: Dict[str, np.ndarray],
+    ) -> Dict[str, np.ndarray]:
+        """Rebuild a dict observation from a flat vector.
+
+        Args:
+            flat_obs: Flattened observation vector.
+            template: Template dict with correct keys and shapes.
+
+        Returns:
+            Dictionary of observation arrays.
+        """
+        obs_dict: Dict[str, np.ndarray] = {}
+        offset = 0
+        for name, spec in self._specs.items():
+            if name not in template:
+                continue
+            size = int(np.prod(spec.shape))
+            obs_dict[name] = flat_obs[offset : offset + size].reshape(spec.shape)
+            offset += size
+        return obs_dict

@@ -1,0 +1,31 @@
+{
+  "metadata": {
+    "name": "Minimal Test Scene",
+    "version": "1.0.0",
+    "description": "Simple scene for testing schema validation",
+    "tags": []
+  },
+  "statistics": {
+    "num_robots": 0,
+    "num_tissues": 0,
+    "num_instruments": 0,
+    "num_cameras": 1,
+    "num_lights": 1,
+    "num_objectives": 0,
+    "num_constraints": 0
+  },
+  "physics": {
+    "gravity": [
+      0.0,
+      0.0,
+      -9.81
+    ],
+    "timestep": 0.002,
+    "integrator": "implicit"
+  },
+  "task": {
+    "name": null,
+    "max_episode_length": null,
+    "time_limit": null
+  }
+}

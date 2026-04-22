@@ -24,17 +24,17 @@ class ControllerState(Enum):
 @dataclass
 class ControllerConfig:
     """Configuration for the environment controller.
-    
+
     Attributes:
         enabled: Whether the controller is active.
         seed: Random seed for reproducibility.
         update_frequency: How often to update parameters (in steps).
-        warmup_steps: Number of steps before starting modifications.
+        warmup_episodes: Number of episodes before starting modifications.
     """
     enabled: bool = True
     seed: Optional[int] = None
     update_frequency: int = 1
-    warmup_steps: int = 0
+    warmup_episodes: int = 0
 
 
 @dataclass
@@ -212,7 +212,7 @@ class BaseController(ABC):
         self._step = 0
         self._episode += 1
         
-        if self.config.enabled and self._episode >= self.config.warmup_steps:
+        if self.config.enabled and self._episode >= self.config.warmup_episodes:
             self._current_params = self.sample_parameters()
         else:
             self._current_params = ParameterSnapshot(episode=self._episode)
@@ -239,7 +239,7 @@ class BaseController(ABC):
         if not self.config.enabled:
             return self._current_params
         
-        if self._step < self.config.warmup_steps:
+        if self._step < self.config.warmup_episodes:
             return self._current_params
         
         if self._step % self.config.update_frequency == 0:

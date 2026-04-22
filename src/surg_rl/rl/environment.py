@@ -26,7 +26,7 @@ from .observation import (
     ObservationType,
     ObservationSpec,
 )
-from .action import
+from .action import (
     ActionScaling,
     ActionBuilder,
     ActionConfig,
@@ -130,6 +130,7 @@ class SurgicalEnv(gym.Env):
 
         # Initialize simulator
         self._simulator = self._create_simulator()
+        self._simulator.load_scene(self._scene)
 
         # Initialize observation and action builders
         self._obs_builder = ObservationBuilder(
@@ -282,13 +283,9 @@ class SurgicalEnv(gym.Env):
 
         # Reset environment controller
         if self._controller is not None:
-            self._controller.reset(seed=seed)
             params = self._controller.reset(seed=seed)
             # Apply randomized parameters to simulator
-            if self._controller._randomizer is not None:
-                self._controller._randomizer.apply_parameters(
-                    params, self._simulator
-                )
+            self._controller.apply_parameters(params, self._simulator)
 
         # Reset simulator
         try:
@@ -370,8 +367,9 @@ class SurgicalEnv(gym.Env):
         # Apply observation noise
         if self._controller is not None and self.config.observation_config is not None:
             flat_obs = self._obs_builder.flatten_observation(obs_dict)
-            noisy_obs = self._controller.get_randomized_observation(flat_obs)
-            # Note: we still return the dict observation for compatibility
+            noisy_flat = self._controller.get_randomized_observation(flat_obs)
+            # Rebuild dict observation from noisy flat array
+            obs_dict = self._obs_builder.unflatten_observation(noisy_flat, obs_dict)
 
         # Compute reward using reward function
         reward_result = self._reward_fn.compute(

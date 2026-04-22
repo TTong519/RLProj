@@ -320,6 +320,23 @@ class EnvironmentController:
 
     # === Utility Methods ===
 
+    def apply_parameters(
+        self,
+        snapshot: ParameterSnapshot,
+        simulator: Any,
+    ) -> None:
+        """Apply parameter snapshot to a simulator.
+
+        Delegates to the parameter randomizer's apply_parameters method
+        if randomization is enabled.
+
+        Args:
+            snapshot: Parameter snapshot to apply.
+            simulator: Simulator instance.
+        """
+        if self._randomizer is not None:
+            self._randomizer.apply_parameters(snapshot, simulator)
+
     def get_randomized_action(
         self,
         action: np.ndarray,

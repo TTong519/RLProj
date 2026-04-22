@@ -1,43 +1,33 @@
-# Quick Start After Step 1
+# Quick Start
+
+All 8 implementation steps are complete. The project is fully functional.
 
 ## Current Status
 
-✅ **Step 1 is complete!** All files and directories are in place.
+✅ **All 8 steps complete!** The framework is ready for use.
 
-❌ **Tests need dependencies installed** to run successfully.
+✅ **All core tests passing** with comprehensive coverage.
 
-## Immediate Action Required
-
-Run this single command to install required packages:
+## Installation
 
 ```bash
-pip install pydantic pydantic-settings pytest pyyaml rich typer
+pip install -e ".[dev]"
 ```
 
-## Then Verify
+This installs all dependencies including MuJoCo, PyBullet, Stable-Baselines3, and LLM libraries.
+
+## Quick Verification
 
 ```bash
-# Run tests (should pass)
+# Run tests
 pytest tests/ -v
 
 # Test CLI
-python -m surg_rl.cli version
+surg-rl version
 
 # Check configuration
-python -m surg_rl.cli config
+surg-rl config
 ```
-
-## Why This is Needed
-
-The project uses:
-- **pydantic** - Configuration and validation
-- **pydantic-settings** - Settings management  
-- **pytest** - Testing framework
-- **pyyaml** - YAML file handling
-- **rich** - Rich terminal output
-- **typer** - CLI framework
-
-These packages must be installed before tests can run.
 
 ## All Options
 
@@ -57,59 +47,67 @@ pip install -e ".[dev]"
 ```
 Note: May fail if network issues prevent downloading all dependencies.
 
-## What's Already Done
+## What's Implemented
 
-✅ Project structure created
-✅ All source files written  
-✅ Configuration system implemented
-✅ CLI interface created
-✅ Tests written
-✅ Documentation complete
-✅ conftest.py (handles import paths automatically)
-✅ pytest.ini configured
+✅ Scene Definition & Schema
+✅ Scene Generation (LLM/VLM)
+✅ Scene Loader
+✅ Simulators (MuJoCo/PyBullet)
+✅ Environment Controller (Domain Randomization, Curriculum, Adaptive)
+✅ RL Training Pipeline (Gymnasium, Stable-Baselines3)
+✅ CLI & Demo Scripts
 
-## What's Next
+## Quick Examples
 
-After installing dependencies and verifying tests pass:
+### Scene Visualization
+```bash
+python demos/demo.py --scene scenes/simple_suturing.json
+```
 
-**Continue to Step 2: Scene Schema Definition**
+### RL Training
+```bash
+surg-rl train --scene scenes/suturing.json --algorithm PPO --timesteps 100000
+```
 
-See `docs/IMPLEMENTATION_PLAN.md` for detailed instructions.
+### Scene Generation
+```bash
+surg-rl generate --template suturing --output my_scene.json
+```
 
-## Files to Reference
+## Key Documentation
 
-- **FIX_TESTS.md** - Quick fix for test errors
-- **INSTALL.md** - Complete installation guide  
-- **docs/TROUBLESHOOTING.md** - Detailed troubleshooting
 - **README.md** - Project overview
-- **docs/IMPLEMENTATION_PLAN.md** - Full step-by-step plan
-- **docs/STATUS.md** - Current progress tracker
+- **docs/STATUS.md** - Full project status
+- **docs/API_REFERENCE.md** - Complete API documentation
+- **docs/GETTING_STARTED.md** - Installation and setup guide
+- **examples/** - Usage examples
 
 ## Command Summary
 
 ```bash
-# 1. Install dependencies
-pip install pydantic pydantic-settings pytest pyyaml rich typer
+# Install dependencies
+pip install -e ".[dev]"
 
-# 2. Run tests
+# Run tests
 pytest tests/ -v
 
-# 3. Test CLI
-python -m surg_rl.cli version
+# View demo
+python demos/demo.py --scene scenes/simple_suturing.json
 
-# 4. Continue to Step 2
-# See: docs/IMPLEMENTATION_PLAN.md
+# Train RL agent
+surg-rl train --scene scenes/suturing.json --algorithm PPO
+
+# Generate scene
+surg-rl generate --template suturing --output scene.json
 ```
 
 ## Need Help?
 
 1. Check **INSTALL.md** for installation options
 2. Check **docs/TROUBLESHOOTING.md** for common issues
-3. Check **FIX_TESTS.md** for specific test fixes
+3. Check **docs/API_REFERENCE.md** for API documentation
 
 ---
 
-**Current Step:** 1 ✅ COMPLETED  
-**Next Step:** 2 - Scene Schema and File Format
-
-All implementation details are in `docs/IMPLEMENTATION_PLAN.md` - just follow the instructions for Step 2 when ready!
+**Project Status:** All 8 steps complete ✅  
+**See docs/STATUS.md for detailed status.**

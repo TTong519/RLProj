@@ -83,7 +83,8 @@ class BaseParser(ABC):
         """
         pass
 
-    def validate_scene(self, scene_data: Dict[str, Any]) -> SceneDefinition:
+    @staticmethod
+    def validate_scene(scene_data: Dict[str, Any]) -> SceneDefinition:
         """Validate and create a SceneDefinition from dictionary data.
 
         Args:

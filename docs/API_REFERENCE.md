@@ -252,17 +252,44 @@ Utility for converting scene definitions to simulator-specific formats.
 
 The `rl` module provides RL training infrastructure.
 
-### `surg_rl.rl`
+### `surg_rl.rl.environment`
 
-#### Key Classes
+- **`SurgicalEnv(gym.Env)`** - Gymnasium-compatible environment wrapper
+  - Configurable observation and action spaces
+  - Domain randomization integration
+  - Supports vectorized environments via `make_vec_env()`
+- **`SurgicalEnvConfig`** - Configuration dataclass for SurgicalEnv
+- **`make_env()`** - Factory function to create a SurgicalEnv
+- **`make_vec_env()`** - Create vectorized environments for parallel training
 
-- **`SurgicalEnv(gym.Env)`**
-  - Gymnasium-compatible environment wrapper
-  - Supports vectorized environments
-  
-- **`PolicyWrapper`**
-  - Wraps trained policies for inference
-  - Supports policies from Stable-Baselines3, RLlib, custom implementations
+### `surg_rl.rl.training`
+
+- **`TrainingManager`** - Orchestrates RL training with Stable-Baselines3
+  - Supports PPO, SAC, TD3, DDPG, A2C algorithms
+  - Checkpoint saving and evaluation
+- **`TrainingConfig`** - Training configuration (timesteps, seed, device, etc.)
+- **`AlgorithmConfig`** - Algorithm-specific hyperparameters
+
+### `surg_rl.rl.observation`
+
+- **`ObservationBuilder`** - Builds observation spaces and extracts observations
+- **`ObservationConfig`** - Configuration for observation types
+- **`ObservationSpec`** - Specification for a single observation component
+- **`ObservationType`** - Enum of available observation types
+
+### `surg_rl.rl.action`
+
+- **`ActionBuilder`** - Builds action spaces and processes actions
+- **`ActionConfig`** - Configuration for action types
+- **`ActionType`** - Enum of available action types
+
+### `surg_rl.rl.rewards`
+
+- **`CompositeReward`** - Weighted combination of reward functions
+- **`DistanceReward`** - Reward based on distance to target
+- **`SuccessReward`** - Sparse terminal reward for task completion
+- **`ActionPenalty`** - Penalizes large actions
+- **`create_default_reward()`** - Factory for standard surgical reward
 
 ---
 
@@ -320,12 +347,6 @@ Command-line interface for Surg-RL.
   - Evaluate trained policies
   ```bash
   surg-rl evaluate --policy model.zip --scene scene.json --episodes 10
-  ```
-
-- **`surg-rl validate`**
-  - Validate scene definitions
-  ```bash
-  surg-rl validate --scene scene.json
   ```
 
 ---

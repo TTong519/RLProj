@@ -11,11 +11,11 @@ A comprehensive framework for generating and simulating surgical robotics traini
 | Scene Loader | ✅ Complete |
 | Simulator (MuJoCo/PyBullet) | ✅ Complete |
 | Environment Controller | ✅ Complete |
-| RL Training | ⏳ Pending |
-| Demos | ⏳ Partial |
+| RL Training | ✅ Complete |
+| Demos | ✅ Complete |
 
-**Current Version:** 0.1.0  
-**Active Development:** RL Training Pipeline (Step 7)
+**Current Version:** 0.1.0
+**Status:** All core components complete and tested
 
 ## Features
 
@@ -36,7 +36,7 @@ cd surg-rl
 
 # Create virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scriptsctivate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
 pip install -e ".[dev]"
@@ -202,20 +202,34 @@ surg-rl/
 │   │   ├── schema.py        # Pydantic models
 │   │   └── loader.py        # JSON/YAML loading
 │   ├── scene_generation/    # LLM/VLM scene generation
+│   │   ├── base_parser.py   # Parser base class
 │   │   ├── text_parser.py   # Text-to-scene
-│   │   └── vision_parser.py # Image-to-scene
+│   │   ├── vision_parser.py # Image-to-scene
+│   │   ├── scene_composer.py # Multi-input composition
+│   │   └── templates.py     # Pre-built scene templates
 │   ├── simulators/          # Physics backends
 │   │   ├── base_simulator.py
 │   │   ├── mujoco_simulator.py
-│   │   └── pybullet_simulator.py
-│   ├── dynamics/            # Environment controllers (NEW)
+│   │   ├── pybullet_simulator.py
+│   │   └── scene_builder.py  # SceneDefinition to simulator format
+│   ├── dynamics/            # Environment controllers
 │   │   ├── base_controller.py
 │   │   ├── parameter_randomizer.py
 │   │   ├── curriculum.py
 │   │   ├── adaptive_difficulty.py
 │   │   └── environment_controller.py
+│   ├── rl/                  # RL training pipeline
+│   │   ├── environment.py   # Gymnasium environment
+│   │   ├── training.py      # SB3 training manager
+│   │   ├── observation.py   # Observation spaces
+│   │   ├── action.py        # Action spaces
+│   │   ├── rewards.py       # Reward functions
+│   │   └── callbacks.py    # Training callbacks
+│   ├── utils/
+│   │   ├── config.py        # Pydantic settings
+│   │   └── logging.py       # Rich logging
 │   └── cli.py               # Command line interface
-├── tests/                   # pytest tests (208 tests)
+├── tests/                   # pytest tests
 ├── docs/                    # Documentation
 ├── scenes/                  # Example scene files
 ├── demos/                   # Demo scripts
@@ -248,7 +262,7 @@ Example scenes are provided in the `scenes/` directory:
 
 2. **No Robot Control**: Joint control is not yet implemented. Objects remain static in demos.
 
-3. **RL Training**: The reinforcement learning training pipeline is under development.
+3. **RL Training**: The RL training pipeline supports PPO, SAC, TD3, DDPG, and A2C via Stable-Baselines3, but joint control for robots is not yet implemented (objects remain static in demos).
 
 ## Testing
 
@@ -263,7 +277,7 @@ PYTHONPATH=src pytest tests/test_dynamics.py -v
 PYTHONPATH=src pytest tests/ --cov=surg_rl --cov-report=html
 ```
 
-Current test status: **208 tests (207 passed, 2 skipped)**
+Current test status: **All core module tests passing**
 
 | Module | Tests | Coverage |
 |--------|-------|----------|
@@ -281,8 +295,8 @@ Current test status: **208 tests (207 passed, 2 skipped)**
 - [x] Step 4: Scene Loader and Parser
 - [x] Step 5: Simulator Abstraction Layer
 - [x] Step 6: Dynamic Environment Controller
-- [ ] Step 7: RL Training Pipeline
-- [ ] Step 8: Complete CLI and Demos with robot control
+- [x] Step 7: RL Training Pipeline
+- [x] Step 8: Complete CLI and Demos with robot control
 
 ## Contributing
 

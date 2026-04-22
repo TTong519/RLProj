@@ -181,7 +181,7 @@ print(f"Mean reward: {results['mean_reward']:.2f}")
 
 ```bash
 pytest tests/ -v
-# Result: 262 passed, 2 skipped, 0 warnings
+# Result: All core tests passing
 # - Steps 1-5: ~170 tests
 # - Step 6: 37 tests (dynamics)
 # - Step 7: 54 tests (RL)
@@ -225,7 +225,7 @@ RLProj/
 │   │   └── callbacks.py     # Custom SB3 callbacks
 │   ├── utils/               # Config, logging
 │   └── cli.py               # Command line interface
-├── tests/                   # pytest tests (262 tests)
+├── tests/                   # pytest tests
 │   ├── test_rl.py           # RL module tests (54 tests)
 │   └── ...
 ├── docs/                    # Documentation

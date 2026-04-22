@@ -8,6 +8,7 @@ difficulty as the agent improves.
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+import copy
 import numpy as np
 
 from .base_controller import (
@@ -160,7 +161,7 @@ class CurriculumScheduler(BaseController):
         self.curriculum_config = curriculum_config or CurriculumConfig()
         
         # Initialize stages
-        self._stages = self.DEFAULT_STAGES.copy()
+        self._stages = copy.deepcopy(self.DEFAULT_STAGES)
         if self.curriculum_config.stage_configs:
             self._stages.update(self.curriculum_config.stage_configs)
         

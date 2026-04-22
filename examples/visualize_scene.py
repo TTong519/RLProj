@@ -77,8 +77,11 @@ def visualize_scene_ascii(scene):
     
     # Draw instruments
     for instrument in scene.instruments:
-        pos = instrument.pose.position
-        print(f"  │  Instrument '{instrument.name}' at ({pos.x:.2f}, {pos.y:.2f}, {pos.z:.2f})")
+        if instrument.pose is not None:
+            pos = instrument.pose.position
+            print(f"  │  Instrument '{instrument.name}' at ({pos.x:.2f}, {pos.y:.2f}, {pos.z:.2f})")
+        else:
+            print(f"  │  Instrument '{instrument.name}' at (default)")
     
     print("  │" + " "*68 + "│")
     print("  " + "─"*70)
@@ -90,10 +93,13 @@ def visualize_scene_ascii(scene):
     print(f"  Solver: {scene.physics.integrator} ({scene.physics.solver_iterations} iterations)")
     
     # Task information
-    print(f"\nTask: {scene.task.name}")
-    print(f"  Objectives: {len(scene.task.objectives)}")
-    for i, obj in enumerate(scene.task.objectives, 1):
-        print(f"    {i}. {obj.name}: {obj.description}")
+    if scene.task is not None:
+        print(f"\nTask: {scene.task.name}")
+        print(f"  Objectives: {len(scene.task.objectives)}")
+        for i, obj in enumerate(scene.task.objectives, 1):
+            print(f"    {i}. {obj.name}: {obj.description}")
+    else:
+        print("\nTask: (none defined)")
     
     print("\n" + "="*80)
 
@@ -113,8 +119,8 @@ def export_scene_summary(scene, output_file: str):
             "num_instruments": len(scene.instruments),
             "num_cameras": len(scene.environment.cameras),
             "num_lights": len(scene.environment.lights),
-            "num_objectives": len(scene.task.objectives),
-            "num_constraints": len(scene.task.constraints)
+            "num_objectives": len(scene.task.objectives) if scene.task else 0,
+            "num_constraints": len(scene.task.constraints) if scene.task else 0
         },
         "physics": {
             "gravity": scene.physics.gravity,
@@ -122,9 +128,9 @@ def export_scene_summary(scene, output_file: str):
             "integrator": scene.physics.integrator
         },
         "task": {
-            "name": scene.task.name,
-            "max_episode_length": scene.task.max_episode_length,
-            "time_limit": scene.task.time_limit
+            "name": scene.task.name if scene.task else None,
+            "max_episode_length": scene.task.max_episode_length if scene.task else None,
+            "time_limit": scene.task.time_limit if scene.task else None
         }
     }
     
@@ -196,23 +202,26 @@ def generate_scene_report(scene, output_dir: str):
         
         f.write("\n\nTASK\n")
         f.write(f"{'─'*80}\n")
-        f.write(f"Name: {scene.task.name}\n")
-        f.write(f"Description: {scene.task.description}\n")
-        f.write(f"Max Episode Length: {scene.task.max_episode_length}\n")
-        f.write(f"Time Limit: {scene.task.time_limit}s\n\n")
-        
-        f.write("Objectives:\n")
-        for i, obj in enumerate(scene.task.objectives, 1):
-            f.write(f"  {i}. {obj.name}\n")
-            f.write(f"     {obj.description}\n")
-            f.write(f"     Success: {obj.success_criteria}\n")
-            f.write(f"     Weight: {obj.weight}\n")
-        
-        f.write("\nConstraints:\n")
-        for i, constraint in enumerate(scene.task.constraints, 1):
-            f.write(f"  {i}. {constraint.name} ({constraint.type})\n")
-            f.write(f"     Target: {constraint.target_entity}\n")
-            f.write(f"     Limits: {constraint.limits}\n")
+        if scene.task is not None:
+            f.write(f"Name: {scene.task.name}\n")
+            f.write(f"Description: {scene.task.description}\n")
+            f.write(f"Max Episode Length: {scene.task.max_episode_length}\n")
+            f.write(f"Time Limit: {scene.task.time_limit}s\n\n")
+
+            f.write("Objectives:\n")
+            for i, obj in enumerate(scene.task.objectives, 1):
+                f.write(f"  {i}. {obj.name}\n")
+                f.write(f"     {obj.description}\n")
+                f.write(f"     Success: {obj.success_criteria}\n")
+                f.write(f"     Weight: {obj.weight}\n")
+
+            f.write("\nConstraints:\n")
+            for i, constraint in enumerate(scene.task.constraints, 1):
+                f.write(f"  {i}. {constraint.name} ({constraint.type})\n")
+                f.write(f"     Target: {constraint.target_entity}\n")
+                f.write(f"     Limits: {constraint.limits}\n")
+        else:
+            f.write("(none defined)\n")
         
         f.write("\n\nDOMAIN RANDOMIZATION\n")
         f.write(f"{'─'*80}\n")
@@ -264,7 +273,7 @@ def main():
         print(f"  Robots: {len(scene.robots)}")
         print(f"  Tissues: {len(scene.tissues)}")
         print(f"  Instruments: {len(scene.instruments)}")
-        print(f"  Task: {scene.task.name}")
+        print(f"  Task: {scene.task.name if scene.task else '(none)'}")
         print(f"\nUse --ascii for visual representation")
         print(f"Use --report to generate full report")
 

@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive documentation suite
 - GitHub community files (LICENSE, CODE_OF_CONDUCT, CONTRIBUTING)
 
-## [0.1.0] - 2024-04-06
+## [0.1.0] - 2026-04-07
 
 ### Added
 
@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Vision-based scene generation from surgical images
 - Template system for common surgical procedures
 - Scene composer orchestrator
-- Support for OpenAI and Anthropic LLM providers
+- Support for OpenAI, Anthropic, and Ollama LLM providers
 
 #### Simulation Backends
 - Abstract base simulator interface for unified API
@@ -47,41 +47,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - URDF model support
   - Debug visualization tools
 - Scene builder utilities for converting definitions to simulator formats
+- Primitive shape fallbacks for missing mesh assets
+
+#### Dynamic Environment Controller
+- BaseController abstract class defining controller interface
+- ParameterRandomizer for physics/visual/dynamics randomization
+- CurriculumScheduler for progressive learning stages (Easy → Medium → Hard → Expert)
+- AdaptiveDifficultyController for performance-based difficulty adjustment
+- EnvironmentController integrating all components
+- Full test coverage (37 tests)
 
 #### Reinforcement Learning Framework
-- Gymnasium-compatible environment wrapper
-- Integration with Stable-Baselines3
-- Support for multiple RL algorithms:
-  - PPO (Proximal Policy Optimization)
-  - SAC (Soft Actor-Critic)
-  - TD3 (Twin Delayed DDPG)
-  - DDPG (Deep Deterministic Policy Gradient)
-  - A2C (Advantage Actor-Critic)
-- Policy wrapper for inference and deployment
-- Multi-environment training support
+- **Observation module**: ObservationType enum, ObservationSpec, ObservationConfig, ObservationBuilder with Gymnasium space generation, normalization, and noise support
+- **Action module**: ActionType enum, ActionSpec, ActionConfig, ActionBuilder with joint/EoF/gripper actions, scaling, and relative action support
+- **Reward module**: BaseRewardFunction ABC, DistanceReward (linear/exponential/Gaussian), OrientationReward, ActionPenalty, TimePenalty, SuccessReward, CollisionPenalty, CompositeReward, and `create_default_reward()` factory
+- **Environment module**: SurgicalEnv (gym.Env), SurgicalEnvConfig, make_env(), make_vec_env() — full Gymnasium integration with simulator, controller, reward, observation/action builders
+- **Training module**: AlgorithmConfig, TrainingConfig, TrainingManager — SB3 integration for PPO/SAC/TD3/DDPG/A2C with checkpointing and evaluation
+- **Callbacks module**: TrainingProgressCallback, CheckpointCallback, CurriculumCallback, EvaluationCallback
+- 54 tests covering observation spaces, action spaces, rewards, training config, and callbacks
 
 #### CLI Interface
-- Command-line interface for scene generation
-- Training orchestration commands
-- Scene validation commands
-- Policy evaluation commands
+- `surg-rl version` - Show version
+- `surg-rl config` - Display configuration
+- `surg-rl generate` - Generate scenes from templates/text/images
+- `surg-rl setup` - Create directories
+- `surg-rl train` - Train RL agents (PPO, SAC, TD3, DDPG, A2C)
+- `surg-rl evaluate` - Evaluate trained agents
 
-#### Utilities
-- Configuration management system
-- YAML-based configuration with environment variable support
-- Logging utilities with file and console handlers
-- Helper functions for common operations
+#### Demo Scripts
+- `demos/demo.py` - Scene visualization with MuJoCo/PyBullet
+- `demos/train_demo.py` - Interactive RL training demo
+- `demos/eval_demo.py` - Evaluation visualization demo
+- `demos/benchmark.py` - Performance benchmark script
+
+#### Examples
+- `examples/basic_usage.py` - Basic setup example
+- `examples/visualize_scene.py` - Scene visualization example
+- `examples/rl_training.py` - RL training example
+- `examples/rl_evaluation.py` - RL evaluation example
 
 #### Testing Infrastructure
-- Unit tests for core modules
+- All core tests passing with comprehensive coverage
+- Unit tests for all modules
 - Integration tests for simulators
 - Test fixtures and utilities
 - pytest configuration
-
-#### Examples
-- Basic usage examples
-- Scene generation examples
-- Training examples
 
 #### Documentation
 - README with project overview and quick start
@@ -91,6 +101,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Development guide
 - API reference
 - Configuration guide
+- DYNAMICS_API.md for dynamic environment control
+- STATUS.md for project status tracking
 - Contributing guidelines
 - Code of conduct
 
@@ -137,6 +149,16 @@ This is the first usable release. To upgrade:
 
 ## Roadmap
 
+### Completed in 0.1.0 ✅
+- [x] Project structure and dependencies
+- [x] Scene schema and file format
+- [x] Scene generation module
+- [x] Scene loader and parser
+- [x] Simulator abstraction layer (MuJoCo/PyBullet)
+- [x] Dynamic environment controller
+- [x] RL training pipeline
+- [x] CLI interface and demos
+
 ### Upcoming in 0.2.0
 - [ ] Advanced soft body dynamics for tissue simulation
 - [ ] Multi-agent surgical scenarios
@@ -146,20 +168,19 @@ This is the first usable release. To upgrade:
 - [ ] Extended template library for surgical procedures
 
 ### Planned for 0.3.0
-- [ ] Domain randomization for robust policy learning
-- [ ] Curriculum learning support
+- [ ] Vectorized environments for parallel training
+- [ ] TensorBoard integration for monitoring
+- [ ] Pre-trained model zoo
 - [ ] Distributed training across multiple machines
 - [ ] Integration with surgical video datasets
-- [ ] Augmented reality visualization overlay
 - [ ] Haptic feedback simulation
 
 ### Future Releases
 - [ ] Support for additional physics engines
 - [ ] Integration with ROS (Robot Operating System)
 - [ ] Web-based scene editor
-- [ ] Pre-trained policy zoo
-- [ ] Docker containers for easy deployment
 - [ ] Cloud training integration
+- [ ] Docker containers for easy deployment
 
 ---
 
