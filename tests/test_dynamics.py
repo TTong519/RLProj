@@ -245,15 +245,95 @@ class TestParameterRandomizer:
                 joint_noise=(-0.05, 0.05),
             )
         )
-        
+
         randomizer = ParameterRandomizer(domain_config=domain_config)
         randomizer.start()
         randomizer.reset()
-        
+
         obs = np.array([1.0, 2.0, 3.0])
         randomized = randomizer.get_randomized_observation(obs)
-        
+
         assert randomized.shape == obs.shape
+
+    def test_apply_visual_parameters_mujoco(self):
+        """Test applying visual parameters to a mock MuJoCo simulator."""
+        from unittest.mock import MagicMock
+        import numpy as np
+
+        randomizer = ParameterRandomizer()
+        sim = MagicMock()
+        sim._model = MagicMock()
+        sim._model.geom_rgba = np.array([[0.5, 0.5, 0.5, 1.0], [0.3, 0.3, 0.3, 1.0]])
+        sim._model.vis = MagicMock()
+        sim._model.vis.headlight = np.array([0.1, 0.15, 0.3])
+
+        params = {
+            "color_r_offset": 0.1,
+            "color_g_offset": 0.05,
+            "color_b_offset": -0.1,
+            "lighting_intensity": 2.0,
+        }
+        randomizer._apply_visual_parameters(sim, params)
+
+        # Colors should be clamped to [0, 1]
+        assert np.all(sim._model.geom_rgba[:, 0] <= 1.0)
+        assert np.all(sim._model.geom_rgba[:, 0] >= 0.0)
+        # First geom original 0.5 + 0.1 offset
+        assert sim._model.geom_rgba[0, 0] == pytest.approx(0.6, abs=0.01)
+
+    def test_apply_mass_scaling_mujoco(self):
+        """Test mass scaling on a mock MuJoCo simulator."""
+        from unittest.mock import MagicMock
+        import numpy as np
+
+        randomizer = ParameterRandomizer()
+        sim = MagicMock()
+        sim._model = MagicMock()
+        sim._model.body_mass = np.array([1.0, 2.0, 3.0])
+
+        randomizer._apply_mass_scaling(sim, 1.5)
+
+        assert np.allclose(sim._model.body_mass, np.array([1.5, 3.0, 4.5]))
+
+    def test_apply_friction_mujoco(self):
+        """Test friction application on a mock MuJoCo simulator."""
+        from unittest.mock import MagicMock
+        import numpy as np
+
+        randomizer = ParameterRandomizer()
+        sim = MagicMock()
+        sim._model = MagicMock()
+        sim._model.geom_friction = np.array([[0.5, 0.1, 0.01], [0.3, 0.1, 0.01]])
+
+        randomizer._apply_friction(sim, 0.8)
+
+        assert np.allclose(sim._model.geom_friction[:, 0], np.array([0.8, 0.8]))
+
+    def test_apply_parameters_calls_visual(self):
+        """Test that apply_parameters calls visual parameter application."""
+        from unittest.mock import MagicMock, patch
+        import numpy as np
+
+        domain_config = DomainRandomizationConfig(
+            visual=VisualRandomization(
+                enabled=True,
+                color_range=(-0.1, 0.1),
+            )
+        )
+        randomizer = ParameterRandomizer(domain_config=domain_config)
+        randomizer.start()
+        snapshot = randomizer.reset()
+
+        sim = MagicMock()
+        sim._model = MagicMock()
+        sim._model.geom_rgba = np.array([[0.5, 0.5, 0.5, 1.0]])
+        sim._model.vis = MagicMock()
+        sim._model.vis.headlight = np.array([0.1, 0.15, 0.3])
+
+        with patch.object(randomizer, '_apply_visual_parameters') as mock_visual:
+            result = randomizer.apply_parameters(snapshot, sim)
+            assert result is True
+            mock_visual.assert_called_once()
 
 
 # === Test CurriculumScheduler ===
