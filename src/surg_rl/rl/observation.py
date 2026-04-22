@@ -522,7 +522,8 @@ class ObservationBuilder:
         if obs_type == ObservationType.JOINT_POSITIONS:
             if observation.robot_state is not None:
                 positions = observation.robot_state[: self.num_joints]
-                return positions.copy()
+                if len(positions) == self.num_joints:
+                    return positions.copy()
             return np.zeros(spec.shape)
 
         elif obs_type == ObservationType.JOINT_VELOCITIES:
@@ -645,7 +646,11 @@ class ObservationBuilder:
         range_val = high - low
         range_val = np.where(range_val == 0, 1.0, range_val)
 
-        normalized = 2.0 * (value.flatten() - low) / range_val - 1.0
+        flat_value = value.flatten()
+        if flat_value.shape[0] != low.shape[0]:
+            # Shape mismatch: return zeros matching spec shape as fallback
+            return np.zeros_like(value)
+        normalized = 2.0 * (flat_value - low) / range_val - 1.0
         return normalized.reshape(value.shape)
 
     @staticmethod
