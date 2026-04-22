@@ -428,7 +428,7 @@ class ParameterRandomizer(BaseController):
         if "action_noise" not in self._current_params.dynamics:
             return action
         
-        scale = noise_scale or abs(self._current_params.dynamics["action_noise"])
+        scale = noise_scale if noise_scale is not None else abs(self._current_params.dynamics["action_noise"])
         noise = self._rng.uniform(-scale, scale, size=action.shape)
         return action + noise
 
@@ -452,6 +452,6 @@ class ParameterRandomizer(BaseController):
         if "joint_noise" not in self._current_params.dynamics:
             return observation
         
-        scale = noise_scale or abs(self._current_params.dynamics["joint_noise"])
+        scale = noise_scale if noise_scale is not None else abs(self._current_params.dynamics["joint_noise"])
         noise = self._rng.uniform(-scale, scale, size=observation.shape)
         return observation + noise
