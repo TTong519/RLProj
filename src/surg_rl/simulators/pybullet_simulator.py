@@ -345,7 +345,7 @@ class PyBulletSimulator(BaseSimulator):
                 import pybullet_data
                 self._pb.setAdditionalSearchPath(pybullet_data.getDataPath())
             except ImportError:
-                pass
+                logger.warning("pybullet_data not available; ground plane URDF may fail to load")
             ground_id = self._pb.loadURDF(
                 "plane.urdf",
                 physicsClientId=self._physics_client,
