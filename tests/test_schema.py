@@ -235,6 +235,24 @@ class TestSoftBodyPhysics:
         assert sbp.stiffness == 5000.0
         assert sbp.poissons_ratio == 0.4
 
+    def test_soft_body_new_fields(self):
+        """Test new soft body physics fields."""
+        sbp = SoftBodyPhysics(
+            elasticity=0.8,
+            bending_stiffness=200.0,
+            self_collision=True,
+        )
+        assert sbp.elasticity == 0.8
+        assert sbp.bending_stiffness == 200.0
+        assert sbp.self_collision is True
+
+    def test_soft_body_default_new_fields(self):
+        """Test default values for new soft body physics fields."""
+        sbp = SoftBodyPhysics()
+        assert sbp.elasticity == 0.5
+        assert sbp.bending_stiffness == 100.0
+        assert sbp.self_collision is False
+
 
 class TestRobotConfig:
     """Tests for RobotConfig model."""
@@ -298,6 +316,25 @@ class TestTissueConfig:
             geometry=TissueMeshDefinition(mesh=MeshAsset(path="organ.obj")),
         )
         assert tissue.geometry.mesh.path == "organ.obj"
+
+    def test_tissue_soft_body_flag(self):
+        """Test tissue soft body flag."""
+        tissue = TissueConfig(
+            name="soft_tissue",
+            type=TissueType.SKIN,
+            geometry=TissueMeshDefinition(primitive="box", dimensions=(0.1, 0.1, 0.01)),
+            soft_body=True,
+        )
+        assert tissue.soft_body is True
+        assert tissue.physics is not None
+
+    def test_tissue_soft_body_default(self):
+        """Test tissue soft body flag defaults to False."""
+        tissue = TissueConfig(
+            name="rigid_tissue",
+            geometry=TissueMeshDefinition(primitive="box", dimensions=(0.1, 0.1, 0.01)),
+        )
+        assert tissue.soft_body is False
 
 
 class TestInstrumentConfig:

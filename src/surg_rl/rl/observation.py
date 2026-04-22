@@ -24,6 +24,7 @@ class ObservationType(str, Enum):
     ENDEFFECTOR_QUAT = "endeffector_quat"
     FORCE_TORQUE = "force_torque"
     TISSUE_STATE = "tissue_state"
+    TISSUE_DEFORMATION = "tissue_deformation"
     RGB_IMAGE = "rgb_image"
     DEPTH_IMAGE = "depth_image"
     SEGMENTATION = "segmentation"
@@ -186,6 +187,17 @@ TISSUE_STATE_SPEC = ObservationSpec(
     description="Tissue node positions and velocities",
 )
 
+# Tissue deformation (soft body vertex displacements)
+TISSUE_DEFORMATION_SPEC = ObservationSpec(
+    name="tissue_deformation",
+    obs_type=ObservationType.TISSUE_DEFORMATION,
+    shape=(50, 3),  # 5x5x2 flexcomp grid vertices, 3D displacements
+    low=np.full((50, 3), -1.0),
+    high=np.full((50, 3), 1.0),
+    normalize=False,
+    description="Soft body tissue vertex displacements from rest shape",
+)
+
 # Task-related
 TARGET_POS_SPEC = ObservationSpec(
     name="target_pos",
@@ -273,6 +285,7 @@ DEFAULT_SPECS: Dict[ObservationType, ObservationSpec] = {
     ObservationType.ENDEFFECTOR_QUAT: ENDEFFECTOR_QUAT_SPEC,
     ObservationType.FORCE_TORQUE: FORCE_TORQUE_SPEC,
     ObservationType.TISSUE_STATE: TISSUE_STATE_SPEC,
+    ObservationType.TISSUE_DEFORMATION: TISSUE_DEFORMATION_SPEC,
     ObservationType.TARGET_POS: TARGET_POS_SPEC,
     ObservationType.TARGET_QUAT: TARGET_QUAT_SPEC,
     ObservationType.DISTANCE_TO_TARGET: DISTANCE_TO_TARGET_SPEC,
@@ -542,6 +555,19 @@ class ObservationBuilder:
                     [v for v in observation.tissue_state.values()]
                 )
                 return tissue_vals
+            return np.zeros(spec.shape)
+
+        elif obs_type == ObservationType.TISSUE_DEFORMATION:
+            if observation.custom.get("tissue_deformation") is not None:
+                deformation = np.array(observation.custom["tissue_deformation"])
+                # Pad or truncate to expected shape
+                expected_size = int(np.prod(spec.shape))
+                flat = deformation.flatten()
+                if len(flat) < expected_size:
+                    padded = np.zeros(expected_size, dtype=np.float32)
+                    padded[: len(flat)] = flat
+                    return padded.reshape(spec.shape)
+                return flat[:expected_size].reshape(spec.shape)
             return np.zeros(spec.shape)
 
         elif obs_type == ObservationType.TARGET_POS:

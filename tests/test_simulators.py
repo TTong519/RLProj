@@ -20,6 +20,9 @@ from surg_rl.scene_definition import (
     SceneDefinition,
     Metadata,
     SimulatorType,
+    TissueConfig,
+    TissueMeshDefinition,
+    TissueType,
 )
 
 
@@ -519,3 +522,90 @@ class TestPyBulletJointControl:
         assert "robot" in states
         assert states["robot"]["positions"][0] == pytest.approx(0.5)
         assert states["robot"]["velocities"][0] == pytest.approx(0.1)
+
+class TestSoftBodyMJCF:
+    """Tests for soft body MJCF generation."""
+
+    def test_soft_body_flexcomp_in_mjcf(self, tmp_path: Path):
+        """Test that soft body tissues generate flexcomp in MJCF."""
+        scene = SceneDefinition(
+            metadata=Metadata(name="Soft Body Scene"),
+            simulator=SimulatorType.MUJOCO,
+            tissues=[
+                TissueConfig(
+                    name="soft_tissue",
+                    type=TissueType.SKIN,
+                    geometry=TissueMeshDefinition(primitive="box", dimensions=(0.1, 0.1, 0.01)),
+                    soft_body=True,
+                ),
+            ],
+        )
+
+        builder = SceneBuilder(use_primitive_fallback=True)
+        mjcf_path = builder.create_mjcf(scene, output_path=tmp_path / "soft_body.xml")
+
+        assert mjcf_path.exists()
+        content = mjcf_path.read_text()
+        assert "flexcomp" in content
+        assert 'type="grid"' in content
+        assert 'dim="3"' in content
+        assert "soft_tissue_flex" in content
+
+    def test_rigid_tissue_no_flexcomp(self, tmp_path: Path):
+        """Test that rigid tissues do not generate flexcomp."""
+        scene = SceneDefinition(
+            metadata=Metadata(name="Rigid Body Scene"),
+            simulator=SimulatorType.MUJOCO,
+            tissues=[
+                TissueConfig(
+                    name="rigid_tissue",
+                    type=TissueType.SKIN,
+                    geometry=TissueMeshDefinition(primitive="box", dimensions=(0.1, 0.1, 0.01)),
+                    soft_body=False,
+                ),
+            ],
+        )
+
+        builder = SceneBuilder(use_primitive_fallback=True)
+        mjcf_path = builder.create_mjcf(scene, output_path=tmp_path / "rigid.xml")
+
+        assert mjcf_path.exists()
+        content = mjcf_path.read_text()
+        assert "flexcomp" not in content
+        assert "rigid_tissue_geom" in content
+
+
+class TestMuJoCoSoftBody:
+    """Tests for MuJoCo soft body support."""
+
+    def test_get_tissue_deformation_not_loaded(self):
+        """Test get_tissue_deformation returns None when scene not loaded."""
+        sim = MuJoCoSimulator()
+        result = sim.get_tissue_deformation("soft_tissue")
+        assert result is None
+
+    def test_get_tissue_deformation_flex_not_found(self):
+        """Test get_tissue_deformation returns None when flex not found."""
+        sim = MuJoCoSimulator()
+        # Mock loaded state without actual model
+        sim._loaded = True
+        sim._mujoco = MagicMock()
+        sim._model = MagicMock()
+        sim._data = MagicMock()
+        sim._mujoco.mj_name2id.return_value = -1
+        sim._mujoco.mjtObj.mjOBJ_FLEX = 8
+
+        result = sim.get_tissue_deformation("missing_tissue")
+        assert result is None
+
+
+class TestPyBulletSoftBody:
+    """Tests for PyBullet soft body behavior."""
+
+    def test_pybullet_soft_body_warning(self):
+        """Test that PyBullet has limited soft body support."""
+        # PyBullet does not natively support soft bodies in this implementation.
+        # This test documents the expected limitation.
+        sim = PyBulletSimulator()
+        assert sim.render_mode == "DIRECT"
+
