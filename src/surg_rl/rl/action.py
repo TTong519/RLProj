@@ -306,8 +306,11 @@ class ActionBuilder:
 
         # Clip actions if configured
         if self.config.clip_actions:
-            action_space = self.get_action_space()
-            action = np.clip(action, action_space.low, action_space.high)
+            if self.config.scaling == ActionScaling.NORMALIZE:
+                action = np.clip(action, -1.0, 1.0)
+            else:
+                action_space = self.get_action_space()
+                action = np.clip(action, action_space.low, action_space.high)
 
         # Apply scaling
         if self.config.scaling == ActionScaling.NORMALIZE:
