@@ -4,19 +4,19 @@ This module provides custom callbacks for monitoring, logging, and
 controlling the RL training process.
 """
 
-import os
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional
 
 import numpy as np
+from stable_baselines3.common.callbacks import BaseCallback
 
 from surg_rl.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-class TrainingProgressCallback:
+class TrainingProgressCallback(BaseCallback):
     """Callback for tracking and reporting training progress.
 
     Logs training metrics including episode rewards, lengths,
@@ -40,7 +40,7 @@ class TrainingProgressCallback:
             log_interval: Logging interval in timesteps.
             reward_window: Window for computing running statistics.
         """
-        self.verbose = verbose
+        super().__init__(verbose)
         self.log_interval = log_interval
         self.reward_window = reward_window
         self._step = 0
@@ -48,37 +48,28 @@ class TrainingProgressCallback:
         self._episode_lengths: List[int] = []
         self._start_time = time.time()
 
-    def __call__(self, *args, **kwargs) -> None:
-        """Called by SB3 during training.
-
-        Args:
-            *args: Positional arguments from SB3 (locals, globals).
-            **kwargs: Callback keyword arguments from SB3.
-        """
-        locals_dict = kwargs.get("locals", {})
-        if not locals_dict and len(args) > 0 and isinstance(args[0], dict):
-            locals_dict = args[0]
+    def _on_step(self) -> bool:
+        """Called by SB3 during each training step."""
+        locals_dict = self.locals
 
         # Track steps
         self._step += 1
 
         # Check for episode end
-        done = locals_dict.get("done", False)
-        if done:
-            info = locals_dict.get("info", {})
-            if isinstance(info, dict):
-                reward = info.get("episode", {}).get("r", 0.0)
-                length = info.get("episode", {}).get("l", 0)
-            else:
-                # SB3 VecEnv format
-                reward = 0.0
-                length = 0
-            self._episode_rewards.append(reward)
-            self._episode_lengths.append(length)
+        infos = locals_dict.get("infos", [])
+        for info in infos:
+            if "episode" in info:
+                ep = info["episode"]
+                reward = ep.get("r", 0.0)
+                length = ep.get("l", 0)
+                self._episode_rewards.append(reward)
+                self._episode_lengths.append(length)
 
         # Periodic logging
         if self._step % self.log_interval == 0 and self.verbose >= 1:
             self._log_progress()
+
+        return True
 
     def _log_progress(self) -> None:
         """Log training progress."""
@@ -128,7 +119,7 @@ class TrainingProgressCallback:
         }
 
 
-class CheckpointCallback:
+class CheckpointCallback(BaseCallback):
     """Callback for saving model checkpoints during training.
 
     Saves the model at regular intervals during training.
@@ -156,32 +147,27 @@ class CheckpointCallback:
             name_prefix: Prefix for checkpoint filenames.
             verbose: Verbosity level.
         """
+        super().__init__(verbose)
         self.save_freq = save_freq
         self.save_path = Path(save_path)
         self.name_prefix = name_prefix
-        self.verbose = verbose
         self._last_save_step = 0
 
-    def __call__(self, *args, **kwargs) -> None:
-        """Called by SB3 during training.
-
-        Args:
-            *args: Positional arguments from SB3 (locals, globals).
-            **kwargs: Callback keyword arguments from SB3.
-        """
-        locals_dict = kwargs.get("locals", {})
-        if not locals_dict and len(args) > 0 and isinstance(args[0], dict):
-            locals_dict = args[0]
+    def _on_step(self) -> bool:
+        """Called by SB3 during each training step."""
+        locals_dict = self.locals
         model = locals_dict.get("self")
         step = locals_dict.get("num_collected_steps", 0)
 
         if model is None:
-            return
+            return True
 
         # Check if we should save
         if step - self._last_save_step >= self.save_freq:
             self._save_checkpoint(model, step)
             self._last_save_step = step
+
+        return True
 
     def _save_checkpoint(self, model, step: int) -> None:
         """Save a model checkpoint.
@@ -202,7 +188,7 @@ class CheckpointCallback:
             logger.warning(f"Failed to save checkpoint: {e}")
 
 
-class CurriculumCallback:
+class CurriculumCallback(BaseCallback):
     """Callback for curriculum learning integration.
 
     Updates the curriculum scheduler based on training progress,
@@ -223,49 +209,43 @@ class CurriculumCallback:
             controller: EnvironmentController instance.
             verbose: Verbosity level.
         """
+        super().__init__(verbose)
         self.controller = controller
-        self.verbose = verbose
         self._episode_count = 0
 
-    def __call__(self, *args, **kwargs) -> None:
-        """Called by SB3 during training.
-
-        Args:
-            *args: Positional arguments from SB3 (locals, globals).
-            **kwargs: Callback keyword arguments from SB3.
-        """
+    def _on_step(self) -> bool:
+        """Called by SB3 during each training step."""
         if self.controller is None:
-            return
+            return True
 
-        locals_dict = kwargs.get("locals", {})
-        if not locals_dict and len(args) > 0 and isinstance(args[0], dict):
-            locals_dict = args[0]
-        done = locals_dict.get("done", False)
+        locals_dict = self.locals
+        infos = locals_dict.get("infos", [])
+        for info in infos:
+            if "episode" in info:
+                self._episode_count += 1
 
-        if done:
-            self._episode_count += 1
-            info = locals_dict.get("info", {})
+                # Report episode metrics to controller
+                metrics = {
+                    "reward": info["episode"].get("r", 0.0),
+                    "success": info.get("success", False),
+                }
 
-            # Report episode metrics to controller
-            metrics = {
-                "reward": info.get("episode", {}).get("r", 0.0),
-                "success": info.get("success", False),
-            }
+                self.controller.episode_end(metrics, None)
 
-            controller_info = self.controller.episode_end(metrics, None)
+                # Log curriculum progress
+                if self.verbose >= 1 and self._episode_count % 50 == 0:
+                    stage = self.controller.get_curriculum_stage()
+                    difficulty = self.controller.get_difficulty()
+                    logger.info(
+                        f"Curriculum: episode={self._episode_count}, "
+                        f"stage={stage.value if stage else 'N/A'}, "
+                        f"difficulty={difficulty:.2f if difficulty else 'N/A'}"
+                    )
 
-            # Log curriculum progress
-            if self.verbose >= 1 and self._episode_count % 50 == 0:
-                stage = self.controller.get_curriculum_stage()
-                difficulty = self.controller.get_difficulty()
-                logger.info(
-                    f"Curriculum: episode={self._episode_count}, "
-                    f"stage={stage.value if stage else 'N/A'}, "
-                    f"difficulty={difficulty:.2f if difficulty else 'N/A'}"
-                )
+        return True
 
 
-class EvaluationCallback:
+class EvaluationCallback(BaseCallback):
     """Callback for periodic evaluation during training.
 
     Runs evaluation episodes at regular intervals and logs results.
@@ -295,34 +275,29 @@ class EvaluationCallback:
             deterministic: Whether to use deterministic actions.
             verbose: Verbosity level.
         """
+        super().__init__(verbose)
         self.eval_env = eval_env
         self.eval_freq = eval_freq
         self.n_eval_episodes = n_eval_episodes
         self.deterministic = deterministic
-        self.verbose = verbose
         self._last_eval_step = 0
         self._eval_results: List[Dict[str, Any]] = []
 
-    def __call__(self, *args, **kwargs) -> None:
-        """Called by SB3 during training.
-
-        Args:
-            *args: Positional arguments from SB3 (locals, globals).
-            **kwargs: Callback keyword arguments from SB3.
-        """
-        locals_dict = kwargs.get("locals", {})
-        if not locals_dict and len(args) > 0 and isinstance(args[0], dict):
-            locals_dict = args[0]
+    def _on_step(self) -> bool:
+        """Called by SB3 during each training step."""
+        locals_dict = self.locals
         model = locals_dict.get("self")
         step = locals_dict.get("num_collected_steps", 0)
 
         if model is None or self.eval_env is None:
-            return
+            return True
 
         # Check if we should evaluate
         if step - self._last_eval_step >= self.eval_freq:
             self._evaluate(model, step)
             self._last_eval_step = step
+
+        return True
 
     def _evaluate(self, model, step: int) -> None:
         """Run evaluation episodes.
@@ -373,3 +348,94 @@ class EvaluationCallback:
             List of evaluation result dictionaries.
         """
         return self._eval_results.copy()
+
+
+class TensorBoardCallback(BaseCallback):
+    """Callback for logging training metrics to TensorBoard.
+
+    Logs episode reward and length, training FPS, curriculum stage,
+    adaptive difficulty, and domain randomization parameters using
+    Stable-Baselines3's built-in logger.
+
+    Example:
+        >>> callback = TensorBoardCallback(
+        ...     controller=env.controller,
+        ...     log_interval=100,
+        ... )
+    """
+
+    def __init__(
+        self,
+        controller=None,
+        log_interval: int = 100,
+        verbose: int = 0,
+    ):
+        """Initialize the TensorBoard callback.
+
+        Args:
+            controller: EnvironmentController instance for accessing
+                curriculum and randomization state.
+            log_interval: Number of timesteps between logger dumps.
+            verbose: Verbosity level.
+        """
+        super().__init__(verbose)
+        self.controller = controller
+        self.log_interval = log_interval
+        self._episode_rewards: List[float] = []
+        self._episode_lengths: List[int] = []
+        self._start_time: Optional[float] = None
+        self._last_log_step = 0
+
+    def _on_training_start(self) -> None:
+        """Record training start time."""
+        self._start_time = time.time()
+
+    def _on_step(self) -> bool:
+        """Log metrics at each training step."""
+        infos = self.locals.get("infos", [])
+        for info in infos:
+            if "episode" in info:
+                ep = info["episode"]
+                reward = ep.get("r", 0.0)
+                length = ep.get("l", 0)
+                self._episode_rewards.append(reward)
+                self._episode_lengths.append(length)
+
+                if self.logger is not None:
+                    self.logger.record("rollout/episode_reward", reward)
+                    self.logger.record("rollout/episode_length", length)
+
+        # Log controller state
+        if self.controller is not None and self.logger is not None:
+            stage = self.controller.get_curriculum_stage()
+            if stage is not None:
+                self.logger.record("curriculum/stage", stage.value)
+
+            difficulty = self.controller.get_difficulty()
+            if difficulty is not None:
+                self.logger.record("curriculum/difficulty", difficulty)
+
+            params = self.controller.current_params
+            for key, value in params.physics.items():
+                if isinstance(value, (int, float)):
+                    self.logger.record(f"randomization/physics/{key}", value)
+            for key, value in params.visual.items():
+                if isinstance(value, (int, float)):
+                    self.logger.record(f"randomization/visual/{key}", value)
+            for key, value in params.dynamics.items():
+                if isinstance(value, (int, float)):
+                    self.logger.record(f"randomization/dynamics/{key}", value)
+
+        # Log FPS
+        if self._start_time is not None and self.logger is not None:
+            elapsed = time.time() - self._start_time
+            fps = self.num_timesteps / elapsed if elapsed > 0 else 0
+            self.logger.record("time/fps", fps)
+
+        # Dump logger at intervals
+        if self.num_timesteps - self._last_log_step >= self.log_interval:
+            if self.logger is not None:
+                self.logger.dump(self.num_timesteps)
+            self._last_log_step = self.num_timesteps
+
+        return True

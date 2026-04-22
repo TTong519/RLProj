@@ -96,6 +96,7 @@ class TrainingConfig:
         max_episode_steps: Maximum steps per episode.
         use_curriculum: Whether to use curriculum learning.
         use_adaptive_difficulty: Whether to use adaptive difficulty.
+        enable_tensorboard: Whether to enable TensorBoard logging.
     """
 
     scene_path: str = "scenes/simple_suturing.json"
@@ -113,6 +114,7 @@ class TrainingConfig:
     max_episode_steps: int = 1000
     use_curriculum: bool = False
     use_adaptive_difficulty: bool = False
+    enable_tensorboard: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -290,6 +292,11 @@ class TrainingManager:
             "policy_kwargs": policy_kwargs,
         }
 
+        if self.config.enable_tensorboard:
+            common_kwargs["tensorboard_log"] = (
+                self.config.tensorboard_log or self.config.log_dir
+            )
+
         # Algorithm-specific parameters
         if algo_config.name.upper() in ("PPO", "A2C"):
             common_kwargs.update({
@@ -369,6 +376,17 @@ class TrainingManager:
             verbose=self.config.verbose,
         )
         callbacks.append(progress_callback)
+
+        # TensorBoard callback
+        if self.config.enable_tensorboard:
+            from .callbacks import TensorBoardCallback
+
+            tb_callback = TensorBoardCallback(
+                controller=getattr(self._env, "controller", None),
+                log_interval=100,
+                verbose=self.config.verbose,
+            )
+            callbacks.append(tb_callback)
 
         # Combine callbacks
         from stable_baselines3.common.callbacks import CallbackList

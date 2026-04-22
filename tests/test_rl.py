@@ -61,6 +61,7 @@ from surg_rl.rl.callbacks import (
     CheckpointCallback,
     TrainingProgressCallback,
     EvaluationCallback,
+    TensorBoardCallback,
 )
 
 
@@ -630,6 +631,118 @@ class TestCheckpointCallback:
         )
         assert callback.save_freq == 10000
         assert callback.name_prefix == "test"
+
+
+class TestTensorBoardCallback:
+    """Tests for TensorBoardCallback."""
+
+    def test_creation(self):
+        """Test creating a TensorBoard callback."""
+        callback = TensorBoardCallback(verbose=0)
+        assert callback.log_interval == 100
+        assert callback.controller is None
+
+    def test_creation_with_controller(self):
+        """Test creating a TensorBoard callback with a controller."""
+        from unittest.mock import MagicMock
+
+        controller = MagicMock()
+        controller.get_curriculum_stage.return_value = None
+        controller.get_difficulty.return_value = None
+        controller.current_params = MagicMock()
+        controller.current_params.physics = {}
+        controller.current_params.visual = {}
+        controller.current_params.dynamics = {}
+
+        callback = TensorBoardCallback(controller=controller, log_interval=50)
+        assert callback.controller is controller
+        assert callback.log_interval == 50
+
+    def test_on_step_logs_episode_metrics(self):
+        """Test that _on_step logs episode metrics."""
+        from unittest.mock import MagicMock
+
+        callback = TensorBoardCallback(verbose=0)
+        model = MagicMock()
+        model.num_timesteps = 10
+        logger = MagicMock()
+        model.logger = logger
+        callback.init_callback(model)
+
+        callback.locals = {
+            "infos": [
+                {"episode": {"r": 100.0, "l": 50}},
+            ],
+        }
+        callback.on_step()
+
+        logger.record.assert_any_call("rollout/episode_reward", 100.0)
+        logger.record.assert_any_call("rollout/episode_length", 50)
+
+    def test_on_step_logs_curriculum_and_difficulty(self):
+        """Test that _on_step logs curriculum stage and difficulty."""
+        from unittest.mock import MagicMock
+
+        from surg_rl.dynamics.curriculum import CurriculumStage
+
+        controller = MagicMock()
+        controller.get_curriculum_stage.return_value = CurriculumStage.EASY
+        controller.get_difficulty.return_value = 0.5
+        controller.current_params = MagicMock()
+        controller.current_params.physics = {"friction": 0.8}
+        controller.current_params.visual = {}
+        controller.current_params.dynamics = {}
+
+        callback = TensorBoardCallback(controller=controller, verbose=0)
+        model = MagicMock()
+        model.num_timesteps = 10
+        logger = MagicMock()
+        model.logger = logger
+        callback.init_callback(model)
+
+        callback.locals = {"infos": []}
+        callback.on_step()
+
+        logger.record.assert_any_call("curriculum/stage", CurriculumStage.EASY.value)
+        logger.record.assert_any_call("curriculum/difficulty", 0.5)
+        logger.record.assert_any_call("randomization/physics/friction", 0.8)
+
+    def test_on_step_logs_fps(self):
+        """Test that _on_step logs training FPS."""
+        from unittest.mock import MagicMock
+
+        callback = TensorBoardCallback(verbose=0)
+        model = MagicMock()
+        model.num_timesteps = 100
+        logger = MagicMock()
+        model.logger = logger
+        callback.init_callback(model)
+
+        callback.locals = {"infos": []}
+        callback._on_training_start()
+        callback.on_step()
+
+        assert logger.record.called
+        fps_calls = [
+            call for call in logger.record.call_args_list
+            if call[0][0] == "time/fps"
+        ]
+        assert len(fps_calls) == 1
+        assert fps_calls[0][0][1] > 0
+
+
+class TestTrainingConfigTensorBoard:
+    """Tests for TrainingConfig TensorBoard options."""
+
+    def test_tensorboard_disabled_by_default(self):
+        """Test that TensorBoard is disabled by default."""
+        config = TrainingConfig()
+        assert config.enable_tensorboard is False
+
+    def test_tensorboard_enabled(self):
+        """Test enabling TensorBoard."""
+        config = TrainingConfig(enable_tensorboard=True)
+        assert config.enable_tensorboard is True
 
 
 # ============================================================================
