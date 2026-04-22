@@ -620,7 +620,7 @@ f 5 1 4 8
         if self._temp_dir and self._temp_dir.exists():
             shutil.rmtree(self._temp_dir, ignore_errors=True)
             self._temp_dir = None
-            self._primitive_meshes.clear()
+        self._primitive_meshes.clear()
 
     def __del__(self):
         """Destructor to clean up temp files."""
