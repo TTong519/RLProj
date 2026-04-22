@@ -244,15 +244,15 @@ class EnvironmentController:
             physics_params.update(rand_params.physics)
             visual_params.update(rand_params.visual)
             dynamics_params.update(rand_params.dynamics)
-        
+
         if self._curriculum:
-            curr_params = self._curriculum.reset(seed)
+            curr_params = self._curriculum.reset(seed + 1 if seed is not None else None)
             physics_params.update(curr_params.physics)
             visual_params.update(curr_params.visual)
             dynamics_params.update(curr_params.dynamics)
-        
+
         if self._adaptive:
-            adapt_params = self._adaptive.reset(seed)
+            adapt_params = self._adaptive.reset(seed + 2 if seed is not None else None)
             physics_params.update(adapt_params.physics)
             visual_params.update(adapt_params.visual)
             dynamics_params.update(adapt_params.dynamics)
@@ -269,23 +269,44 @@ class EnvironmentController:
 
     def step_update(self, simulator: Any) -> ParameterSnapshot:
         """Update after a simulation step.
-        
+
         Args:
             simulator: Simulator instance.
-            
+
         Returns:
             Current parameter snapshot.
         """
         self._step += 1
-        
-        # Update all controllers
+
+        # Update all controllers and re-merge their snapshots
+        physics_params = dict(self._current_params.physics)
+        visual_params = dict(self._current_params.visual)
+        dynamics_params = dict(self._current_params.dynamics)
+
         if self._randomizer:
-            self._randomizer.step_update(simulator)
+            rand_params = self._randomizer.step_update(simulator)
+            physics_params.update(rand_params.physics)
+            visual_params.update(rand_params.visual)
+            dynamics_params.update(rand_params.dynamics)
         if self._curriculum:
-            self._curriculum.step_update(simulator)
+            curr_params = self._curriculum.step_update(simulator)
+            physics_params.update(curr_params.physics)
+            visual_params.update(curr_params.visual)
+            dynamics_params.update(curr_params.dynamics)
         if self._adaptive:
-            self._adaptive.step_update(simulator)
-        
+            adapt_params = self._adaptive.step_update(simulator)
+            physics_params.update(adapt_params.physics)
+            visual_params.update(adapt_params.visual)
+            dynamics_params.update(adapt_params.dynamics)
+
+        self._current_params = ParameterSnapshot(
+            physics=physics_params,
+            visual=visual_params,
+            dynamics=dynamics_params,
+            episode=self._episode,
+            step=self._step,
+        )
+
         return self._current_params
 
     def episode_end(
@@ -327,8 +348,8 @@ class EnvironmentController:
     ) -> None:
         """Apply parameter snapshot to a simulator.
 
-        Delegates to the parameter randomizer's apply_parameters method
-        if randomization is enabled.
+        Delegates to all sub-controllers so curriculum and adaptive
+        overrides are also applied.
 
         Args:
             snapshot: Parameter snapshot to apply.
@@ -336,6 +357,10 @@ class EnvironmentController:
         """
         if self._randomizer is not None:
             self._randomizer.apply_parameters(snapshot, simulator)
+        if self._curriculum is not None:
+            self._curriculum.apply_parameters(snapshot, simulator)
+        if self._adaptive is not None:
+            self._adaptive.apply_parameters(snapshot, simulator)
 
     def get_randomized_action(
         self,
