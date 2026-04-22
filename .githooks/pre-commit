@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Pre-commit hook for surg-rl
+# Enable with: git config core.hooksPath .githooks
+
+set -euo pipefail
+
+# --- Import corruption guard ---
+# Reject literal \n in Python source files (common sed/echo corruption)
+corrupted=$(grep -r '\\n' --include="*.py" src/ tests/ 2>/dev/null | \
+    grep -v 'r"' | grep -v "repr(" | grep -v "# noqa" | grep -v "\\\\n" || true)
+
+if [ -n "$corrupted" ]; then
+    echo "Error: literal \\n found in Python file (likely sed/echo corruption):"
+    echo "$corrupted"
+    exit 1
+fi
+
+# --- Affected test runner ---
+# Run only tests whose module imports trace to changed files
+changed=$(git diff --cached --name-only)
+
+check_tests() {
+    local pattern=$1
+    local testfile=$2
+    if echo "$changed" | grep -q "$pattern"; then
+        echo "Running $testfile (affected by changes)..."
+        PYTHONPATH=src pytest "$testfile" -q || exit 1
+    fi
+}
+
+check_tests "src/surg_rl/simulators/" "tests/test_simulators.py"
+check_tests "src/surg_rl/scene_generation/" "tests/test_scene_generation.py"
+check_tests "src/surg_rl/scene_definition/" "tests/test_scene_definition.py"
+check_tests "src/surg_rl/rl/" "tests/test_rl.py"
+check_tests "src/surg_rl/dynamics/" "tests/test_dynamics.py"
+
+echo "Pre-commit checks passed."

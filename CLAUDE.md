@@ -78,14 +78,25 @@ src/surg_rl/
 ### Imports
 - Multi-line parenthesized imports: always verify the opening parenthesis (`from .module import (` not `from .module import`)
 - The `rl` subpackage's `__init__.py` imports from `environment.py` — a syntax error there breaks the entire import chain
+- Never use `sed` or `echo -e` to inject multi-line import blocks; use `python -c "import pathlib; pathlib.Path('file').write_text(...)"` or the `Edit` tool directly
 
 ### Testing
 - When testing `validate=False` paths with `model_construct`, remember that nested fields are plain dicts — use `metadata.get("name")` or `hasattr(metadata, "name")` guards
 - YAML "invalid" test strings must actually be invalid — `"key: value\n  nested: invalid"` is valid YAML (multiline scalar); use `"key: [invalid"` (unclosed bracket) instead
 - When making an ABC method a `@staticmethod`, update the test call to remove the `self`/`None` argument
+- When appending test classes to an existing file from a parallel branch, first `read` the file to check for overlapping class names and import ordering
+- Test files that cover cross-cutting concerns (`test_simulators.py`, `test_scene_generation.py`) are high-conflict — prefer feature-specific files (`test_soft_body.py`, `test_joint_control.py`) when possible, and import them into the main test file
 
 ### Scene composition
 - When merging scenes with a `base_scene`, iterate over ALL scenes (`for scene in scenes`), not `scenes[1:]` — the base already provides the starting point, so `scenes[0]` should not be skipped
+
+### Parallel Development
+- When running parallel agents on git worktrees, ALWAYS use Python scripts (`python -c "..."`) for multi-line file edits — `sed` with `\n` produces literal backslash-n characters that corrupt Python imports
+- Before spawning parallel agents, check `git ls-files` for files likely to collide (e.g., `scene_builder.py`, `test_simulators.py`) and either:
+  - Assign disjoint file sets to each agent, OR
+  - Have one agent own the shared file and the others write patches
+- After parallel agents finish, merge in dependency order: schema → simulators → scene_generation → rl → tests. Run `pytest` after each merge, not just at the end
+- Limit per-agent debug loops to 3 attempts; if not resolved, halt and re-examine assumptions rather than adding print statements
 
 ### Algorithms
 - Algorithm names are normalized to uppercase internally (`algo_name = name.upper()`) — always compare against the uppercase version in downstream conditionals
@@ -108,5 +119,4 @@ Copy `.env.example` to `.env`. Key variables:
 ## Known Limitations
 
 - `assets/` has no real mesh files; simulators use primitive shape fallbacks
-- No joint/robot control yet in demos (objects are static)
 - Scene generation requires API keys (OpenAI/Anthropic) or local Ollama
