@@ -239,11 +239,21 @@ class TrainingManager:
         """Create the training environment.
 
         Returns:
-            Gymnasium environment.
+            Gymnasium environment or SB3 vectorized environment.
         """
+        from .environment import make_vec_env
+
+        if self.config.n_envs > 1:
+            return make_vec_env(
+                scene_path=self.config.scene_path,
+                n_envs=self.config.n_envs,
+                seed=self.config.seed,
+                max_episode_steps=self.config.max_episode_steps,
+                use_curriculum=self.config.use_curriculum,
+                use_adaptive_difficulty=self.config.use_adaptive_difficulty,
+            )
+
         from .environment import SurgicalEnv, SurgicalEnvConfig
-        from .observation import ObservationConfig, ObservationType
-        from .action import ActionConfig, ActionType
 
         config = SurgicalEnvConfig(
             scene_path=self.config.scene_path,

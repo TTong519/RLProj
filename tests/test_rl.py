@@ -51,6 +51,7 @@ from surg_rl.rl.environment import (
     SurgicalEnv,
     SurgicalEnvConfig,
     make_env,
+    make_vec_env,
 )
 from surg_rl.rl.training import (
     AlgorithmConfig,
@@ -683,6 +684,72 @@ class TestObservationActionIntegration:
         result = reward_fn.compute(obs, action, {"terminated": False})
         assert result.total != 0
         reward_fn.reset()
+
+
+# ============================================================================
+# Vectorized Environment Tests
+# ============================================================================
+
+
+class TestVectorizedEnv:
+    """Tests for vectorized environment creation and stepping."""
+
+    def test_make_vec_env_dummy(self):
+        """Test that make_vec_env returns DummyVecEnv for n_envs=1."""
+        from stable_baselines3.common.vec_env import DummyVecEnv
+
+        vec_env = make_vec_env("scenes/minimal_scene.json", n_envs=1)
+        assert isinstance(vec_env, DummyVecEnv)
+        vec_env.close()
+
+    def test_make_vec_env_subproc(self):
+        """Test that make_vec_env returns SubprocVecEnv for n_envs>1."""
+        from stable_baselines3.common.vec_env import SubprocVecEnv
+
+        vec_env = make_vec_env("scenes/minimal_scene.json", n_envs=2)
+        assert isinstance(vec_env, SubprocVecEnv)
+        vec_env.close()
+
+    def test_make_vec_env_explicit_cls(self):
+        """Test that vec_env_cls overrides the default."""
+        from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+
+        vec_env = make_vec_env(
+            "scenes/minimal_scene.json",
+            n_envs=2,
+            vec_env_cls=DummyVecEnv,
+        )
+        assert isinstance(vec_env, DummyVecEnv)
+        vec_env.close()
+
+    def test_vec_env_reset_step(self):
+        """Test reset and step on a vectorized environment."""
+        vec_env = make_vec_env("scenes/minimal_scene.json", n_envs=2)
+        obs = vec_env.reset()
+        assert obs is not None
+        # Dict observation space: each key should have shape (n_envs, ...)
+        for key, arr in obs.items():
+            assert arr.shape[0] == 2, f"Expected batch dim 2 for {key}, got {arr.shape}"
+
+        action = np.stack([vec_env.action_space.sample() for _ in range(2)])
+        obs, rewards, dones, infos = vec_env.step(action)
+        assert len(rewards) == 2
+        assert len(dones) == 2
+        vec_env.close()
+
+    def test_vec_env_seeding(self):
+        """Test that each sub-environment receives a different seed."""
+        from stable_baselines3.common.vec_env import DummyVecEnv
+
+        vec_env = make_vec_env(
+            "scenes/minimal_scene.json",
+            n_envs=3,
+            seed=42,
+            vec_env_cls=DummyVecEnv,
+        )
+        obs = vec_env.reset()
+        assert obs is not None
+        vec_env.close()
 
 
 if __name__ == "__main__":

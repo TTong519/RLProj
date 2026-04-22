@@ -595,35 +595,42 @@ def make_env(
 
 def make_vec_env(
     scene_path: str,
-    n_envs: int = 1,
-    simulator_type: str = "mujoco",
-    seed: Optional[int] = None,
+    n_envs: int = 4,
+    vec_env_cls: Optional[Any] = None,
     **kwargs,
-) -> gym.vector.VectorEnv:
+) -> "gym.Env":
     """Create a vectorized environment for parallel training.
+
+    Uses Stable-Baselines3's DummyVecEnv (single process) or SubprocVecEnv
+    (multiprocess) depending on ``n_envs`` and ``vec_env_cls``.
 
     Args:
         scene_path: Path to the scene definition file.
         n_envs: Number of parallel environments.
-        simulator_type: Simulator backend.
-        seed: Base random seed.
-        **kwargs: Additional arguments passed to SurgicalEnvConfig.
+        vec_env_cls: VecEnv class to use (``DummyVecEnv`` or ``SubprocVecEnv``).
+            Defaults to ``DummyVecEnv`` when ``n_envs == 1`` and
+            ``SubprocVecEnv`` otherwise.
+        **kwargs: Additional arguments passed to ``SurgicalEnvConfig``.
 
     Returns:
-        Vectorized Gymnasium environment.
+        Vectorized SB3 environment.
     """
+    from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+
     def env_factory(rank: int):
         def _init():
-            env_seed = seed + rank if seed is not None else None
+            env_seed = kwargs.get("seed")
+            if env_seed is not None:
+                env_seed = env_seed + rank
             config = SurgicalEnvConfig(
                 scene_path=scene_path,
-                simulator_type=simulator_type,
                 seed=env_seed,
-                **kwargs,
+                **{k: v for k, v in kwargs.items() if k != "seed"},
             )
             return SurgicalEnv(config)
         return _init
 
-    return gym.vector.SyncVectorEnv(
-        [env_factory(i) for i in range(n_envs)],
-    )
+    if vec_env_cls is None:
+        vec_env_cls = DummyVecEnv if n_envs == 1 else SubprocVecEnv
+
+    return vec_env_cls([env_factory(i) for i in range(n_envs)])
