@@ -154,35 +154,64 @@ class PyBulletSimulator(BaseSimulator):
                         physicsClientId=self._physics_client,
                     )
                     self._body_ids[robot.name] = body_id
+                    self._collect_joint_info(robot.name, body_id)
                     return
                 except Exception as e:
                     logger.warning(f"Failed to load robot URDF: {e}. Using primitive.")
 
-        # Create primitive collision shape
-        collision_shape = self._pb.createCollisionShape(
+        # Primitive fallback: create a base + 1-DOF revolute joint
+        base_collision = self._pb.createCollisionShape(
             self._pb.GEOM_BOX,
             halfExtents=[0.05, 0.05, 0.1],
             physicsClientId=self._physics_client,
         )
-        visual_shape = self._pb.createVisualShape(
+        base_visual = self._pb.createVisualShape(
             self._pb.GEOM_BOX,
             halfExtents=[0.05, 0.05, 0.1],
             rgbaColor=[0.3, 0.3, 0.8, 1.0],
             physicsClientId=self._physics_client,
         )
+        link_collision = self._pb.createCollisionShape(
+            self._pb.GEOM_BOX,
+            halfExtents=[0.03, 0.03, 0.08],
+            physicsClientId=self._physics_client,
+        )
+        link_visual = self._pb.createVisualShape(
+            self._pb.GEOM_BOX,
+            halfExtents=[0.03, 0.03, 0.08],
+            rgbaColor=[0.4, 0.4, 0.9, 1.0],
+            physicsClientId=self._physics_client,
+        )
 
         body_id = self._pb.createMultiBody(
-            baseMass=0.0,  # Static (no joint control implemented yet)
-            baseCollisionShapeIndex=collision_shape,
-            baseVisualShapeIndex=visual_shape,
+            baseMass=0.0,
+            baseCollisionShapeIndex=base_collision,
+            baseVisualShapeIndex=base_visual,
             basePosition=[
                 robot.base_pose.position.x,
                 robot.base_pose.position.y,
                 robot.base_pose.position.z,
             ],
+            baseOrientation=[
+                robot.base_pose.orientation.w,
+                robot.base_pose.orientation.x,
+                robot.base_pose.orientation.y,
+                robot.base_pose.orientation.z,
+            ],
+            linkMasses=[0.5],
+            linkCollisionShapeIndices=[link_collision],
+            linkVisualShapeIndices=[link_visual],
+            linkPositions=[[0.0, 0.0, 0.15]],
+            linkOrientations=[[0.0, 0.0, 0.0, 1.0]],
+            linkInertialFramePositions=[[0.0, 0.0, 0.0]],
+            linkInertialFrameOrientations=[[0.0, 0.0, 0.0, 1.0]],
+            linkParentIndices=[0],
+            linkJointTypes=[self._pb.JOINT_REVOLUTE],
+            linkJointAxis=[[0.0, 1.0, 0.0]],
             physicsClientId=self._physics_client,
         )
         self._body_ids[robot.name] = body_id
+        self._collect_joint_info(robot.name, body_id)
         # Store initial pose for reset
         self._initial_positions[robot.name] = [
             robot.base_pose.position.x,
@@ -195,6 +224,25 @@ class PyBulletSimulator(BaseSimulator):
             robot.base_pose.orientation.z,
             robot.base_pose.orientation.w,
         ]
+
+    def _collect_joint_info(self, robot_name: str, body_id: int) -> None:
+        """Collect joint indices for a loaded robot body."""
+        num_joints = self._pb.getNumJoints(body_id, physicsClientId=self._physics_client)
+        joint_dict: Dict[str, int] = {}
+        for j in range(num_joints):
+            info = self._pb.getJointInfo(body_id, j, physicsClientId=self._physics_client)
+            joint_name = info[1].decode("utf-8")
+            joint_dict[joint_name] = j
+            # Enable position control by default
+            self._pb.setJointMotorControl2(
+                body_id,
+                j,
+                self._pb.POSITION_CONTROL,
+                targetPosition=0.0,
+                force=100.0,
+                physicsClientId=self._physics_client,
+            )
+        self._joint_ids[robot_name] = joint_dict
 
     def _load_tissue(self, tissue: Any) -> None:
         """Load a tissue into the simulation."""
@@ -453,11 +501,51 @@ class PyBulletSimulator(BaseSimulator):
             body_positions[name] = np.array(pos)
             body_orientations[name] = np.array(orn)
 
+        # Get joint states
+        joint_states = self.get_joint_states()
+        qpos_list = []
+        qvel_list = []
+        for robot_name, states in joint_states.items():
+            qpos_list.append(states["positions"])
+            qvel_list.append(states["velocities"])
+
+        qpos = np.concatenate(qpos_list) if qpos_list else None
+        qvel = np.concatenate(qvel_list) if qvel_list else None
+
         return State(
             time=self._simulation_time,
+            qpos=qpos,
+            qvel=qvel,
             body_positions=body_positions,
             body_orientations=body_orientations,
         )
+
+    def get_joint_states(self) -> Dict[str, Dict[str, np.ndarray]]:
+        """Get joint positions and velocities for all robots.
+
+        Returns:
+            Dictionary mapping robot name to {'positions': array, 'velocities': array}.
+        """
+        result: Dict[str, Dict[str, np.ndarray]] = {}
+        if not self._loaded:
+            return result
+
+        for robot_name, joint_dict in self._joint_ids.items():
+            if robot_name not in self._body_ids:
+                continue
+            body_id = self._body_ids[robot_name]
+            positions = []
+            velocities = []
+            for joint_name in sorted(joint_dict.keys()):
+                joint_idx = joint_dict[joint_name]
+                state = self._pb.getJointState(body_id, joint_idx, physicsClientId=self._physics_client)
+                positions.append(state[0])
+                velocities.append(state[1])
+            result[robot_name] = {
+                "positions": np.array(positions, dtype=np.float32),
+                "velocities": np.array(velocities, dtype=np.float32),
+            }
+        return result
 
     def set_state(self, state: State) -> None:
         """Restore simulation state."""
@@ -488,9 +576,33 @@ class PyBulletSimulator(BaseSimulator):
         self.scene_builder.cleanup()
 
     def _apply_action(self, action: np.ndarray) -> None:
-        """Apply action to the simulation."""
-        # Placeholder - would set joint targets
-        pass
+        """Apply action to the simulation.
+
+        Args:
+            action: Action vector with joint position targets.
+        """
+        if action is None or len(action) == 0:
+            return
+
+        idx = 0
+        for robot_name, joint_dict in self._joint_ids.items():
+            if robot_name not in self._body_ids:
+                continue
+            body_id = self._body_ids[robot_name]
+            for joint_name in sorted(joint_dict.keys()):
+                if idx >= len(action):
+                    break
+                joint_idx = joint_dict[joint_name]
+                target = float(action[idx])
+                self._pb.setJointMotorControl2(
+                    body_id,
+                    joint_idx,
+                    self._pb.POSITION_CONTROL,
+                    targetPosition=target,
+                    force=100.0,
+                    physicsClientId=self._physics_client,
+                )
+                idx += 1
 
     def _get_observation(self) -> Observation:
         """Get current observation."""
@@ -507,6 +619,15 @@ class PyBulletSimulator(BaseSimulator):
         for name, body_id in self._body_ids.items():
             pos, orn = self._pb.getBasePositionAndOrientation(body_id, physicsClientId=self._physics_client)
             obs.tissue_state[name] = np.concatenate([np.array(pos), np.array(orn)])
+
+        # Get robot joint states
+        joint_states = self.get_joint_states()
+        if joint_states:
+            all_positions = []
+            for robot_name in sorted(joint_states.keys()):
+                all_positions.append(joint_states[robot_name]["positions"])
+            if all_positions:
+                obs.robot_state = np.concatenate(all_positions)
 
         return obs
 
