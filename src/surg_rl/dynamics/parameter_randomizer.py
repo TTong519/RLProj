@@ -98,28 +98,28 @@ class ParameterRandomizer(BaseController):
         # Physics parameters
         phys = self.domain_config.physics
         if phys.enabled:
-            if phys.mass_range:
+            if phys.mass_range is not None:
                 self.parameter_bounds["mass_ratio"] = ParameterBounds(
                     name="mass_ratio",
                     min_value=phys.mass_range[0],
                     max_value=phys.mass_range[1],
                     default=1.0,
                 )
-            if phys.friction_range:
+            if phys.friction_range is not None:
                 self.parameter_bounds["friction"] = ParameterBounds(
                     name="friction",
                     min_value=phys.friction_range[0],
                     max_value=phys.friction_range[1],
                     default=0.5,
                 )
-            if phys.damping_range:
+            if phys.damping_range is not None:
                 self.parameter_bounds["damping"] = ParameterBounds(
                     name="damping",
                     min_value=phys.damping_range[0],
                     max_value=phys.damping_range[1],
                     default=0.1,
                 )
-            if phys.stiffness_range:
+            if phys.stiffness_range is not None:
                 self.parameter_bounds["stiffness"] = ParameterBounds(
                     name="stiffness",
                     min_value=phys.stiffness_range[0],
@@ -131,14 +131,14 @@ class ParameterRandomizer(BaseController):
         # Visual parameters
         vis = self.domain_config.visual
         if vis.enabled:
-            if vis.color_range:
+            if vis.color_range is not None:
                 self.parameter_bounds["color_variation"] = ParameterBounds(
                     name="color_variation",
                     min_value=vis.color_range[0],
                     max_value=vis.color_range[1],
                     default=0.0,
                 )
-            if vis.lighting_variation:
+            if vis.lighting_variation is not None:
                 self.parameter_bounds["lighting_intensity"] = ParameterBounds(
                     name="lighting_intensity",
                     min_value=vis.lighting_variation[0],
@@ -149,21 +149,21 @@ class ParameterRandomizer(BaseController):
         # Dynamics parameters
         dyn = self.domain_config.dynamics
         if dyn.enabled:
-            if dyn.joint_noise:
+            if dyn.joint_noise is not None:
                 self.parameter_bounds["joint_noise"] = ParameterBounds(
                     name="joint_noise",
                     min_value=dyn.joint_noise[0],
                     max_value=dyn.joint_noise[1],
                     default=0.0,
                 )
-            if dyn.action_noise:
+            if dyn.action_noise is not None:
                 self.parameter_bounds["action_noise"] = ParameterBounds(
                     name="action_noise",
                     min_value=dyn.action_noise[0],
                     max_value=dyn.action_noise[1],
                     default=0.0,
                 )
-            if dyn.delay_range:
+            if dyn.delay_range is not None:
                 self.parameter_bounds["delay"] = ParameterBounds(
                     name="delay",
                     min_value=dyn.delay_range[0],
