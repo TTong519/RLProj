@@ -511,6 +511,8 @@ class SurgicalEnv(gym.Env):
             state["sim_time"] = sim_state.time
             state["qpos"] = sim_state.qpos
             state["qvel"] = sim_state.qvel
+            state["body_positions"] = sim_state.body_positions
+            state["body_orientations"] = sim_state.body_orientations
 
         # Save controller state
         if self._controller is not None:
@@ -530,13 +532,15 @@ class SurgicalEnv(gym.Env):
         self._target_quat = state.get("target_quat")
 
         # Restore simulator state
-        if self._simulator is not None and "qpos" in state:
+        if self._simulator is not None:
             from surg_rl.simulators.base_simulator import State
 
             sim_state = State(
                 time=state.get("sim_time", 0.0),
                 qpos=state.get("qpos"),
                 qvel=state.get("qvel"),
+                body_positions=state.get("body_positions", {}),
+                body_orientations=state.get("body_orientations", {}),
             )
             self._simulator.set_state(sim_state)
 
