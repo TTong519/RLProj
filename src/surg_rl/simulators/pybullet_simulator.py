@@ -176,6 +176,18 @@ class PyBulletSimulator(BaseSimulator):
             physicsClientId=self._physics_client,
         )
         self._body_ids[robot.name] = body_id
+        # Store initial pose for reset
+        self._initial_positions[robot.name] = [
+            robot.base_pose.position.x,
+            robot.base_pose.position.y,
+            robot.base_pose.position.z,
+        ]
+        self._initial_orientations[robot.name] = [
+            robot.base_pose.orientation.x,
+            robot.base_pose.orientation.y,
+            robot.base_pose.orientation.z,
+            robot.base_pose.orientation.w,
+        ]
 
     def _load_tissue(self, tissue: Any) -> None:
         """Load a tissue into the simulation."""
@@ -268,10 +280,10 @@ class PyBulletSimulator(BaseSimulator):
             tissue.pose.position.z,
         ]
         self._initial_orientations[tissue.name] = [
-            tissue.pose.orientation.w,
             tissue.pose.orientation.x,
             tissue.pose.orientation.y,
             tissue.pose.orientation.z,
+            tissue.pose.orientation.w,
         ]
 
     def _load_instrument(self, instrument: Any) -> None:
@@ -308,16 +320,20 @@ class PyBulletSimulator(BaseSimulator):
             instrument.pose.position.z,
         ]
         self._initial_orientations[instrument.name] = [
-            instrument.pose.orientation.w,
             instrument.pose.orientation.x,
             instrument.pose.orientation.y,
             instrument.pose.orientation.z,
+            instrument.pose.orientation.w,
         ]
 
     def _load_environment(self, scene_definition: Any) -> None:
         """Load environment elements."""
         # Load ground plane
-        if scene_definition.physics.ground_plane:
+        if (
+            hasattr(scene_definition, "physics")
+            and scene_definition.physics is not None
+            and scene_definition.physics.ground_plane
+        ):
             try:
                 import pybullet_data
                 self._pb.setAdditionalSearchPath(pybullet_data.getDataPath())
