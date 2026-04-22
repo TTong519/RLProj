@@ -4,6 +4,7 @@ This module provides adaptive difficulty adjustment based on agent
 performance, allowing dynamic difficulty scaling during training.
 """
 
+import copy
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
@@ -313,9 +314,9 @@ class AdaptiveDifficultyController(BaseController):
         elif self.difficulty_config.adaptation_strategy == AdaptationStrategy.PROPORTIONAL:
             # Proportional to performance difference from threshold
             if direction == AdaptationDirection.INCREASE:
-                delta = rate * (success_rate - self.difficulty_config.success_threshold_high)
+                delta = max(0.0, rate * (success_rate - self.difficulty_config.success_threshold_high))
             else:
-                delta = rate * (self.difficulty_config.success_threshold_low - success_rate)
+                delta = max(0.0, rate * (self.difficulty_config.success_threshold_low - success_rate))
         else:  # THRESHOLD
             # Fixed step if threshold crossed
             delta = rate
@@ -342,7 +343,7 @@ class AdaptiveDifficultyController(BaseController):
         return DifficultyState(
             difficulty=self._difficulty,
             direction=self._direction,
-            performance_history=self._performance_history.copy(),
+            performance_history=copy.deepcopy(self._performance_history),
             adaptation_count=self._adaptation_count,
         )
 
