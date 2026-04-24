@@ -419,6 +419,16 @@ class PyBulletSimulator(BaseSimulator):
             )
             # Also reset velocity
             self._pb.resetBaseVelocity(body_id, [0, 0, 0], [0, 0, 0], physicsClientId=self._physics_client)
+            # Reset joint positions and velocities
+            if name in self._joint_ids:
+                for joint_idx in self._joint_ids[name].values():
+                    self._pb.resetJointState(
+                        body_id,
+                        joint_idx,
+                        targetValue=0.0,
+                        targetVelocity=0.0,
+                        physicsClientId=self._physics_client,
+                    )
 
         self._simulation_time = 0.0
         return self._get_observation()
