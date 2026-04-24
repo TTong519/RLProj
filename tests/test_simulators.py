@@ -610,6 +610,36 @@ class TestPyBulletSoftBody:
         assert sim.render_mode == "DIRECT"
 
 
+class TestBaseSimulatorDel:
+    """Tests for BaseSimulator __del__ behavior."""
+
+    def test_del_does_not_crash_on_close_failure(self):
+        """__del__ should not raise even if close() fails during shutdown."""
+        from unittest.mock import MagicMock
+
+        class BrokenSimulator(BaseSimulator):
+            def load_scene(self, scene):
+                pass
+            def reset(self, seed=None):
+                return MagicMock()
+            def step(self, action):
+                return MagicMock()
+            def render(self, mode="rgb_array"):
+                return None
+            def close(self):
+                raise RuntimeError("cleanup failed")
+            def get_state(self):
+                return State()
+            def set_state(self, state):
+                pass
+            def get_joint_states(self):
+                return {}
+
+        sim = BrokenSimulator()
+        # __del__ should not raise
+        sim.__del__()
+
+
 class TestPyBulletBugs:
     """Regression tests for PyBullet simulator bugs."""
 

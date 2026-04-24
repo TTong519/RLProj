@@ -374,7 +374,11 @@ class BaseSimulator(ABC):
 
     def __del__(self):
         """Destructor to ensure cleanup."""
+        import sys
+        if sys.is_finalizing():
+            return
         try:
             self.close()
         except Exception:
+            # Suppress cleanup errors during interpreter shutdown
             pass
