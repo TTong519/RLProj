@@ -271,9 +271,6 @@ class SurgicalEnv(gym.Env):
         """
         super().reset(seed=seed)
 
-        if seed is not None:
-            np.random.seed(seed)
-
         # Reset episode state
         self._step_count = 0
         self._episode_count += 1
@@ -298,7 +295,7 @@ class SurgicalEnv(gym.Env):
             sim_obs = Observation()
 
         # Set random target position for task
-        self._target_pos = np.array([0.3, 0.0, 0.5]) + np.random.uniform(
+        self._target_pos = np.array([0.3, 0.0, 0.5]) + self.np_random.uniform(
             -0.1, 0.1, size=3
         )
         self._target_quat = np.array([1.0, 0.0, 0.0, 0.0])

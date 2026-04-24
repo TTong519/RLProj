@@ -896,5 +896,40 @@ def test_evaluate_with_vec_env():
     assert "mean_reward" in results
 
 
+def test_env_seeding_is_reproducible():
+    """Seeded envs must produce identical target positions and not poison global RNG."""
+    from unittest.mock import MagicMock, patch
+    from surg_rl.rl.environment import SurgicalEnv, SurgicalEnvConfig
+
+    config = SurgicalEnvConfig(
+        scene_path="scenes/minimal_scene.json",
+        seed=42,
+    )
+    # Mock simulator to avoid loading scene
+    with patch("surg_rl.rl.environment.MuJoCoSimulator") as MockSim:
+        sim = MagicMock()
+        sim.get_observation.return_value = MagicMock(
+            robot_state=np.zeros(7),
+            end_effector_pos=np.array([0.0, 0.0, 0.0]),
+            end_effector_quat=np.array([1.0, 0.0, 0.0, 0.0]),
+        )
+        MockSim.return_value = sim
+
+        env1 = SurgicalEnv(config)
+        env2 = SurgicalEnv(config)
+
+        # Seed global RNG to known state; reset must not alter it.
+        np.random.seed(123)
+        expected_next = np.random.uniform()
+
+        np.random.seed(123)
+        obs1, info1 = env1.reset(seed=42)
+        obs2, info2 = env2.reset(seed=42)
+        actual_next = np.random.uniform()
+
+        assert np.allclose(obs1["target_pos"], obs2["target_pos"])
+        assert np.isclose(actual_next, expected_next), "reset() poisoned global np.random"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
