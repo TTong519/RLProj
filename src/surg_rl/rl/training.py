@@ -322,7 +322,7 @@ class TrainingManager:
                 "vf_coef": algo_config.vf_coef,
                 "max_grad_norm": algo_config.max_grad_norm,
             })
-        elif algo_config.name in ("SAC", "TD3", "DDPG"):
+        elif algo_config.name.upper() in ("SAC", "TD3", "DDPG"):
             common_kwargs.update({
                 "buffer_size": algo_config.buffer_size,
                 "learning_starts": algo_config.learning_starts,

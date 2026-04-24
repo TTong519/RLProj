@@ -986,5 +986,31 @@ def test_checkpoint_callback_uses_self_num_timesteps():
         mock_save.assert_called_once()
 
 
+def test_algorithm_name_case_insensitive():
+    """Algorithm names must be compared case-insensitively."""
+    from surg_rl.rl.training import TrainingManager, TrainingConfig, AlgorithmConfig
+    from unittest.mock import MagicMock, patch
+
+    config = TrainingConfig(
+        scene_path="scenes/minimal_scene.json",
+        algorithm=AlgorithmConfig(name="sac"),  # lowercase
+        total_timesteps=100,
+    )
+    manager = TrainingManager(config)
+
+    env = MagicMock()
+    env.observation_space = MagicMock()
+    env.action_space = MagicMock()
+
+    with patch("stable_baselines3.SAC") as MockSAC:
+        MockSAC.return_value = MagicMock()
+        manager._create_model(env)
+        MockSAC.assert_called_once()
+        # Off-policy kwargs must be present even when name is lowercase
+        call_kwargs = MockSAC.call_args.kwargs
+        assert "buffer_size" in call_kwargs
+        assert "learning_starts" in call_kwargs
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
