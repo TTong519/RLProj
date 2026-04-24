@@ -317,6 +317,9 @@ class ActionBuilder:
             action = self._normalize_action(action)
         elif self.config.scaling == ActionScaling.TANH:
             action = np.tanh(action)
+            # Map from (-1, 1) to (low, high)
+            low, high = self.get_action_space().low, self.get_action_space().high
+            action = low + (action + 1.0) / 2.0 * (high - low)
 
         # Apply action scale for delta actions
         if self.config.relative_actions and self._last_action is not None:

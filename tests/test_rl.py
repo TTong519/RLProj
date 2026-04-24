@@ -956,5 +956,21 @@ def test_observation_noise_is_reproducible():
     assert np.allclose(result1, result2)
 
 
+def test_tanh_scaling_maps_to_action_bounds():
+    """TANH scaling must map (-inf, inf) input to actual action-space bounds."""
+    from surg_rl.rl.action import ActionBuilder, ActionConfig, ActionScaling
+
+    config = ActionConfig(scaling=ActionScaling.TANH, include_gripper=False, clip_actions=False)
+    builder = ActionBuilder(config=config)
+    space = builder.get_action_space()
+
+    # Large input values should be squashed to actual bounds
+    action = np.ones(space.shape) * 10.0
+    scaled = builder.process_action(action)
+
+    # After TANH scaling, output should be mapped to actual bounds, not left in (-1, 1)
+    assert np.allclose(scaled, space.high, atol=1e-2), f"Expected near {space.high}, got {scaled}"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
