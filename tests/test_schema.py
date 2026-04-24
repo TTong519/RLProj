@@ -432,6 +432,12 @@ class TestLightConfig:
         with pytest.raises(ValueError):
             LightConfig(name="invalid", type=LightType.POINT)
 
+    def test_light_config_validator_returns_copy(self):
+        """LightConfig validator must return a model_copy, not mutate self."""
+        cfg = LightConfig.model_validate({"type": LightType.DIRECTIONAL})
+        assert cfg.direction == (0.0, 0.0, -1.0)
+        assert cfg.type == LightType.DIRECTIONAL
+
 
 class TestTaskConfig:
     """Tests for TaskConfig model."""

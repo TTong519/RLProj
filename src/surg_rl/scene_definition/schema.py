@@ -699,7 +699,7 @@ class LightConfig(BaseModel):
             raise ValueError("Point lights require a position")
         if self.type == LightType.DIRECTIONAL and self.direction is None:
             # Default to overhead light
-            self.direction = (0.0, 0.0, -1.0)
+            return self.model_copy(update={"direction": (0.0, 0.0, -1.0)})
         if self.type == LightType.SPOTLIGHT:
             if self.position is None or self.direction is None:
                 raise ValueError("Spotlights require position and direction")
