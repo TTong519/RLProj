@@ -640,6 +640,25 @@ class TestBaseSimulatorDel:
         sim.__del__()
 
 
+class TestMuJoCoReset:
+    """Tests for MuJoCo reset behavior."""
+
+    def test_reset_does_not_poison_global_rng(self):
+        """reset() must not call np.random.seed() globally."""
+        from unittest.mock import patch, MagicMock
+
+        sim = MuJoCoSimulator()
+        sim._loaded = True
+        sim._model = MagicMock()
+        sim._data = MagicMock()
+        sim._mujoco = MagicMock()
+        sim._get_observation = MagicMock(return_value=MagicMock())
+
+        with patch("numpy.random.seed") as mock_seed:
+            sim.reset(seed=42)
+            mock_seed.assert_not_called()
+
+
 class TestPyBulletBugs:
     """Regression tests for PyBullet simulator bugs."""
 

@@ -142,7 +142,8 @@ class MuJoCoSimulator(BaseSimulator):
             raise RuntimeError("Scene not loaded. Call load_scene() first.")
 
         if seed is not None:
-            np.random.seed(seed)
+            self._seed = seed
+            self._rng = np.random.default_rng(seed)
 
         self._mujoco.mj_resetData(self._model, self._data)
         self._simulation_time = 0.0
