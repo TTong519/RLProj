@@ -17,25 +17,9 @@ from surg_rl.scene_generation import TextParser, VisionParser, SceneComposer, ge
 logger = get_logger(__name__)
 
 
-def _yaml_serialize(data):
-    """Convert Pydantic model dump to YAML-safe structure.
-
-    Handles Enum values and tuples that PyYAML cannot serialize.
-    """
-    from enum import Enum
-
-    def _convert(obj):
-        if isinstance(obj, Enum):
-            return obj.value
-        if isinstance(obj, tuple):
-            return list(obj)
-        elif isinstance(obj, dict):
-            return {k: _convert(v) for k, v in obj.items()}
-        elif isinstance(obj, list):
-            return [_convert(item) for item in obj]
-        return obj
-
-    return _convert(data)
+def _yaml_serialize(scene):
+    """Serialize a scene to YAML-safe dict."""
+    return scene.model_dump(mode="json")
 
 app = typer.Typer(
     name="surg-rl",
@@ -135,7 +119,7 @@ def generate(
 
             if format == "yaml":
                 import yaml
-                content = yaml.dump(_yaml_serialize(scene.model_dump()), default_flow_style=False, sort_keys=False)
+                content = yaml.dump(_yaml_serialize(scene), default_flow_style=False, sort_keys=False)
             else:
                 content = json.dumps(scene.model_dump(), indent=2)
 
@@ -164,7 +148,7 @@ def generate(
 
             if format == "yaml":
                 import yaml
-                content = yaml.dump(_yaml_serialize(scene.model_dump()), default_flow_style=False, sort_keys=False)
+                content = yaml.dump(_yaml_serialize(scene), default_flow_style=False, sort_keys=False)
             else:
                 content = json.dumps(scene.model_dump(), indent=2)
 
@@ -193,7 +177,7 @@ def generate(
 
             if format == "yaml":
                 import yaml
-                content = yaml.dump(_yaml_serialize(scene.model_dump()), default_flow_style=False, sort_keys=False)
+                content = yaml.dump(_yaml_serialize(scene), default_flow_style=False, sort_keys=False)
             else:
                 content = json.dumps(scene.model_dump(), indent=2)
 
