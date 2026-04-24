@@ -264,6 +264,21 @@ class TestCreateDefaultReward:
         assert len(result.components) > 0
         reward_fn.reset()
 
+    def test_collision_penalty_is_negative(self):
+        """CollisionPenalty must produce a negative reward on collision."""
+        from surg_rl.rl.rewards import RewardConfig
+
+        composite = create_default_reward(RewardConfig())
+        obs = {}
+        action = np.zeros(7)
+        info = {"collision": True, "tissue_damage": 0.0, "collision_force": 0.0}
+
+        result = composite.compute(obs, action, info)
+        collision_component = [v for k, v in result.components.items() if "collision" in k]
+        assert collision_component
+        assert all(v <= 0 for v in collision_component), f"Collision penalty must be negative, got {collision_component}"
+        assert result.total <= 0, f"Total reward on collision should be non-positive, got {result.total}"
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -834,8 +834,8 @@ def create_default_reward(
             angle_threshold=config.angle_threshold,
         ), 1.0),
         (CollisionPenalty(
-            weight=config.collision_penalty,
-            tissue_weight=config.tissue_damage_penalty,
+            weight=abs(config.collision_penalty),
+            tissue_weight=abs(config.tissue_damage_penalty),
         ), 1.0),
     ])
 
