@@ -609,3 +609,95 @@ class TestPyBulletSoftBody:
         sim = PyBulletSimulator()
         assert sim.render_mode == "DIRECT"
 
+
+class TestPyBulletBugs:
+    """Regression tests for PyBullet simulator bugs."""
+
+    def test_pybullet_primitive_robot_quaternion_order(self):
+        """Bug 1: createMultiBody primitive fallback must pass [x, y, z, w]."""
+        import unittest.mock as mock
+        from surg_rl.scene_definition import RobotConfig, RobotType, Pose, Orientation, Position
+
+        sim = PyBulletSimulator()
+        sim._physics_client = 0
+        sim._pb = mock.MagicMock()
+        sim._pb.createCollisionShape.return_value = 1
+        sim._pb.createVisualShape.return_value = 2
+        sim._pb.createMultiBody.return_value = 42
+        sim._pb.getNumJoints.return_value = 0
+
+        robot = RobotConfig(
+            name="test_robot",
+            type=RobotType.ROBOTIC_ARM,
+            urdf_path=None,
+            joints=[
+                {
+                    "name": "j0",
+                    "type": "revolute",
+                    "limits": {"lower": -1.57, "upper": 1.57},
+                }
+            ],
+            base_pose=Pose(
+                position=Position(x=0.1, y=0.2, z=0.3),
+                orientation=Orientation(x=0.0, y=0.0, z=0.0, w=1.0),
+            ),
+        )
+
+        sim._load_robot(robot)
+
+        # Assert createMultiBody was called with [x, y, z, w] not [w, x, y, z]
+        call_kwargs = sim._pb.createMultiBody.call_args[1]
+        assert call_kwargs["baseOrientation"] == [0.0, 0.0, 0.0, 1.0]
+
+    def test_pybullet_reset_resets_joints(self):
+        """Bug 2: reset() must reset joint positions and velocities."""
+        import unittest.mock as mock
+
+        sim = PyBulletSimulator()
+        sim._physics_client = 0
+        sim._pb = mock.MagicMock()
+        sim._body_ids = {"robot": 1}
+        sim._joint_ids = {"robot": {"joint_0": 0, "joint_1": 1}}
+        sim._initial_positions = {"robot": [0, 0, 0]}
+        sim._initial_orientations = {"robot": [0, 0, 0, 1]}
+        sim._loaded = True
+        sim._scene = None
+
+        # Mock _get_observation so reset can return
+        sim._get_observation = mock.MagicMock(return_value=mock.MagicMock())
+
+        sim.reset()
+
+        # Assert resetJointState was called for each joint
+        assert sim._pb.resetJointState.call_count == 2
+        first_call = sim._pb.resetJointState.call_args_list[0]
+        assert first_call[0][0] == 1  # body_id
+        assert first_call[0][1] == 0  # joint_idx
+        assert first_call[1]["targetValue"] == 0.0
+        assert first_call[1]["targetVelocity"] == 0.0
+
+    def test_pybullet_load_scene_without_physics(self):
+        """Bug 3: load_scene() must not raise when physics is None."""
+        import unittest.mock as mock
+        from surg_rl.scene_definition import SceneDefinition, Metadata
+
+        sim = PyBulletSimulator()
+        sim._pb = mock.MagicMock()
+        sim._physics_client = 0
+        # Prevent _check_pybullet from overwriting our mock
+        sim._check_pybullet = mock.MagicMock()
+
+        # Use model_construct to bypass Pydantic validation so physics can be None
+        scene = SceneDefinition.model_construct(
+            metadata=Metadata(name="No Physics Scene"),
+            physics=None,
+        )
+
+        # Should not raise AttributeError
+        sim.load_scene(scene)
+
+        # Default gravity should be set
+        sim._pb.setGravity.assert_called_with(
+            0, 0, -9.81, physicsClientId=0
+        )
+
