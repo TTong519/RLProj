@@ -931,5 +931,30 @@ def test_env_seeding_is_reproducible():
         assert np.isclose(actual_next, expected_next), "reset() poisoned global np.random"
 
 
+def test_observation_noise_is_reproducible():
+    """Observation noise must be reproducible with the same seed."""
+    from surg_rl.rl.observation import ObservationBuilder, ObservationConfig
+    from unittest.mock import MagicMock
+
+    config = ObservationConfig()
+    builder = ObservationBuilder(config=config)
+    builder.seed(42)
+
+    obs = MagicMock()
+    obs.robot_state = np.array([1.0, 2.0, 3.0])
+    obs.end_effector_pos = np.array([0.1, 0.2, 0.3])
+    obs.end_effector_quat = np.array([1.0, 0.0, 0.0, 0.0])
+    obs.force_torque = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    obs.tissue_state = {}
+
+    spec = builder._specs["joint_positions"]
+    result1 = builder._apply_noise(np.array([1.0, 2.0, 3.0]), spec.noise_scale)
+
+    builder.seed(42)
+    result2 = builder._apply_noise(np.array([1.0, 2.0, 3.0]), spec.noise_scale)
+
+    assert np.allclose(result1, result2)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

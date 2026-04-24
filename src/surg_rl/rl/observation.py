@@ -339,10 +339,31 @@ class ObservationBuilder:
         self._specs: Dict[str, ObservationSpec] = {}
         self._build_specs()
 
+        # Pre-allocate fallback zero arrays to avoid repeated allocations
+        self._fallback_cache: Dict[str, np.ndarray] = {
+            name: np.zeros(spec.shape, dtype=spec.dtype)
+            for name, spec in self._specs.items()
+        }
+        # Override quaternion fallbacks with identity (valid default quaternion)
+        for quat_name in ("endeffector_quat", "target_quat"):
+            if quat_name in self._fallback_cache:
+                self._fallback_cache[quat_name] = np.array(
+                    [1.0, 0.0, 0.0, 0.0], dtype=self._specs[quat_name].dtype
+                )
+
         # Running statistics for normalization
         self._running_mean: Optional[np.ndarray] = None
         self._running_var: Optional[np.ndarray] = None
         self._count: int = 0
+
+        self._rng = np.random.default_rng(seed=0)
+
+    def seed(self, seed: int) -> None:
+        self._rng = np.random.default_rng(seed=seed)
+
+    def _apply_noise(self, obs_array: np.ndarray, noise_scale: float) -> np.ndarray:
+        noise = self._rng.normal(0, noise_scale, obs_array.shape)
+        return obs_array + noise.astype(obs_array.dtype)
 
     def _build_specs(self) -> None:
         """Build observation specifications from configuration."""
@@ -488,8 +509,7 @@ class ObservationBuilder:
             if obs_array is not None:
                 # Apply noise if configured
                 if spec.noise_scale > 0:
-                    noise = np.random.normal(0, spec.noise_scale, obs_array.shape)
-                    obs_array = obs_array + noise.astype(obs_array.dtype)
+                    obs_array = self._apply_noise(obs_array, spec.noise_scale)
 
                 # Normalize if configured
                 if spec.normalize and obs_array.dtype != np.uint8:
@@ -524,7 +544,7 @@ class ObservationBuilder:
                 positions = observation.robot_state[: self.num_joints]
                 if len(positions) == self.num_joints:
                     return positions.copy()
-            return np.zeros(spec.shape)
+            return self._fallback_cache[spec.name]
 
         elif obs_type == ObservationType.JOINT_VELOCITIES:
             if observation.robot_state is not None:
@@ -533,22 +553,22 @@ class ObservationBuilder:
                 ]
                 if len(velocities) == self.num_joints:
                     return velocities.copy()
-            return np.zeros(spec.shape)
+            return self._fallback_cache[spec.name]
 
         elif obs_type == ObservationType.ENDEFFECTOR_POS:
             if observation.end_effector_pos is not None:
                 return observation.end_effector_pos.copy()
-            return np.zeros(3)
+            return self._fallback_cache[spec.name]
 
         elif obs_type == ObservationType.ENDEFFECTOR_QUAT:
             if observation.end_effector_quat is not None:
                 return observation.end_effector_quat.copy()
-            return np.array([1.0, 0.0, 0.0, 0.0])
+            return self._fallback_cache[spec.name]
 
         elif obs_type == ObservationType.FORCE_TORQUE:
             if observation.force_torque is not None:
                 return observation.force_torque.copy()
-            return np.zeros(6)
+            return self._fallback_cache[spec.name]
 
         elif obs_type == ObservationType.TISSUE_STATE:
             if observation.tissue_state is not None:
@@ -556,7 +576,7 @@ class ObservationBuilder:
                     [v for v in observation.tissue_state.values()]
                 )
                 return tissue_vals
-            return np.zeros(spec.shape)
+            return self._fallback_cache[spec.name]
 
         elif obs_type == ObservationType.TISSUE_DEFORMATION:
             if observation.custom.get("tissue_deformation") is not None:
@@ -569,27 +589,27 @@ class ObservationBuilder:
                     padded[: len(flat)] = flat
                     return padded.reshape(spec.shape)
                 return flat[:expected_size].reshape(spec.shape)
-            return np.zeros(spec.shape)
+            return self._fallback_cache[spec.name]
 
         elif obs_type == ObservationType.TARGET_POS:
             if target_pos is not None:
                 return target_pos.copy()
             if observation.custom.get("target_pos") is not None:
                 return np.array(observation.custom["target_pos"])
-            return np.zeros(3)
+            return self._fallback_cache[spec.name]
 
         elif obs_type == ObservationType.TARGET_QUAT:
             if target_quat is not None:
                 return target_quat.copy()
             if observation.custom.get("target_quat") is not None:
                 return np.array(observation.custom["target_quat"])
-            return np.array([1.0, 0.0, 0.0, 0.0])
+            return self._fallback_cache[spec.name]
 
         elif obs_type == ObservationType.DISTANCE_TO_TARGET:
             if observation.end_effector_pos is not None and target_pos is not None:
                 dist = np.linalg.norm(observation.end_effector_pos - target_pos)
                 return np.array([dist])
-            return np.zeros(1)
+            return self._fallback_cache[spec.name]
 
         elif obs_type == ObservationType.ANGLE_TO_TARGET:
             if observation.end_effector_quat is not None and target_quat is not None:
@@ -597,32 +617,32 @@ class ObservationBuilder:
                     observation.end_effector_quat, target_quat
                 )
                 return np.array([angle])
-            return np.zeros(1)
+            return self._fallback_cache[spec.name]
 
         elif obs_type == ObservationType.RGB_IMAGE:
             if observation.rgb_image is not None:
                 return observation.rgb_image
-            return np.zeros(spec.shape, dtype=np.uint8)
+            return self._fallback_cache[spec.name]
 
         elif obs_type == ObservationType.DEPTH_IMAGE:
             if observation.depth_image is not None:
                 return observation.depth_image[:, :, np.newaxis]
-            return np.zeros(spec.shape, dtype=spec.dtype)
+            return self._fallback_cache[spec.name]
 
         elif obs_type == ObservationType.SEGMENTATION:
             if observation.segmentation is not None:
                 return observation.segmentation[:, :, np.newaxis]
-            return np.zeros(spec.shape, dtype=np.int32)
+            return self._fallback_cache[spec.name]
 
         elif obs_type == ObservationType.TOOL_POSITIONS:
             if observation.custom.get("tool_positions") is not None:
                 return np.array(observation.custom["tool_positions"])
-            return np.zeros(spec.shape)
+            return self._fallback_cache[spec.name]
 
         elif obs_type == ObservationType.CUSTOM:
             if spec.name in observation.custom:
                 return np.array(observation.custom[spec.name])
-            return np.zeros(spec.shape)
+            return self._fallback_cache[spec.name]
 
         return None
 
