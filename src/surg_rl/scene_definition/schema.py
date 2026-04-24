@@ -692,18 +692,21 @@ class LightConfig(BaseModel):
         default=0.5, ge=0.0, le=1.0, description="Shadow softness"
     )
 
-    @model_validator(mode="after")
-    def validate_light_type(self) -> "LightConfig":
+    @model_validator(mode="before")
+    @classmethod
+    def validate_light_type(cls, data):
         """Validate that required fields are present for each light type."""
-        if self.type == LightType.POINT and self.position is None:
-            raise ValueError("Point lights require a position")
-        if self.type == LightType.DIRECTIONAL and self.direction is None:
-            # Default to overhead light
-            return self.model_copy(update={"direction": (0.0, 0.0, -1.0)})
-        if self.type == LightType.SPOTLIGHT:
-            if self.position is None or self.direction is None:
-                raise ValueError("Spotlights require position and direction")
-        return self
+        if isinstance(data, dict):
+            light_type = data.get("type")
+            if light_type == LightType.POINT and data.get("position") is None:
+                raise ValueError("Point lights require a position")
+            if light_type == LightType.DIRECTIONAL and data.get("direction") is None:
+                # Default to overhead light
+                data["direction"] = (0.0, 0.0, -1.0)
+            if light_type == LightType.SPOTLIGHT:
+                if data.get("position") is None or data.get("direction") is None:
+                    raise ValueError("Spotlights require position and direction")
+        return data
 
 
 class GroundPlaneConfig(BaseModel):
