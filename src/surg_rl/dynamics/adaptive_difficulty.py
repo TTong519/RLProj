@@ -209,16 +209,106 @@ class AdaptiveDifficultyController(BaseController):
         simulator: Any,
     ) -> bool:
         """Apply difficulty-scaled parameters to simulator.
-        
+
+        Stores the snapshot so that action/observation noise can be
+        retrieved via get_randomized_action and get_randomized_observation.
+        Gravity variation is applied directly to the simulator when present.
+
         Args:
             snapshot: Parameters to apply.
             simulator: Simulator instance.
-            
+
         Returns:
             True if successful, False otherwise.
         """
-        # Parameter application is typically done by ParameterRandomizer
+        self._current_params = snapshot
+
+        # Apply gravity variation directly if present
+        gravity_var = snapshot.physics.get("gravity_variation")
+        if gravity_var is not None and gravity_var != 0.0:
+            try:
+                if hasattr(simulator, "_model") and simulator._model is not None and hasattr(simulator._model, "opt"):
+                    base_gravity = getattr(simulator._model.opt, "gravity", np.array([0.0, 0.0, -9.81]))
+                    simulator._model.opt.gravity[:] = base_gravity * (1.0 + gravity_var)
+                elif hasattr(simulator, "_physics_client"):
+                    import pybullet as p
+                    base_gravity = np.array([0.0, 0.0, -9.81])
+                    p.setGravity(
+                        base_gravity[0] * (1.0 + gravity_var),
+                        base_gravity[1] * (1.0 + gravity_var),
+                        base_gravity[2] * (1.0 + gravity_var),
+                        physicsClientId=simulator._physics_client,
+                    )
+            except Exception:
+                pass
+
+        # Apply mass ratio if present
+        if "mass_ratio" in snapshot.physics:
+            mass_ratio = snapshot.physics["mass_ratio"]
+            if hasattr(simulator, "set_mass_ratio"):
+                simulator.set_mass_ratio(mass_ratio)
+
+        # Apply friction if present
+        if "friction" in snapshot.physics:
+            friction = snapshot.physics["friction"]
+            if hasattr(simulator, "set_friction"):
+                simulator.set_friction(friction)
+
         return True
+
+    def get_randomized_action(
+        self,
+        action: np.ndarray,
+        noise_scale: Optional[float] = None,
+    ) -> np.ndarray:
+        """Apply adaptive action noise.
+
+        Args:
+            action: Original action array.
+            noise_scale: Optional override for noise scale.
+
+        Returns:
+            Action with noise applied.
+        """
+        if not self.config.enabled:
+            return action
+
+        scale = noise_scale
+        if scale is None and "action_noise" in self._current_params.dynamics:
+            scale = abs(self._current_params.dynamics["action_noise"])
+
+        if scale is None or scale == 0.0:
+            return action
+
+        noise = self._rng.uniform(-scale, scale, size=action.shape)
+        return action + noise
+
+    def get_randomized_observation(
+        self,
+        observation: np.ndarray,
+        noise_scale: Optional[float] = None,
+    ) -> np.ndarray:
+        """Apply adaptive observation noise.
+
+        Args:
+            observation: Original observation array.
+            noise_scale: Optional override for noise scale.
+
+        Returns:
+            Observation with noise applied.
+        """
+        if not self.config.enabled:
+            return observation
+
+        scale = noise_scale
+        if scale is None and "observation_noise" in self._current_params.dynamics:
+            scale = abs(self._current_params.dynamics["observation_noise"])
+
+        if scale is None or scale == 0.0:
+            return observation
+
+        noise = self._rng.uniform(-scale, scale, size=observation.shape)
+        return observation + noise
 
     def update_curriculum(
         self,

@@ -763,3 +763,26 @@ def test_visual_randomization_preserves_original_colors():
     called_color = mock_pb.changeVisualShape.call_args.kwargs.get("rgbaColor")
     assert called_color is not None
     assert abs(called_color[0] - 1.0) < 0.01, f"Expected ~1.0 but got {called_color[0]}"
+
+
+def test_adaptive_difficulty_applies_mass_and_friction():
+    """apply_parameters must apply mass_ratio and friction, not just gravity."""
+    from unittest.mock import MagicMock
+    from surg_rl.dynamics.adaptive_difficulty import AdaptiveDifficultyController, DifficultyConfig
+    from surg_rl.dynamics.base_controller import ParameterSnapshot
+
+    config = DifficultyConfig()
+    controller = AdaptiveDifficultyController(difficulty_config=config)
+    controller.start()
+    controller.reset()
+
+    snapshot = ParameterSnapshot(
+        physics={"gravity_variation": 0.1, "mass_ratio": 1.2, "friction": 0.8},
+        visual={}, dynamics={}, episode=1, step=0,
+    )
+    simulator = MagicMock()
+
+    controller.apply_parameters(snapshot, simulator)
+
+    assert simulator.set_mass_ratio.called or simulator.set_friction.called, \
+        "apply_parameters did not apply mass_ratio or friction"
