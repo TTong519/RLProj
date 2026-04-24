@@ -865,5 +865,36 @@ class TestVectorizedEnv:
         vec_env.close()
 
 
+def test_evaluate_with_vec_env():
+    """evaluate() must work when _create_environment returns a VecEnv."""
+    from unittest.mock import MagicMock
+    from surg_rl.rl.training import TrainingManager, TrainingConfig, AlgorithmConfig
+
+    config = TrainingConfig(
+        scene_path="scenes/minimal_scene.json",
+        algorithm=AlgorithmConfig(name="PPO"),
+        n_envs=2,
+        total_timesteps=100,
+    )
+    manager = TrainingManager(config)
+
+    model = MagicMock()
+    model.predict.return_value = (np.zeros(7), None)
+    manager._model = model
+
+    vec_env = MagicMock()
+    vec_env.reset.return_value = np.zeros((2, 10))
+    vec_env.step.return_value = (
+        np.zeros((2, 10)),
+        np.array([1.0, 1.0]),
+        np.array([True, True]),
+        [{}, {}],
+    )
+    manager._create_environment = MagicMock(return_value=vec_env)
+
+    results = manager.evaluate(n_episodes=2)
+    assert "mean_reward" in results
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

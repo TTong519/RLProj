@@ -112,6 +112,7 @@ class TrainingConfig:
     n_eval_episodes: int = 10
     verbose: int = 1
     max_episode_steps: int = 1000
+    simulator: str = "mujoco"
     use_curriculum: bool = False
     use_adaptive_difficulty: bool = False
     enable_tensorboard: bool = False
@@ -251,6 +252,7 @@ class TrainingManager:
                 n_envs=self.config.n_envs,
                 seed=self.config.seed,
                 max_episode_steps=self.config.max_episode_steps,
+                simulator_type=self.config.simulator,
                 use_curriculum=self.config.use_curriculum,
                 use_adaptive_difficulty=self.config.use_adaptive_difficulty,
             )
@@ -260,6 +262,7 @@ class TrainingManager:
         config = SurgicalEnvConfig(
             scene_path=self.config.scene_path,
             max_episode_steps=self.config.max_episode_steps,
+            simulator_type=self.config.simulator,
             seed=self.config.seed,
             use_curriculum=self.config.use_curriculum,
             use_adaptive_difficulty=self.config.use_adaptive_difficulty,
@@ -472,25 +475,44 @@ class TrainingManager:
         episode_lengths = []
         episode_successes = []
 
+        is_vec_env = hasattr(eval_env, "num_envs")
+
         for episode in range(n_episodes):
-            obs, info = eval_env.reset()
+            reset_result = eval_env.reset()
+            if is_vec_env:
+                obs = reset_result
+                info = {}
+            else:
+                obs, info = reset_result
+
             total_reward = 0.0
             steps = 0
             done = False
 
             while not done:
                 action, _ = model.predict(obs, deterministic=True)
-                obs, reward, terminated, truncated, info = eval_env.step(action)
-                total_reward += reward
+                step_result = eval_env.step(action)
+                if is_vec_env:
+                    obs, reward, done_flag, info = step_result
+                    terminated = done_flag
+                    truncated = False
+                    done = bool(done_flag.any()) if hasattr(done_flag, "any") else bool(done_flag)
+                    total_reward += float(reward.sum()) if hasattr(reward, "sum") else float(reward)
+                else:
+                    obs, reward, terminated, truncated, info = step_result
+                    done = terminated or truncated
+                    total_reward += float(reward)
+
                 steps += 1
-                done = terminated or truncated
 
                 if render:
                     eval_env.render()
 
             episode_rewards.append(total_reward)
             episode_lengths.append(steps)
-            episode_successes.append(info.get("task_success", False))
+            episode_successes.append(
+                info.get("task_success", False) if isinstance(info, dict) else False
+            )
 
         eval_env.close()
 
