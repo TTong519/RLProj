@@ -272,6 +272,19 @@ class TestBaseSimulator:
             BaseSimulator()
 
 
+class TestSceneBuilderCleanup:
+    """Tests for SceneBuilder cleanup behavior."""
+
+    def test_cleanup_removes_temp_dir(self):
+        """cleanup() must remove the temp directory."""
+        import os
+
+        builder = SceneBuilder()
+        assert os.path.exists(builder.temp_dir)
+        builder.cleanup()
+        assert not os.path.exists(builder.temp_dir)
+
+
 class TestAssetMissingError:
     """Tests for AssetMissingError."""
 

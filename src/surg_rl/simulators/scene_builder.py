@@ -68,15 +68,9 @@ class SceneBuilder:
         """
         self.assets_dir = Path(assets_dir) if assets_dir else None
         self.use_primitive_fallback = use_primitive_fallback
-        self._temp_dir: Optional[Path] = None
+        self._temp_dir_obj = tempfile.TemporaryDirectory(prefix="surg_rl_")
+        self.temp_dir = Path(self._temp_dir_obj.name)
         self._primitive_meshes: Dict[str, Path] = {}
-
-    @property
-    def temp_dir(self) -> Path:
-        """Get or create temporary directory for generated files."""
-        if self._temp_dir is None:
-            self._temp_dir = Path(tempfile.mkdtemp(prefix="surg_rl_"))
-        return self._temp_dir
 
     def resolve_asset_path(self, asset_path: str) -> Optional[Path]:
         """Resolve an asset path to an absolute path.
@@ -695,11 +689,9 @@ f 5 1 4 8
 
     def cleanup(self) -> None:
         """Clean up temporary files."""
-        import shutil
-
-        if self._temp_dir and self._temp_dir.exists():
-            shutil.rmtree(self._temp_dir, ignore_errors=True)
-            self._temp_dir = None
+        if hasattr(self, "_temp_dir_obj") and self._temp_dir_obj is not None:
+            self._temp_dir_obj.cleanup()
+            self._temp_dir_obj = None
         self._primitive_meshes.clear()
 
     def __del__(self):
