@@ -11,7 +11,7 @@ from rich.table import Table
 
 from surg_rl import __version__
 from surg_rl.utils.config import get_settings
-from surg_rl.utils.logging import get_logger
+from surg_rl.utils.logging import get_logger, setup_logging
 from surg_rl.scene_generation import TextParser, VisionParser, SceneComposer, get_template
 
 logger = get_logger(__name__)
@@ -44,6 +44,12 @@ app = typer.Typer(
 )
 
 console = Console()
+
+
+@app.callback()
+def main():
+    """CLI entry point."""
+    setup_logging()
 
 
 @app.command()
@@ -262,9 +268,10 @@ def train(
             log_dir=log_dir,
             save_freq=save_freq,
             eval_freq=eval_freq,
+            simulator=simulator,
+            max_episode_steps=max_episode_steps,
             use_curriculum=curriculum,
             use_adaptive_difficulty=adaptive,
-            max_episode_steps=max_episode_steps,
             verbose=verbose,
         )
 
@@ -313,6 +320,7 @@ def evaluate(
         config = TrainingConfig(
             scene_path=scene,
             seed=seed,
+            simulator=simulator,
             verbose=verbose,
         )
 

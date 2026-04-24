@@ -47,12 +47,24 @@ def test_ensure_directories(tmp_path):
         scenes_dir=Path("scenes"),
         configs_dir=Path("configs"),
     )
-    
+
     settings.ensure_directories()
-    
+
     assert (tmp_path / "assets").exists()
     assert (tmp_path / "assets" / "meshes").exists()
     assert (tmp_path / "assets" / "textures").exists()
     assert (tmp_path / "assets" / "materials").exists()
     assert (tmp_path / "scenes").exists()
     assert (tmp_path / "configs").exists()
+
+
+def test_cli_calls_setup_logging():
+    """CLI commands must initialize logging."""
+    from unittest.mock import patch
+    from typer.testing import CliRunner
+    from surg_rl.cli import app
+
+    with patch("surg_rl.cli.setup_logging") as mock_setup:
+        runner = CliRunner()
+        runner.invoke(app, ["version"])
+        mock_setup.assert_called_once()
