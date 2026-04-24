@@ -657,7 +657,14 @@ class PyBulletSimulator(BaseSimulator):
         return 0.0
 
     def _check_termination(self) -> bool:
-        """Check termination."""
+        """Check if simulation should terminate due to instability."""
+        for name, body_id in self._body_ids.items():
+            pos, orn = self._pb.getBasePositionAndOrientation(
+                body_id, physicsClientId=self._physics_client
+            )
+            if any(np.isnan(p) for p in pos) or any(np.isnan(o) for o in orn):
+                logger.warning(f"NaN detected in body {name}, terminating episode")
+                return True
         return False
 
     def _check_truncation(self) -> bool:

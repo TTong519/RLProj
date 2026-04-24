@@ -659,6 +659,24 @@ class TestMuJoCoReset:
             mock_seed.assert_not_called()
 
 
+class TestPyBulletTermination:
+    """Tests for PyBullet termination detection."""
+
+    def test_check_termination_detects_nan(self):
+        """_check_termination must return True when NaN is present."""
+        from unittest.mock import MagicMock
+
+        sim = PyBulletSimulator()
+        sim._physics_client = 0
+        sim._pb = MagicMock()
+        sim._body_ids = {"robot": 1}
+        sim._pb.getBasePositionAndOrientation.return_value = (
+            [float("nan"), 0.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        )
+        assert sim._check_termination() is True
+
+
 class TestPyBulletBugs:
     """Regression tests for PyBullet simulator bugs."""
 
