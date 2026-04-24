@@ -534,15 +534,30 @@ class ParameterRandomizer(BaseController):
             elif hasattr(simulator, "_physics_client") and hasattr(simulator, "_body_ids"):
                 import pybullet as p
                 for body_id in simulator._body_ids.values():
-                    # Get current color and apply offset
-                    # PyBullet doesn't provide a getVisualShapeData that easily
-                    # gives rgba, so we use a default base and apply offsets
+                    # Read current visual shape data to get actual base color
+                    base_r = base_g = base_b = 0.5
+                    try:
+                        color_data = p.getVisualShapeData(
+                            body_id,
+                            physicsClientId=simulator._physics_client,
+                        )
+                        if color_data:
+                            for item in color_data:
+                                if item[1] == -1:  # base link
+                                    rgba = item[7]
+                                    base_r, base_g, base_b = rgba[0], rgba[1], rgba[2]
+                                    break
+                            else:
+                                rgba = color_data[0][7]
+                                base_r, base_g, base_b = rgba[0], rgba[1], rgba[2]
+                    except Exception:
+                        pass
                     p.changeVisualShape(
                         body_id, -1,
                         rgbaColor=[
-                            np.clip(0.5 + r_offset, 0.0, 1.0),
-                            np.clip(0.5 + g_offset, 0.0, 1.0),
-                            np.clip(0.5 + b_offset, 0.0, 1.0),
+                            np.clip(base_r + r_offset, 0.0, 1.0),
+                            np.clip(base_g + g_offset, 0.0, 1.0),
+                            np.clip(base_b + b_offset, 0.0, 1.0),
                             1.0,
                         ],
                         physicsClientId=simulator._physics_client,

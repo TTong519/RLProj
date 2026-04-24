@@ -731,3 +731,35 @@ def test_parameter_randomizer_logs_on_failure():
         with patch.dict("sys.modules", {"pybullet": None}):
             randomizer._apply_gravity(simulator, [0.0, 0.0, -9.81])
             mock_logger.warning.assert_called()
+
+
+def test_visual_randomization_preserves_original_colors():
+    """Visual randomization must offset from original color, not hardcode 0.5."""
+    from unittest.mock import MagicMock, patch
+    from surg_rl.dynamics.parameter_randomizer import ParameterRandomizer
+    from surg_rl.scene_definition.schema import DomainRandomizationConfig, VisualRandomization
+
+    config = DomainRandomizationConfig(
+        visual=VisualRandomization(
+            enabled=True,
+            color_range=(-0.1, 0.1),
+        ),
+    )
+    randomizer = ParameterRandomizer(domain_config=config)
+    randomizer.start()
+    randomizer.reset()
+
+    mock_pb = MagicMock()
+    mock_pb.getVisualShapeData.return_value = [(1, -1, 0, 0, 0, 0, 0, (0.9, 0.2, 0.3, 1.0))]
+
+    simulator = MagicMock()
+    simulator._physics_client = 0
+    simulator._model = None
+    simulator._body_ids = {"robot": 1}
+
+    with patch.dict("sys.modules", {"pybullet": mock_pb}):
+        randomizer._apply_visual_parameters(simulator, {"color_r_offset": 0.1})
+
+    called_color = mock_pb.changeVisualShape.call_args.kwargs.get("rgbaColor")
+    assert called_color is not None
+    assert abs(called_color[0] - 1.0) < 0.01, f"Expected ~1.0 but got {called_color[0]}"
