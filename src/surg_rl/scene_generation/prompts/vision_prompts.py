@@ -4,6 +4,7 @@ This module contains prompt templates for analyzing surgical images
 and generating scene definitions from visual input.
 """
 
+import json
 from typing import Any, Dict, Optional
 
 
@@ -73,7 +74,7 @@ def get_image_to_scene_prompt(
 
     return IMAGE_TO_SCENE_PROMPT.format(
         additional_instructions=additional_instructions,
-        schema=schema_example,
+        schema=json.dumps(schema_example, indent=2),
     )
 
 

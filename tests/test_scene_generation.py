@@ -415,6 +415,15 @@ class TestPromptTemplates:
         with pytest.raises(ValueError, match="Unknown scenario type"):
             get_specialized_prompt("invalid")
 
+    def test_vision_prompt_contains_valid_json(self):
+        """The vision prompt schema example must use double-quoted JSON, not Python repr."""
+        from surg_rl.scene_generation.prompts.vision_prompts import get_image_to_scene_prompt
+
+        prompt = get_image_to_scene_prompt()
+        assert "metadata" in prompt
+        # Must not contain single-quoted dict repr
+        assert "'metadata'" not in prompt, "Prompt contains Python repr instead of JSON"
+
 
 # Mark tests that require API access
 @pytest.mark.integration
