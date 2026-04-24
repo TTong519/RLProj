@@ -157,7 +157,7 @@ class CheckpointCallback(BaseCallback):
         """Called by SB3 during each training step."""
         locals_dict = self.locals
         model = locals_dict.get("self")
-        step = locals_dict.get("num_collected_steps", 0)
+        step = self.num_timesteps
 
         if model is None:
             return True
@@ -287,7 +287,7 @@ class EvaluationCallback(BaseCallback):
         """Called by SB3 during each training step."""
         locals_dict = self.locals
         model = locals_dict.get("self")
-        step = locals_dict.get("num_collected_steps", 0)
+        step = self.num_timesteps
 
         if model is None or self.eval_env is None:
             return True

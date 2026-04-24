@@ -972,5 +972,19 @@ def test_tanh_scaling_maps_to_action_bounds():
     assert np.allclose(scaled, space.high, atol=1e-2), f"Expected near {space.high}, got {scaled}"
 
 
+def test_checkpoint_callback_uses_self_num_timesteps():
+    """CheckpointCallback must use self.num_timesteps, not locals."""
+    from unittest.mock import MagicMock, patch
+    from surg_rl.rl.callbacks import CheckpointCallback
+
+    callback = CheckpointCallback(save_freq=100, save_path="/tmp")
+    callback.num_timesteps = 200
+    callback.locals = {"self": MagicMock()}  # Model present, but no num_collected_steps
+
+    with patch.object(callback, "_save_checkpoint") as mock_save:
+        callback._on_step()
+        mock_save.assert_called_once()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
