@@ -786,3 +786,31 @@ def test_adaptive_difficulty_applies_mass_and_friction():
 
     assert simulator.set_mass_ratio.called or simulator.set_friction.called, \
         "apply_parameters did not apply mass_ratio or friction"
+
+
+def test_adaptive_difficulty_gravity_without_getdynamicsinfo():
+    """apply_parameters must not call getDynamicsInfo for gravity."""
+    from unittest.mock import MagicMock, patch
+    from surg_rl.dynamics.adaptive_difficulty import AdaptiveDifficultyController, DifficultyConfig
+    from surg_rl.dynamics.base_controller import ParameterSnapshot
+
+    config = DifficultyConfig()
+    controller = AdaptiveDifficultyController(difficulty_config=config)
+    controller.start()
+    controller.reset()
+
+    snapshot = ParameterSnapshot(
+        physics={"gravity_variation": 0.1},
+        visual={}, dynamics={}, episode=1, step=0,
+    )
+    simulator = MagicMock()
+    simulator._physics_client = 0
+    mock_pb = MagicMock()
+    mock_pb.getDynamicsInfo = MagicMock(
+        side_effect=AssertionError("getDynamicsInfo should not be called for gravity")
+    )
+
+    with patch.dict("sys.modules", {"pybullet": mock_pb}):
+        controller.apply_parameters(snapshot, simulator)
+
+    mock_pb.getDynamicsInfo.assert_not_called()
