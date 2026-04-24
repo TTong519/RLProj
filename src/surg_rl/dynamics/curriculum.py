@@ -292,9 +292,23 @@ class CurriculumScheduler(BaseController):
         Returns:
             True if successful, False otherwise.
         """
-        # Curriculum scheduler does not directly apply parameters
-        # This is handled by the ParameterRandomizer
-        return True
+        try:
+            if hasattr(simulator, "setGravity") and "gravity_x" in snapshot.physics:
+                gx = snapshot.physics.get("gravity_x", 0.0)
+                gy = snapshot.physics.get("gravity_y", 0.0)
+                gz = snapshot.physics.get("gravity_z", -9.81)
+                simulator.setGravity(gx, gy, gz)
+            elif hasattr(simulator, "_pb") and "gravity_x" in snapshot.physics:
+                gx = snapshot.physics.get("gravity_x", 0.0)
+                gy = snapshot.physics.get("gravity_y", 0.0)
+                gz = snapshot.physics.get("gravity_z", -9.81)
+                simulator._pb.setGravity(
+                    gx, gy, gz,
+                    physicsClientId=simulator._physics_client,
+                )
+            return True
+        except Exception:
+            return False
 
     def update_curriculum(
         self,

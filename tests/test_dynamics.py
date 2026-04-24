@@ -428,20 +428,36 @@ class TestCurriculumScheduler:
         """Test performance summary."""
         scheduler = CurriculumScheduler()
         scheduler.start()
-        
+
         # Add some performance data
         scheduler._performance_history = [
             {"success": 1, "reward": 100},
             {"success": 0, "reward": 50},
             {"success": 1, "reward": 80},
         ]
-        
+
         summary = scheduler.get_performance_summary()
-        
+
         assert "success_rate" in summary
         assert "avg_reward" in summary
         assert summary["success_rate"] == pytest.approx(2/3, rel=0.1)
         assert summary["avg_reward"] == pytest.approx(230/3, rel=0.1)
+
+    def test_curriculum_apply_parameters_not_noop(self):
+        """apply_parameters must not be a no-op returning True."""
+        from unittest.mock import MagicMock
+
+        scheduler = CurriculumScheduler()
+        scheduler.start()
+        scheduler.reset()
+
+        snapshot = ParameterSnapshot(physics={"gravity_x": 0.0}, visual={}, dynamics={}, episode=1, step=0)
+        simulator = MagicMock()
+
+        result = scheduler.apply_parameters(snapshot, simulator)
+        assert result is True
+        # Must have attempted to apply parameters
+        assert simulator.setGravity.called, "apply_parameters was a no-op"
 
 
 # === Test AdaptiveDifficultyController ===
