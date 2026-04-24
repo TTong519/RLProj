@@ -6,7 +6,11 @@ dynamics parameters in surgical robotics simulations.
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, Union
+import logging
 import numpy as np
+import weakref
+
+logger = logging.getLogger(__name__)
 
 from surg_rl.scene_definition.schema import (
     DomainRandomizationConfig,
@@ -90,6 +94,9 @@ class ParameterRandomizer(BaseController):
         
         # Build parameter bounds for sampling
         self._build_parameter_bounds()
+
+        # Baseline storage for non-compounding randomization
+        self._baselines: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
     def _build_parameter_bounds(self) -> None:
         """Build parameter bounds from configuration."""
@@ -346,10 +353,37 @@ class ParameterRandomizer(BaseController):
             # PyBullet
             elif hasattr(simulator, "_physics_client"):
                 import pybullet as p
-                p.setGravity(gravity[0], gravity[1], gravity[2], 
+                p.setGravity(gravity[0], gravity[1], gravity[2],
                             physicsClientId=simulator._physics_client)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to apply gravity: {e}")
+
+    def _get_baseline(self, simulator: Any, key: str) -> Any:
+        """Get or initialize a baseline value for a simulator.
+
+        Args:
+            simulator: Simulator instance.
+            key: Baseline key.
+
+        Returns:
+            Baseline value.
+        """
+        baseline = self._baselines.get(simulator)
+        if baseline is None:
+            return None
+        return baseline.get(key)
+
+    def _set_baseline(self, simulator: Any, key: str, value: Any) -> None:
+        """Store a baseline value for a simulator.
+
+        Args:
+            simulator: Simulator instance.
+            key: Baseline key.
+            value: Baseline value.
+        """
+        if simulator not in self._baselines:
+            self._baselines[simulator] = {}
+        self._baselines[simulator][key] = value
 
     def _apply_mass_scaling(self, simulator: Any, ratio: float) -> None:
         """Apply mass scaling to bodies.
@@ -363,19 +397,29 @@ class ParameterRandomizer(BaseController):
             if hasattr(simulator, "_model") and simulator._model is not None:
                 model = simulator._model
                 if hasattr(model, "body_mass") and model.body_mass is not None:
-                    model.body_mass[:] = model.body_mass * ratio
+                    baseline = self._get_baseline(simulator, "body_mass")
+                    if baseline is None:
+                        baseline = model.body_mass.copy()
+                        self._set_baseline(simulator, "body_mass", baseline)
+                    model.body_mass[:] = baseline * ratio
             # PyBullet
             elif hasattr(simulator, "_physics_client") and hasattr(simulator, "_body_ids"):
                 import pybullet as p
                 for body_id in simulator._body_ids.values():
-                    dynamics = p.getDynamicsInfo(body_id, -1, physicsClientId=simulator._physics_client)
-                    new_mass = dynamics[0] * ratio
+                    baseline_key = f"mass_{body_id}"
+                    baseline = self._get_baseline(simulator, baseline_key)
+                    if baseline is None:
+                        dynamics = p.getDynamicsInfo(
+                            body_id, -1, physicsClientId=simulator._physics_client
+                        )
+                        baseline = dynamics[0]
+                        self._set_baseline(simulator, baseline_key, baseline)
                     p.changeDynamics(
-                        body_id, -1, mass=new_mass,
+                        body_id, -1, mass=baseline * ratio,
                         physicsClientId=simulator._physics_client,
                     )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to apply mass scaling: {e}")
 
     def _apply_friction(self, simulator: Any, friction: float) -> None:
         """Apply friction coefficient.
@@ -399,8 +443,8 @@ class ParameterRandomizer(BaseController):
                         body_id, -1, lateralFriction=friction,
                         physicsClientId=simulator._physics_client,
                     )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to apply friction: {e}")
 
     def _apply_damping(self, simulator: Any, damping: float) -> None:
         """Apply damping coefficient.
@@ -425,8 +469,8 @@ class ParameterRandomizer(BaseController):
                         angularDamping=damping,
                         physicsClientId=simulator._physics_client,
                     )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to apply damping: {e}")
 
     def _apply_stiffness(self, simulator: Any, stiffness: float) -> None:
         """Apply stiffness for soft bodies.
@@ -444,8 +488,8 @@ class ParameterRandomizer(BaseController):
                 if hasattr(model, "actuator_gainprm") and model.actuator_gainprm is not None:
                     model.actuator_gainprm[:, 0] = stiffness
             # PyBullet: no direct soft body stiffness control at runtime
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to apply stiffness: {e}")
 
     def _apply_visual_parameters(
         self, simulator: Any, params: Dict[str, float]
@@ -466,14 +510,18 @@ class ParameterRandomizer(BaseController):
             if hasattr(simulator, "_model") and simulator._model is not None:
                 model = simulator._model
                 if hasattr(model, "geom_rgba") and model.geom_rgba is not None:
+                    baseline = self._get_baseline(simulator, "geom_rgba")
+                    if baseline is None:
+                        baseline = model.geom_rgba.copy()
+                        self._set_baseline(simulator, "geom_rgba", baseline)
                     model.geom_rgba[:, 0] = np.clip(
-                        model.geom_rgba[:, 0] + r_offset, 0.0, 1.0
+                        baseline[:, 0] + r_offset, 0.0, 1.0
                     )
                     model.geom_rgba[:, 1] = np.clip(
-                        model.geom_rgba[:, 1] + g_offset, 0.0, 1.0
+                        baseline[:, 1] + g_offset, 0.0, 1.0
                     )
                     model.geom_rgba[:, 2] = np.clip(
-                        model.geom_rgba[:, 2] + b_offset, 0.0, 1.0
+                        baseline[:, 2] + b_offset, 0.0, 1.0
                     )
                 if lighting is not None and hasattr(model, "vis"):
                     # Scale headlight intensity
@@ -505,8 +553,8 @@ class ParameterRandomizer(BaseController):
                         lightPosition=[1.0 * lighting, 1.0 * lighting, 5.0 * lighting],
                         physicsClientId=simulator._physics_client,
                     )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to apply visual parameters: {e}")
 
     def update_curriculum(
         self,

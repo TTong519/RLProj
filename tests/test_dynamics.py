@@ -711,3 +711,23 @@ class TestEnvironmentController:
         obs = np.array([1.0, 2.0, 3.0])
         randomized = controller.get_randomized_observation(obs)
         assert randomized.shape == obs.shape
+
+
+def test_parameter_randomizer_logs_on_failure():
+    """Failed parameter application must log a warning, not be silent."""
+    from unittest.mock import MagicMock, patch
+    from surg_rl.dynamics.parameter_randomizer import ParameterRandomizer
+    from surg_rl.scene_definition.schema import DomainRandomizationConfig
+
+    randomizer = ParameterRandomizer(domain_config=DomainRandomizationConfig())
+    randomizer.start()
+    randomizer.reset()
+
+    simulator = MagicMock()
+    simulator._model = None
+    simulator._physics_client = 0
+
+    with patch("surg_rl.dynamics.parameter_randomizer.logger") as mock_logger:
+        with patch.dict("sys.modules", {"pybullet": None}):
+            randomizer._apply_gravity(simulator, [0.0, 0.0, -9.81])
+            mock_logger.warning.assert_called()
