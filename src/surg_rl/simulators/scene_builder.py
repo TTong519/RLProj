@@ -29,13 +29,11 @@ class AssetMissingError(Exception):
 
 
 class SceneBuilder:
-    """Build simulator models from scene definitions.
+    """Build simulator scenes from SceneDefinition objects.
 
-    This class handles:
-    - Loading mesh/URDF assets or falling back to primitives
-    - Converting scene definitions to simulator formats
-    - Creating MJCF (MuJoCo XML) files
-    - Creating URDF/SDF files for PyBullet
+    Currently supports MJCF generation for MuJoCo.
+    PyBullet scenes use the same SceneDefinition but are loaded
+    via the PyBulletSimulator's direct primitive builder.
 
     Attributes:
         assets_dir: Base directory for asset files.
