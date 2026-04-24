@@ -99,13 +99,24 @@ class PyBulletSimulator(BaseSimulator):
             self._initial_orientations.clear()
 
         # Configure physics
-        self._pb.setGravity(
-            scene_definition.physics.gravity[0],
-            scene_definition.physics.gravity[1],
-            scene_definition.physics.gravity[2],
-            physicsClientId=self._physics_client,
-        )
-        self._pb.setTimeStep(self.timestep, physicsClientId=self._physics_client)
+        if (
+            hasattr(scene_definition, "physics")
+            and scene_definition.physics is not None
+            and hasattr(scene_definition.physics, "gravity")
+        ):
+            self._pb.setGravity(
+                scene_definition.physics.gravity[0],
+                scene_definition.physics.gravity[1],
+                scene_definition.physics.gravity[2],
+                physicsClientId=self._physics_client,
+            )
+            if hasattr(scene_definition.physics, "timestep"):
+                self._pb.setTimeStep(
+                    scene_definition.physics.timestep,
+                    physicsClientId=self._physics_client,
+                )
+        else:
+            self._pb.setGravity(0, 0, -9.81, physicsClientId=self._physics_client)
 
         # Load robots
         for robot in scene_definition.robots:
