@@ -193,10 +193,10 @@ class PyBulletSimulator(BaseSimulator):
                 robot.base_pose.position.z,
             ],
             baseOrientation=[
-                robot.base_pose.orientation.w,
                 robot.base_pose.orientation.x,
                 robot.base_pose.orientation.y,
                 robot.base_pose.orientation.z,
+                robot.base_pose.orientation.w,
             ],
             linkMasses=[0.5],
             linkCollisionShapeIndices=[link_collision],
