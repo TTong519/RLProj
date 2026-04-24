@@ -48,6 +48,7 @@ class SceneComposer:
 
     async def compose(
         self,
+        inputs: Optional[List[Union[str, Path, bytes]]] = None,
         text_inputs: Optional[List[Union[str, Path]]] = None,
         image_inputs: Optional[List[Union[str, Path, bytes]]] = None,
         base_scene: Optional[SceneDefinition] = None,
@@ -57,6 +58,8 @@ class SceneComposer:
         """Compose scene from multiple inputs.
 
         Args:
+            inputs: Unified list of text strings and image paths/bytes to
+                process in order (sequential mode only).
             text_inputs: List of text descriptions or text file paths.
             image_inputs: List of image paths or image bytes.
             base_scene: Optional starting scene to build upon.
@@ -71,13 +74,17 @@ class SceneComposer:
         Raises:
             ParserError: If any parsing fails.
         """
+        if inputs is not None:
+            total = len(inputs)
+        else:
+            total = len(text_inputs or []) + len(image_inputs or [])
         logger.info(
-            f"Composing scene with {len(text_inputs or [])} text inputs, "
-            f"{len(image_inputs or [])} image inputs"
+            f"Composing scene with {total} inputs"
         )
 
         if merge_strategy == "sequential":
             return await self._compose_sequential(
+                inputs=inputs,
                 text_inputs=text_inputs,
                 image_inputs=image_inputs,
                 base_scene=base_scene,
@@ -98,16 +105,18 @@ class SceneComposer:
 
     async def _compose_sequential(
         self,
-        text_inputs: Optional[List[Union[str, Path]]],
-        image_inputs: Optional[List[Union[str, Path, bytes]]],
-        base_scene: Optional[SceneDefinition],
+        inputs: Optional[List[Union[str, Path, bytes]]] = None,
+        text_inputs: Optional[List[Union[str, Path]]] = None,
+        image_inputs: Optional[List[Union[str, Path, bytes]]] = None,
+        base_scene: Optional[SceneDefinition] = None,
         **kwargs: Any,
     ) -> SceneDefinition:
         """Compose scene sequentially, each input modifying previous.
 
         Args:
-            text_inputs: Text inputs to process.
-            image_inputs: Image inputs to process.
+            inputs: Unified list of inputs to process in order.
+            text_inputs: Text inputs to process (legacy, used when inputs is None).
+            image_inputs: Image inputs to process (legacy, used when inputs is None).
             base_scene: Starting scene.
             **kwargs: Additional arguments.
 
@@ -116,25 +125,42 @@ class SceneComposer:
         """
         scene = base_scene
 
-        # Process text inputs sequentially
-        if text_inputs:
-            for text in text_inputs:
-                logger.debug(f"Processing text input")
-                scene = await self.text_parser.parse_with_context(
-                    input_data=text,
-                    context=scene,
-                    **kwargs,
-                )
+        if inputs is not None:
+            for inp in inputs:
+                if isinstance(inp, str):
+                    logger.debug("Processing text input")
+                    scene = await self.text_parser.parse_with_context(
+                        input_data=inp,
+                        context=scene,
+                        **kwargs,
+                    )
+                else:
+                    logger.debug("Processing image input")
+                    scene = await self.vision_parser.parse_with_context(
+                        input_data=inp,
+                        context=scene,
+                        **kwargs,
+                    )
+        else:
+            # Process text inputs sequentially
+            if text_inputs:
+                for text in text_inputs:
+                    logger.debug("Processing text input")
+                    scene = await self.text_parser.parse_with_context(
+                        input_data=text,
+                        context=scene,
+                        **kwargs,
+                    )
 
-        # Process image inputs sequentially
-        if image_inputs:
-            for image in image_inputs:
-                logger.debug(f"Processing image input")
-                scene = await self.vision_parser.parse_with_context(
-                    input_data=image,
-                    context=scene,
-                    **kwargs,
-                )
+            # Process image inputs sequentially
+            if image_inputs:
+                for image in image_inputs:
+                    logger.debug("Processing image input")
+                    scene = await self.vision_parser.parse_with_context(
+                        input_data=image,
+                        context=scene,
+                        **kwargs,
+                    )
 
         # If no inputs, return empty or base scene
         if scene is None:
@@ -181,11 +207,42 @@ class SceneComposer:
         if tasks:
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            # Filter out exceptions
-            scenes = [r for r in results if isinstance(r, SceneDefinition)]
+            # Separate successes from exceptions
+            scenes: list[SceneDefinition] = []
+            exceptions: list[BaseException] = []
+            for r in results:
+                if isinstance(r, SceneDefinition):
+                    scenes.append(r)
+                elif isinstance(r, BaseException):
+                    exceptions.append(r)
+
+            if exceptions:
+                if not scenes:
+                    # All tasks failed — raise composite error
+                    messages = "; ".join(
+                        f"{type(e).__name__}: {e}" for e in exceptions
+                    )
+                    raise ParserError(
+                        f"All parallel composition tasks failed ({len(exceptions)}): {messages}",
+                        details={
+                            "task_count": len(tasks),
+                            "failures": [
+                                {"type": type(e).__name__, "message": str(e)}
+                                for e in exceptions
+                            ],
+                        },
+                    )
+                # Partial failure — warn but continue with successful results
+                for e in exceptions:
+                    logger.warning(
+                        "Parallel composition task failed: %s: %s",
+                        type(e).__name__,
+                        e,
+                    )
 
             if not scenes:
-                # All failed, return base or empty
+                # Should only reach here if tasks was empty (handled above),
+                # but keep as a safety guard.
                 return base_scene or SceneDefinition()
 
             # Merge all scenes
@@ -242,22 +299,28 @@ class SceneComposer:
             Merged scene.
         """
         merged_data = scene1.model_dump()
+        scene2_data = scene2.model_dump()
 
         # Merge metadata (scene2 takes precedence)
         merged_data["metadata"] = {
             **merged_data.get("metadata", {}),
-            **scene2.model_dump().get("metadata", {}),
+            **scene2_data.get("metadata", {}),
         }
 
         # Merge physics configs safely
-        scene2_data = scene2.model_dump()
         if scene1.physics is not None and scene2.physics is not None:
-            if scene2.physics.timestep != scene1.physics.timestep:
-                merged_data["physics"] = scene2_data["physics"]
+            merged_physics = merged_data.get("physics", {})
+            scene2_physics = scene2_data.get("physics", {})
+            merged_data["physics"] = {**merged_physics, **scene2_physics}
+            # Concatenate materials lists instead of overwriting
+            if merged_physics.get("materials") and scene2_physics.get("materials"):
+                merged_data["physics"]["materials"] = (
+                    list(merged_physics["materials"]) + list(scene2_physics["materials"])
+                )
         elif scene2.physics is not None:
             merged_data["physics"] = scene2_data["physics"]
         elif scene1.physics is not None:
-            merged_data["physics"] = scene1.model_dump().get("physics")
+            merged_data["physics"] = merged_data.get("physics")
 
         # Concatenate lists
         for field in ["robots", "tissues", "instruments"]:
@@ -268,17 +331,12 @@ class SceneComposer:
             env1 = merged_data.get("environment") or {}
             env2 = scene2_data["environment"]
 
-            # Merge cameras and lights
-            merged_env = {
-                **env1,
-                "cameras": (env1.get("cameras") or []) + (env2.get("cameras") or []),
-                "lights": (env1.get("lights") or []) + (env2.get("lights") or []),
-            }
+            # Start with scene1's environment, then overlay scene2's fields
+            merged_env = {**env1, **env2}
 
-            # Use scene2's other environment settings
-            for key in ["name", "background_color", "ground_plane", "surgical_table"]:
-                if key in env2:
-                    merged_env[key] = env2[key]
+            # Concatenate cameras and lights lists instead of overwriting
+            merged_env["cameras"] = (env1.get("cameras") or []) + (env2.get("cameras") or [])
+            merged_env["lights"] = (env1.get("lights") or []) + (env2.get("lights") or [])
 
             merged_data["environment"] = merged_env
 
@@ -286,14 +344,15 @@ class SceneComposer:
         if scene2.task is not None:
             merged_data["task"] = scene2_data.get("task")
 
-        # Merge domain randomization
-        if scene2.domain_randomization:
+        # Merge domain randomization (only if scene2 explicitly set it)
+        if "domain_randomization" in scene2.model_fields_set:
             merged_data["domain_randomization"] = scene2_data.get(
                 "domain_randomization", {}
             )
 
-        # Use scene2's simulator
-        merged_data["simulator"] = scene2_data.get("simulator", "mujoco")
+        # Use scene2's simulator only if explicitly set
+        if "simulator" in scene2.model_fields_set:
+            merged_data["simulator"] = scene2_data.get("simulator", "mujoco")
 
         # Merge custom parameters
         merged_data["custom"] = {
@@ -316,6 +375,7 @@ class SceneComposer:
 
     def compose_sync(
         self,
+        inputs: Optional[List[Union[str, Path, bytes]]] = None,
         text_inputs: Optional[List[Union[str, Path]]] = None,
         image_inputs: Optional[List[Union[str, Path, bytes]]] = None,
         base_scene: Optional[SceneDefinition] = None,
@@ -325,6 +385,8 @@ class SceneComposer:
         """Synchronous wrapper for compose.
 
         Args:
+            inputs: Unified list of text strings and image paths/bytes to
+                process in order (sequential mode only).
             text_inputs: List of text descriptions or text file paths.
             image_inputs: List of image paths or image bytes.
             base_scene: Optional starting scene to build upon.
@@ -336,6 +398,7 @@ class SceneComposer:
         """
         return asyncio.run(
             self.compose(
+                inputs=inputs,
                 text_inputs=text_inputs,
                 image_inputs=image_inputs,
                 base_scene=base_scene,

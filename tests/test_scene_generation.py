@@ -542,3 +542,36 @@ def test_parse_sync_inside_event_loop_raises():
             vision_parser.parse_sync("test.jpg")
 
     asyncio.run(inner())
+
+
+def test_sequential_composition_preserves_input_order():
+    """Sequential composition with inputs must process in given order."""
+    import asyncio
+    from unittest.mock import MagicMock
+    from surg_rl.scene_generation.scene_composer import SceneComposer
+
+    composer = SceneComposer()
+
+    order = []
+
+    async def mock_text_parse(*args, **kwargs):
+        inp = kwargs.get("input_data", args[0] if args else None)
+        order.append(("text", inp))
+        return MagicMock()
+
+    async def mock_image_parse(*args, **kwargs):
+        inp = kwargs.get("input_data", args[0] if args else None)
+        order.append(("image", str(inp)))
+        return MagicMock()
+
+    composer.text_parser.parse_with_context = mock_text_parse
+    composer.vision_parser.parse_with_context = mock_image_parse
+
+    asyncio.run(
+        composer.compose(
+            inputs=["text1", Path("img.png"), "text2"],
+            merge_strategy="sequential",
+        )
+    )
+
+    assert order == [("text", "text1"), ("image", "img.png"), ("text", "text2")]
