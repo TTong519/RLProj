@@ -32,12 +32,23 @@ def setup_logging(
     log_level = level or settings.log_level
     file_path = log_file or settings.log_file
 
+    # Validate log level
+    log_level_upper = (log_level or "INFO").upper()
+    level_value = getattr(logging, log_level_upper, None)
+    if level_value is None or not isinstance(level_value, int):
+        raise ValueError(
+            f"Invalid log level: {log_level!r}. "
+            f"Use one of: DEBUG, INFO, WARNING, ERROR, CRITICAL"
+        )
+
     # Create logger
     logger = logging.getLogger("surg_rl")
-    logger.setLevel(getattr(logging, log_level))
+    logger.setLevel(level_value)
 
-    # Remove existing handlers
-    logger.handlers.clear()
+    # Remove and close existing handlers to prevent file descriptor leaks
+    for handler in logger.handlers[:]:
+        handler.close()
+        logger.removeHandler(handler)
 
     # Console handler
     if rich_output:
@@ -51,7 +62,7 @@ def setup_logging(
     else:
         handler = logging.StreamHandler(sys.stderr)
 
-    handler.setLevel(getattr(logging, log_level))
+    handler.setLevel(level_value)
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
@@ -64,7 +75,7 @@ def setup_logging(
         file_path = Path(file_path)
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_handler = logging.FileHandler(file_path)
-        file_handler.setLevel(getattr(logging, log_level))
+        file_handler.setLevel(level_value)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
 

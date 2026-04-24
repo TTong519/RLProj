@@ -164,7 +164,7 @@ class EnvironmentController:
             or scene.domain_randomization.dynamics.enabled,
             use_curriculum=use_curriculum,
             use_adaptive_difficulty=use_adaptive,
-            seed=seed or scene.domain_randomization.seed,
+            seed=seed if seed is not None else scene.domain_randomization.seed,
             randomization_config=scene.domain_randomization,
         )
         
@@ -368,17 +368,22 @@ class EnvironmentController:
         noise_scale: Optional[float] = None,
     ) -> np.ndarray:
         """Apply action noise if randomization is enabled.
-        
+
+        Applies randomizer noise first, then adaptive difficulty noise.
+
         Args:
             action: Original action.
             noise_scale: Optional noise scale override.
-            
+
         Returns:
             Noisy action.
         """
+        result = action
         if self._randomizer:
-            return self._randomizer.get_randomized_action(action, noise_scale)
-        return action
+            result = self._randomizer.get_randomized_action(result, noise_scale)
+        if self._adaptive:
+            result = self._adaptive.get_randomized_action(result, noise_scale)
+        return result
 
     def get_randomized_observation(
         self,
@@ -386,17 +391,22 @@ class EnvironmentController:
         noise_scale: Optional[float] = None,
     ) -> np.ndarray:
         """Apply observation noise if randomization is enabled.
-        
+
+        Applies randomizer noise first, then adaptive difficulty noise.
+
         Args:
             observation: Original observation.
             noise_scale: Optional noise scale override.
-            
+
         Returns:
             Noisy observation.
         """
+        result = observation
         if self._randomizer:
-            return self._randomizer.get_randomized_observation(observation, noise_scale)
-        return observation
+            result = self._randomizer.get_randomized_observation(result, noise_scale)
+        if self._adaptive:
+            result = self._adaptive.get_randomized_observation(result, noise_scale)
+        return result
 
     def get_curriculum_stage(self) -> Optional[CurriculumStage]:
         """Get current curriculum stage if curriculum is enabled.
