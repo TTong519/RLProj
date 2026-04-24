@@ -17,6 +17,7 @@ from surg_rl.utils.config import get_settings
 from surg_rl.utils.logging import get_logger
 
 from .base_parser import BaseParser, ParserError, ParseValidationError
+from .prompts.text_prompts import SYSTEM_PROMPT
 from .prompts.vision_prompts import (
     get_image_analysis_prompt,
     get_image_to_scene_prompt,
@@ -24,6 +25,10 @@ from .prompts.vision_prompts import (
 )
 
 logger = get_logger(__name__)
+
+# Pre-compiled regex patterns for JSON extraction (hot path during parsing)
+_JSON_CODE_BLOCK_RE = re.compile(r"```(?:json)?\s*([\s\S]*?)```")
+_JSON_OBJ_RE = re.compile(r"\{[\s\S]*?\}")
 
 # Supported image formats
 SUPPORTED_IMAGE_FORMATS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
@@ -414,7 +419,11 @@ class VisionParser(BaseParser):
         """
         # Build prompt based on scenario type
         if scenario_type:
-            additional_instructions = get_specialized_prompt(scenario_type)
+            specialized = get_specialized_prompt(scenario_type)
+            if additional_instructions:
+                additional_instructions = f"{specialized}\n\nAdditional instructions: {additional_instructions}"
+            else:
+                additional_instructions = specialized
 
         prompt = get_image_to_scene_prompt(
             additional_instructions=additional_instructions,
@@ -546,6 +555,7 @@ Respond ONLY with the JSON object, no additional text."""
                     prompt=prompt,
                     image_data=base64_image,
                     image_format=image_format,
+                    system=SYSTEM_PROMPT,
                     temperature=temp,
                     max_tokens=self.max_tokens,
                 )
@@ -577,8 +587,7 @@ Respond ONLY with the JSON object, no additional text."""
             pass
 
         # Try to extract JSON from markdown code blocks
-        json_pattern = r"```(?:json)?\s*([\s\S]*?)```"
-        matches = re.findall(json_pattern, response)
+        matches = _JSON_CODE_BLOCK_RE.findall(response)
 
         for match in matches:
             try:
@@ -587,8 +596,7 @@ Respond ONLY with the JSON object, no additional text."""
                 continue
 
         # Try to find JSON object in text
-        json_obj_pattern = r"\{[\s\S]*\}"
-        matches = re.findall(json_obj_pattern, response)
+        matches = _JSON_OBJ_RE.findall(response)
 
         for match in matches:
             try:
@@ -616,8 +624,18 @@ Respond ONLY with the JSON object, no additional text."""
 
         Returns:
             SceneDefinition object.
+
+        Raises:
+            RuntimeError: If called inside a running event loop.
         """
-        return asyncio.run(self.parse(input_data, **kwargs))
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self.parse(input_data, **kwargs))
+        raise RuntimeError(
+            "parse_sync cannot be called from within a running event loop. "
+            "Use parse() (async) instead."
+        )
 
     def parse_with_context_sync(
         self,
@@ -634,8 +652,18 @@ Respond ONLY with the JSON object, no additional text."""
 
         Returns:
             Modified SceneDefinition object.
+
+        Raises:
+            RuntimeError: If called inside a running event loop.
         """
-        return asyncio.run(self.parse_with_context(input_data, context, **kwargs))
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self.parse_with_context(input_data, context, **kwargs))
+        raise RuntimeError(
+            "parse_with_context_sync cannot be called from within a running event loop. "
+            "Use parse_with_context() (async) instead."
+        )
 
     def analyze_image_sync(
         self,
@@ -650,5 +678,15 @@ Respond ONLY with the JSON object, no additional text."""
 
         Returns:
             Text description of the image.
+
+        Raises:
+            RuntimeError: If called inside a running event loop.
         """
-        return asyncio.run(self.analyze_image(input_data, **kwargs))
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self.analyze_image(input_data, **kwargs))
+        raise RuntimeError(
+            "analyze_image_sync cannot be called from within a running event loop. "
+            "Use analyze_image() (async) instead."
+        )

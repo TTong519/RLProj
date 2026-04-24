@@ -524,3 +524,21 @@ class TestOllamaIntegration:
         from surg_rl.utils.config import Settings
         settings = Settings(llm_provider="ollama")
         assert settings.llm_provider == "ollama"
+
+
+def test_parse_sync_inside_event_loop_raises():
+    """parse_sync must raise RuntimeError when called inside a running event loop."""
+    import asyncio
+    from surg_rl.scene_generation.text_parser import TextParser
+    from surg_rl.scene_generation.vision_parser import VisionParser
+
+    async def inner():
+        text_parser = TextParser(provider="openai")
+        with pytest.raises(RuntimeError, match="running event loop"):
+            text_parser.parse_sync("test")
+
+        vision_parser = VisionParser(provider="openai")
+        with pytest.raises(RuntimeError, match="running event loop"):
+            vision_parser.parse_sync("test.jpg")
+
+    asyncio.run(inner())

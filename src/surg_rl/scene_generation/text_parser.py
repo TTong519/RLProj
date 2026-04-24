@@ -24,6 +24,10 @@ from .prompts.text_prompts import (
 
 logger = get_logger(__name__)
 
+# Pre-compiled regex patterns for JSON extraction (hot path during parsing)
+_JSON_CODE_BLOCK_RE = re.compile(r"```(?:json)?\s*([\s\S]*?)```")
+_JSON_OBJ_RE = re.compile(r"\{[\s\S]*?\}")
+
 
 class TextParser(BaseParser):
     """Parse natural language descriptions into scene definitions using LLMs.
@@ -204,6 +208,11 @@ class TextParser(BaseParser):
                 self._async_client = anthropic.AsyncAnthropic(api_key=self.api_key)
             elif self.provider == "ollama":
                 self._async_client = self._create_async_ollama_client()
+            else:
+                raise ValueError(
+                    f"Unsupported provider: {self.provider}. "
+                    "Supported: 'openai', 'anthropic', 'ollama'"
+                )
 
         return self._async_client
 
@@ -495,8 +504,7 @@ class TextParser(BaseParser):
             pass
 
         # Try to extract JSON from markdown code blocks
-        json_pattern = r"```(?:json)?\s*([\s\S]*?)```"
-        matches = re.findall(json_pattern, response)
+        matches = _JSON_CODE_BLOCK_RE.findall(response)
 
         for match in matches:
             try:
@@ -505,8 +513,7 @@ class TextParser(BaseParser):
                 continue
 
         # Try to find JSON object in text
-        json_obj_pattern = r"\{[\s\S]*\}"
-        matches = re.findall(json_obj_pattern, response)
+        matches = _JSON_OBJ_RE.findall(response)
 
         for match in matches:
             try:
@@ -534,8 +541,18 @@ class TextParser(BaseParser):
 
         Returns:
             SceneDefinition object.
+
+        Raises:
+            RuntimeError: If called inside a running event loop.
         """
-        return asyncio.run(self.parse(input_data, **kwargs))
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self.parse(input_data, **kwargs))
+        raise RuntimeError(
+            "parse_sync cannot be called from within a running event loop. "
+            "Use parse() (async) instead."
+        )
 
     def parse_with_context_sync(
         self,
@@ -552,5 +569,15 @@ class TextParser(BaseParser):
 
         Returns:
             Modified SceneDefinition object.
+
+        Raises:
+            RuntimeError: If called inside a running event loop.
         """
-        return asyncio.run(self.parse_with_context(input_data, context, **kwargs))
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self.parse_with_context(input_data, context, **kwargs))
+        raise RuntimeError(
+            "parse_with_context_sync cannot be called from within a running event loop. "
+            "Use parse_with_context() (async) instead."
+        )
