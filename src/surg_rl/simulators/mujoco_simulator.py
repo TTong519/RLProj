@@ -582,6 +582,15 @@ class MuJoCoSimulator(BaseSimulator):
         if hasattr(self._data, 'xpos') and len(self._data.xpos) > 0:
             obs.end_effector_pos = self._data.xpos[-1].copy()
 
+        # Collision detection: count MuJoCo contacts with non-zero force
+        if hasattr(self._data, 'ncon') and self._data.ncon > 0:
+            for c in range(self._data.ncon):
+                con = self._data.contact[c]
+                # Distances <= 0 indicate penetration (active contact)
+                if hasattr(con, 'dist') and con.dist <= 0:
+                    obs.collision_detected = True
+                    break
+
         return obs
 
     def _compute_reward(self) -> float:

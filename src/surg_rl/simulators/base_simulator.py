@@ -43,6 +43,7 @@ class Observation:
     end_effector_quat: Optional[np.ndarray] = None
     force_torque: Optional[np.ndarray] = None
     tissue_state: Optional[Dict[str, np.ndarray]] = None
+    collision_detected: bool = False
     custom: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:

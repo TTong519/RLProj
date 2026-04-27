@@ -452,32 +452,32 @@ class CollisionPenalty(BaseRewardFunction):
         self.tissue_weight = tissue_weight
 
     def compute(
-        self,
-        observation: Dict[str, np.ndarray],
-        action: np.ndarray,
+  self,
+    observation: Dict[str, np.ndarray],
+      action: np.ndarray,
         info: Dict[str, Any],
     ) -> RewardResult:
         """Compute collision penalty."""
-        collision = info.get("collision", False)
+        collision = observation.get("collision_detected", False) or info.get("collision", False)
         tissue_damage = info.get("tissue_damage", 0.0)
         collision_force = info.get("collision_force", 0.0)
 
         penalty = 0.0
         if collision:
-            penalty -= self.weight
+         penalty -= self.weight
         if tissue_damage > 0:
-            penalty -= tissue_damage * self.tissue_weight
+         penalty -= tissue_damage * self.tissue_weight
         penalty -= collision_force * 0.1  # Force-proportional penalty
 
         return RewardResult(
-            total=penalty,
+ total=penalty,
             components={
-                "collision_penalty": -self.weight if collision else 0.0,
+    "collision_penalty": -self.weight if collision else 0.0,
                 "tissue_damage_penalty": -tissue_damage * self.tissue_weight,
             },
-            info={
+   info={
                 "collision": collision,
-                "tissue_damage": tissue_damage,
+           "tissue_damage": tissue_damage,
             },
         )
 

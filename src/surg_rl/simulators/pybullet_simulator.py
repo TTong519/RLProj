@@ -726,6 +726,16 @@ class PyBulletSimulator(BaseSimulator):
             if all_positions:
                 obs.robot_state = np.concatenate(all_positions)
 
+        # Collision detection: check contact points between any two bodies
+        for i, body_a in enumerate(self._body_ids.values()):
+            for body_b in list(self._body_ids.values())[i + 1:]:
+                contacts = self._pb.getContactPoints(bodyA=body_a, bodyB=body_b, physicsClientId=self._physics_client)
+                if contacts:
+                    obs.collision_detected = True
+                    break
+            if obs.collision_detected:
+                break
+
         return obs
 
     def _compute_reward(self) -> float:
