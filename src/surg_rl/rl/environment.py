@@ -39,6 +39,7 @@ from .rewards import (
     RewardResult,
     create_default_reward,
 )
+from .task_termination import check_task_success
 
 logger = get_logger(__name__)
 
@@ -392,6 +393,14 @@ class SurgicalEnv(gym.Env):
             },
         )
         reward = reward_result.total
+
+        # Backend-agnostic task success check
+        task_success, success_details = check_task_success(
+            self._scene, sim_obs, self._target_pos, self._target_quat, sim_info
+        )
+        if task_success:
+            terminated = True
+            sim_info["success"] = True
 
         # Build info dict
         info = self._build_info(sim_obs, reward_result, sim_info)
