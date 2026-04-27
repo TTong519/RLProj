@@ -18,7 +18,7 @@ pip install -r requirements.txt
 ```
 
 #### Option B: Use conftest.py (Already created)
-The `conftest.py` file in the project root automatically adds `src/` to Python path for pytest.
+The `pytest.ini` file automatically adds `src/` to Python path for pytest.
 
 #### Option C: Set PYTHONPATH manually
 ```bash
@@ -73,12 +73,7 @@ pip install --no-index --find-links=./packages -r requirements.txt
 
 **Solutions:**
 
-Run the setup script to check and install:
-```bash
-python setup_simple.py
-```
-
-Or manually install essentials:
+Install essentials manually:
 ```bash
 pip install pydantic pydantic-settings pyyaml rich typer pytest
 ```
@@ -87,9 +82,9 @@ pip install pydantic pydantic-settings pyyaml rich typer pytest
 
 **Problem:** Warning about unknown config option `asyncio_mode`.
 
-**Solution:** Already fixed in pytest.ini. If you see this warning:
-- The conftest.py file handles the path setup
-- pytest.ini has been simplified to avoid warnings
+**Solution:** Already fixed in `pytest.ini`. If you see this warning:
+- The `pytest.ini` handles the path setup (`pythonpath = src`)
+- `pytest.ini` has `asyncio_mode = auto` and `asyncio_default_fixture_loop_scope = function`
 
 ### 5. Permission Errors
 
@@ -134,7 +129,7 @@ After fixing installation issues, verify setup:
 
 ```bash
 # Test imports
-python3 -c "from surg_rl.utils.config import Settings; print('✅ Config imports work')"
+python3 -c "from surg_rl.utils.config import Settings; print('Config imports work')"
 
 # Run tests
 pytest tests/test_imports.py -v

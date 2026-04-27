@@ -146,6 +146,25 @@ environment:
       b: 0.3
       a: 1.0
     friction: 0.8
+
+  surgical_table:              # Optional operating table
+    name: surgical_table
+    pose:
+      position: {x: 0.0, y: 0.0, z: 0.0}
+      orientation: {w: 1.0, x: 0.0, y: 0.0, z: 0.0}
+    dimensions: [2.0, 0.8, 0.5]
+    color:
+      r: 0.2
+      g: 0.2
+      b: 0.2
+      a: 1.0
+
+  skybox:                      # Optional skybox texture
+    path: assets/textures/skybox.hdr
+
+  fog_enabled: false
+  fog_color: [0.5, 0.5, 0.5]
+  fog_distance: 100.0
 ```
 
 ### Robot Configuration
@@ -156,7 +175,8 @@ robots:
     type: robotic_arm          # robotic_arm, davinci, laparoscopic, custom
     description: Primary surgical manipulator
     urdf_path: assets/robots/surgical_arm.urdf
-    
+    # Alternative: mujoco_xml_path: assets/robots/surgical_arm.xml
+
     base_pose:
       position:
         x: 0.0
@@ -203,13 +223,20 @@ tissues:
       primitive: box          # box, sphere, cylinder, capsule, plane
       dimensions: [0.1, 0.1, 0.01]
     
+    soft_body: false          # Enable MuJoCo soft body / flex (experimental)
+
     physics:
-      stiffness: 5000.0       # N/m
+      stiffness: 5000.0         # N/m
       damping: 0.15
-      density: 1100.0          # kg/m³
+      density: 1100.0           # kg/m³
       poissons_ratio: 0.45
-      youngs_modulus: 15000.0  # Pa
-      tear_threshold: 5000.0   # Pa
+      youngs_modulus: 15000.0   # Pa
+      elasticity: 0.5
+      bending_stiffness: 100.0  # N·m
+      self_collision: false
+      yield_stress: null
+      tear_threshold: 5000.0    # Pa
+      max_deformation: null
     
     pose:
       position:
@@ -242,18 +269,23 @@ tissues:
 ```yaml
 instruments:
   - name: surgical_needle
-    type: custom              # scalpel, forceps, needle_driver, scissors, etc.
+    type: custom              # scalpel, forceps, needle_driver, scissors, clamp, suction, cautery, camera, retractor, custom
     description: Curved surgical needle
-    
+
     mesh:
       path: assets/instruments/curved_needle.obj
       scale: [1.0, 1.0, 1.0]
-    
+
+    # Alternative primitive when no mesh is available
+    primitive: box             # box, sphere, cylinder, capsule
+    dimensions: [0.01, 0.01, 0.1]  # x, y, z in meters
+
     physics:
       mass: 0.001             # kg
       friction: 0.2
       damping: 0.01
-    
+      stiffness: 1000000.0    # Contact stiffness (N/m)
+
     pose:
       position:
         x: 0.35
@@ -264,8 +296,30 @@ instruments:
         x: 0.0
         y: 0.0
         z: 0.0
-    
+
+    tip_offset:                # Offset from center to tool tip
+      x: 0.0
+      y: 0.0
+      z: 0.05
+
     sterile: true
+    disposable: false
+
+    # Type-specific properties
+    cutting:                   # For scalpel, scissors
+      sharpness: 0.8
+      max_cut_depth: 0.02     # meters
+      cutting_force: 1.0      # Newtons
+
+    grasping:                  # For forceps, clamps
+      max_aperture: 0.02      # meters
+      grip_force: 5.0         # Newtons
+      jaw_angle: 30.0         # degrees
+
+    needle_driver:             # For needle drivers
+      compatible_needle_sizes: [0.02, 0.03, 0.04]
+      grip_force: 10.0        # Newtons
+      rotation_range: [-180.0, 180.0]
 ```
 
 ### Task Configuration
@@ -309,11 +363,13 @@ task:
     failure_penalty: -100.0
     time_penalty: -0.01
     distance_reward_scale: 1.0
+    constraint_violation_penalty: -1.0
     collision_penalty: -10.0
     tissue_damage_penalty: -50.0
-  
+
   max_episode_length: 1000
   time_limit: 120.0           # seconds
+  success_threshold: 0.9      # Fractional success threshold (0.0 - 1.0)
 ```
 
 ### Domain Randomization

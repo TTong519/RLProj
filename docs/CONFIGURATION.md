@@ -17,67 +17,45 @@ This document describes how to configure Surg-RL for your specific needs, includ
 
 ## Configuration Files
 
-Surg-RL uses YAML configuration files. The default configuration is located at `configs/default_config.yaml`.
+Surg-RL uses a Pydantic `Settings` class that automatically reads from a `.env` file. Example entries:
 
-### Basic Configuration Structure
-
-```yaml
-# configs/default_config.yaml
-simulation:
-  backend: "mujoco"  # or "pybullet"
-  timestep: 0.002
-  gravity: [0, 0, -9.81]
-  
-rl:
-  algorithm: "PPO"
-  learning_rate: 0.0003
-  batch_size: 64
-  
-scene_generation:
-  llm_provider: "openai"  # or "anthropic"
-  model: "gpt-4"
-  
-logging:
-  level: "INFO"
-  log_dir: "logs/"
+```bash
+# .env
+LLM_PROVIDER=openai
+LLM_API_KEY=sk-...
+DEFAULT_SIMULATOR=mujoco
+RANDOMIZATION_ENABLED=false
 ```
 
 ### Loading Configuration
 
 ```python
-from surg_rl.utils.config import load_config
+from surg_rl.utils.config import get_settings
 
-# Load from file
-config = load_config("configs/my_config.yaml")
+# Get the global settings instance
+settings = get_settings()
 
-# Use default config
-from surg_rl.utils.config import get_default_config
-config = get_default_config()
+# Access fields
+print(settings.default_simulator)  # "mujoco"
+print(settings.project_root)
 ```
 
 ---
 
 ## Configuration Hierarchy
 
-Surg-RL uses a three-tier configuration hierarchy:
+Settings are resolved in the following order (later overrides earlier):
 
-1. **Default Configuration**: Built-in defaults (`configs/default_config.yaml`)
-2. **User Configuration**: Custom config files override defaults
-3. **Command-Line Arguments**: Highest priority, override all other settings
-
-Example of overriding:
+1. **Default values** defined in `surg_rl.utils.config.Settings`
+2. **Environment variables** (case-insensitive, e.g., `DEFAULT_SIMULATOR`)
+3. **`.env` file** (variables prefixed or not; Pydantic `BaseSettings` handles mapping)
+4. **Runtime code** — instantiate `Settings` with explicit overrides:
 
 ```python
-# Start with defaults
-config = get_default_config()
+from surg_rl.utils.config import Settings
 
-# Load user config (merges with defaults)
-user_config = load_config("configs/custom.yaml")
-config.update(user_config)
-
-# Apply command-line overrides
-if args.learning_rate:
-    config["rl"]["learning_rate"] = args.learning_rate
+# Explicit override
+settings = Settings(default_simulator="pybullet")
 ```
 
 ---
@@ -88,9 +66,9 @@ if args.learning_rate:
 
 Choose between MuJoCo and PyBullet:
 
-```yaml
-simulation:
-  backend: "mujoco"  # Options: "mujoco", "pybullet"
+```python
+settings = get_settings()
+print(settings.default_simulator)  # "mujoco"
 ```
 
 **Comparison:**
@@ -100,11 +78,11 @@ simulation:
 ### Timestep and Physics
 
 ```yaml
-simulation:
-  timestep: 0.002  # Physics simulation timestep (seconds)
-  gravity: [0, 0, -9.81]  # Gravity vector
-  solver_iterations: 50  # Constraint solver iterations
-  contact_damping: 0.5  # Contact damping coefficient
+# In scene definition YAML/JSON
+physics:
+  timestep: 0.002      # Physics simulation timestep (seconds)
+  gravity: [0, 0, -9.81]
+  solver_iterations: 50
 ```
 
 ---
@@ -113,52 +91,31 @@ simulation:
 
 ### MuJoCo-Specific Settings
 
+MuJoCo configuration is primarily controlled through the scene definition:
+
 ```yaml
-simulation:
-  mujoco:
-    # Rendering
-    render_mode: "human"  # "human", "rgb_array", "depth_array"
-    width: 640
-    height: 480
-    
-    # Physics
-    solver: "Newton"  # "Newton", "PGS", "CG", "LU"
-    iterations: 50
-    tolerance: 1e-8
-    
-    # Contacts
-    contact_max_contacts: 100
-    contact_impedance: [0.1, 0.5, 1.0]
-    
-    # Integration
-    integrator: "RK4"  # "Euler", "implicit", "RK4"
-    
-    # Soft body dynamics
-    soft_body_enabled: true
-    soft_body_damping: 0.1
+physics:
+  timestep: 0.002
+  solver_iterations: 50
+  integrator: implicit    # "implicit" or "RK4"
+  contact_model: constraint
+
+simulator: mujoco
+```
+
+Rendering defaults are set via `Settings`:
+
+```python
+settings.render_width   # 640
+settings.render_height  # 480
 ```
 
 ### PyBullet-Specific Settings
 
-```yaml
-simulation:
-  pybullet:
-    # Rendering
-    render_mode: "human"
-    width: 640
-    height: 480
-    
-    # Physics
-    solver_iterations: 50
-    num_solver_iterations: 50
-    
-    # Real-time simulation
-    real_time_simulation: false
-    fixed_time_step: 0.002
-    
-    # GUI settings
-    gui: true
-    debug_visualization: true
+PyBullet runs in `DIRECT` mode by default. GUI mode is enabled via `render_mode="human"`:
+
+```python
+env = make_env("scene.json", render_mode="human")
 ```
 
 ---
@@ -169,96 +126,94 @@ simulation:
 
 Surg-RL supports multiple RL algorithms through Stable-Baselines3:
 
-```yaml
-rl:
-  algorithm: "PPO"  # Options: "PPO", "SAC", "TD3", "DDPG", "A2C"
+```python
+from surg_rl.rl.training import AlgorithmConfig, TrainingConfig, TrainingManager
+
+alg_cfg = AlgorithmConfig(name="PPO")
+train_cfg = TrainingConfig(
+    scene_path="scenes/simple_suturing.json",
+    algorithm=alg_cfg,
+    total_timesteps=1_000_000,
+    n_envs=4,
+)
+
+manager = TrainingManager(train_cfg)
+manager.train()
 ```
 
 ### PPO Configuration
 
-```yaml
-rl:
-  algorithm: "PPO"
-  learning_rate: 0.0003
-  n_steps: 2048
-  batch_size: 64
-  n_epochs: 10
-  gamma: 0.99
-  gae_lambda: 0.95
-  clip_range: 0.2
-  ent_coef: 0.01
-  vf_coef: 0.5
-  max_grad_norm: 0.5
-  
-  # Network architecture
-  policy:
-    net_arch: [256, 256]  # Hidden layer sizes
-    activation_fn: "tanh"  # "tanh", "relu", "elu"
+```python
+from surg_rl.rl.training import AlgorithmConfig
+
+alg_cfg = AlgorithmConfig(
+    name="PPO",
+    learning_rate=0.0003,
+    n_steps=2048,
+    batch_size=64,
+    n_epochs=10,
+    gamma=0.99,
+    gae_lambda=0.95,
+    clip_range=0.2,
+    ent_coef=0.01,
+    vf_coef=0.5,
+    max_grad_norm=0.5,
+)
 ```
 
 ### SAC Configuration
 
-```yaml
-rl:
-  algorithm: "SAC"
-  learning_rate: 0.0003
-  buffer_size: 1000000
-  learning_starts: 100
-  batch_size: 256
-  tau: 0.005
-  gamma: 0.99
-  train_freq: 1
-  gradient_steps: 1
-  
-  # Entropy
-  ent_coef: "auto"
-  target_entropy: "auto"
+```python
+alg_cfg = AlgorithmConfig(
+    name="SAC",
+    learning_rate=0.0003,
+    buffer_size=1_000_000,
+    learning_starts=100,
+    batch_size=256,
+    tau=0.005,
+    gamma=0.99,
+    train_freq=1,
+    gradient_steps=1,
+)
 ```
 
 ### TD3 Configuration
 
-```yaml
-rl:
-  algorithm: "TD3"
-  learning_rate: 0.001
-  buffer_size: 1000000
-  learning_starts: 100
-  batch_size: 100
-  tau: 0.005
-  gamma: 0.99
-  train_freq: 1
-  gradient_steps: 1
-  
-  # TD3-specific
-  policy_delay: 2
-  target_policy_noise: 0.2
-  target_noise_clip: 0.5
+```python
+alg_cfg = AlgorithmConfig(
+    name="TD3",
+    learning_rate=0.001,
+    buffer_size=1_000_000,
+    learning_starts=100,
+    batch_size=100,
+    tau=0.005,
+    gamma=0.99,
+    train_freq=1,
+    gradient_steps=1,
+    policy_delay=2,
+    target_policy_noise=0.2,
+    target_noise_clip=0.5,
+)
 ```
 
 ### Training Settings
 
-```yaml
-training:
-  total_timesteps: 1000000
-  n_eval_episodes: 10
-  eval_freq: 10000
-  n_envs: 4  # Number of parallel environments
-  
-  # Logging
-  tensorboard_log: "logs/tensorboard/"
-  log_interval: 100
-  
-  # Checkpoints
-  save_freq: 50000
-  save_path: "checkpoints/"
-  name_prefix: "surg_rl"
-  
-  # Early stopping
-  early_stopping:
-    enabled: true
-    metric: "mean_reward"
-    threshold: 900
-    patience: 10
+```python
+from surg_rl.rl.training import TrainingConfig
+
+cfg = TrainingConfig(
+    scene_path="scenes/simple_suturing.json",
+    algorithm=alg_cfg,
+    total_timesteps=1_000_000,
+    n_envs=4,
+    eval_freq=10_000,
+    n_eval_episodes=10,
+    save_freq=50_000,
+    log_dir="logs/",
+    tensorboard_log="logs/tensorboard/",
+    enable_tensorboard=True,
+    max_episode_steps=1000,
+)
 ```
 
 ---
@@ -267,71 +222,64 @@ training:
 
 ### LLM Provider Configuration
 
-```yaml
-scene_generation:
-  # Provider selection
-  llm_provider: "openai"  # "openai", "anthropic"
-  
-  # OpenAI settings
-  openai:
-    model: "gpt-4"
-    api_key: "${OPENAI_API_KEY}"  # Use env variable
-    temperature: 0.7
-    max_tokens: 2000
-    organization: null  # Optional
-    
-  # Anthropic settings
-  anthropic:
-    model: "claude-3-opus-20240229"
-    api_key: "${ANTHROPIC_API_KEY}"
-    temperature: 0.7
-    max_tokens: 2000
+```python
+from surg_rl.scene_generation.text_parser import TextParser
+
+# Uses settings from .env / environment variables
+parser = TextParser(
+    provider="openai",       # "openai", "anthropic", or "ollama"
+    model="gpt-4",
+    temperature=0.7,
+    max_tokens=4096,
+)
 ```
+
+Supported providers and typical models:
+
+| Provider | Typical Model |
+|----------|--------------|
+| openai   | gpt-4, gpt-4o |
+| anthropic| claude-3-opus-20240229 |
+| ollama   | llama3, llava |
 
 ### Vision Model Configuration
 
-```yaml
-scene_generation:
-  vision:
-    provider: "openai"  # "openai", "anthropic"
-    
-    openai:
-      model: "gpt-4-vision-preview"
-      detail: "high"  # "low", "high", "auto"
-      
-    anthropic:
-      model: "claude-3-opus-20240229"
-      detail: "original"  # "original" for full resolution
+```python
+from surg_rl.scene_generation.vision_parser import VisionParser
+
+parser = VisionParser(
+    provider="openai",
+    model="gpt-4-vision-preview",
+)
 ```
 
 ### Template and Output Settings
 
-```yaml
-scene_generation:
-  # Templates
-  templates_dir: "templates/"
-  default_template: "basic_surgical"
-  
-  # Output
-  output_format: "yaml"  # "yaml", "json"
-  output_dir: "generated_scenes/"
-  pretty_print: true
-  
-  # Validation
-  validate_output: true
-  strict_validation: false
-  
-  # Caching
-  cache_enabled: true
-  cache_dir: ".cache/scene_generation/"
-  cache_ttl: 86400  # 24 hours
+Scene generation output defaults to JSON or YAML based on file extension:
+
+```python
+from surg_rl.scene_generation import get_template, SceneComposer
+
+# Start from a template
+scene = get_template("suturing")
+
+# Compose multiple inputs
+composer = SceneComposer()
+scene = composer.compose_sync(
+    text_inputs=["Add a second instrument"],
+    base_scene=scene,
+)
+
+# Save with auto-detected format
+from surg_rl.scene_definition.loader import save_scene
+save_scene(scene, "output/generated_scene.yaml")
 ```
 
 ---
 
 ## Environment Variables
 
-Surg-RL respects the following environment variables:
+Surg-RL respects the following environment variables via `.env` or the shell environment:
 
 ### API Keys
 
@@ -344,32 +292,43 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 ### Runtime Settings
 
 ```bash
-# Configuration file location
-export SURG_RL_CONFIG="/path/to/config.yaml"
+# Simulator backend
+export DEFAULT_SIMULATOR="mujoco"   # or "pybullet"
+
+# Rendering
+export RENDER_WIDTH="640"
+export RENDER_HEIGHT="480"
+
+# RL
+export RL_DEVICE="auto"
+export RL_SEED="42"
 
 # Logging
-export SURG_RL_LOG_LEVEL="INFO"  # DEBUG, INFO, WARNING, ERROR
-export SURG_RL_LOG_DIR="/path/to/logs"
+export LOG_LEVEL="INFO"             # DEBUG, INFO, WARNING, ERROR
+export LOG_FILE="logs/surg_rl.log"
 
-# Cache
-export SURG_RL_CACHE_DIR="/path/to/cache"
-export SURG_RL_CACHE_ENABLED="true"
-
-# Parallel environments
-export SURG_RL_NUM_ENVS="4"
+# Domain randomization toggle
+export RANDOMIZATION_ENABLED="false"
 ```
 
-### Using Environment Variables in Config
+### Ollama-Specific Settings
 
-```yaml
-# Reference environment variables with ${VAR_NAME}
-scene_generation:
-  openai:
-    api_key: "${OPENAI_API_KEY}"
-    
-logging:
-  level: "${SURG_RL_LOG_LEVEL:INFO}"  # Default to INFO if not set
-  log_dir: "${SURG_RL_LOG_DIR:logs/}"
+```bash
+export OLLAMA_BASE_URL="http://localhost:11434"
+export OLLAMA_MODEL="llama3"
+export OLLAMA_VISION_MODEL="llava"
+export OLLAMA_TIMEOUT="120"
+```
+
+### Accessing Variables in Code
+
+```python
+from surg_rl.utils.config import get_settings
+
+settings = get_settings()
+print(settings.default_simulator)
+print(settings.llm_provider)
+print(settings.log_level)
 ```
 
 ---
@@ -378,140 +337,88 @@ logging:
 
 ### Custom Reward Functions
 
-Define custom reward functions in Python:
+Define custom reward functions by subclassing `BaseRewardFunction`:
 
 ```python
-# custom_rewards.py
+from surg_rl.rl.rewards import BaseRewardFunction, RewardResult
 import numpy as np
 
-def custom_reward(observation, action, info):
-    """Custom reward function for surgical task."""
-    # Distance to target
-    target_pos = info["target_position"]
-    tool_pos = observation["tool_position"]
-    distance = np.linalg.norm(target_pos - tool_pos)
-    
-    # Reward components
-    distance_reward = -distance
-    action_penalty = -0.01 * np.sum(np.square(action))
-    success_bonus = 10.0 if distance < 0.01 else 0.0
-    
-    return distance_reward + action_penalty + success_bonus
+class CustomReward(BaseRewardFunction):
+    def compute(self, observation, action, info):
+        distance = np.linalg.norm(observation["target"] - observation["tool"])
+        return RewardResult(
+            total=-distance,
+            components={"distance": -distance},
+            info={},
+        )
+
+    def reset(self):
+        pass
 ```
 
-Reference in config:
+Register with `CompositeReward`:
 
-```yaml
-rl:
-  reward_function: "custom_rewards.custom_reward"
+```python
+from surg_rl.rl.rewards import CompositeReward
+
+reward = CompositeReward([
+    (DistanceReward(), 1.0),
+    (CustomReward(), 0.5),
+])
 ```
 
 ### Custom Policies
 
-Define custom network architectures:
+Custom network architectures can be passed via `TrainingManager` or `AlgorithmConfig`:
 
 ```python
-# custom_policy.py
-import torch
-from stable_baselines3 import PPO
+from surg_rl.rl.training import AlgorithmConfig
 
-class CustomPolicyExtractor:
-    def __init__(self, observation_space, action_space):
-        super().__init__(observation_space, action_space)
-        
-        # Custom network architecture
-        self.policy_net = torch.nn.Sequential(
-            torch.nn.Linear(observation_space.shape[0], 512),
-            torch.nn.ReLU(),
-            torch.nn.Linear(512, 256),
-            torch.nn.ReLU(),
-            torch.nn.Linear(256, action_space.shape[0])
-        )
+alg_cfg = AlgorithmConfig(
+    name="PPO",
+    policy_kwargs={"net_arch": [512, 256, 128]},
+)
 ```
 
 ### Multi-Environment Training
 
 Configure vectorized environments for faster training:
 
-```yaml
-training:
-  n_envs: 8  # Number of parallel environments
-  
-  # Vectorized environment settings
-  vec_env:
-    method: "subproc"  # "subproc" or "dummy"
-    start_method: "fork"  # "fork", "spawn", "forkserver"
-```
-
-### Distributed Training
-
-For multi-GPU or distributed training:
-
-```yaml
-training:
-  distributed:
-    enabled: true
-    backend: "nccl"  # "nccl", "gloo"
-    world_size: 4  # Number of processes
-    rank: 0  # Process rank
-    
-    # Gradient synchronization
-    sync_frequency: 100
-    gradient_accumulation_steps: 4
-```
-
----
-
-## Configuration Validation
-
-Surg-RL validates configuration files on load. Invalid configurations will raise `ConfigurationError`.
-
-### Validation Rules
-
-- **Type checking**: All parameters have expected types
-- **Range checking**: Numeric values must be within valid ranges
-- **Dependency checking**: Related settings must be compatible
-- **Required fields**: Mandatory fields must be present
-
-### Manual Validation
-
 ```python
-from surg_rl.utils.config import validate_config
+from surg_rl.rl.environment import make_vec_env
 
-# Validate configuration
-try:
-    validate_config(config)
-except ConfigurationError as e:
-    print(f"Configuration error: {e}")
+env = make_vec_env(
+    scene_path="scenes/simple_suturing.json",
+    n_envs=8,
+    vec_env_cls=None,  # Auto-selects SubprocVecEnv for n>1
+)
 ```
 
 ---
 
 ## Best Practices
 
-1. **Use Version Control**: Keep your config files in git
+1. **Use Version Control**: Keep your config files and scene files in git
 2. **Environment Variables**: Use env vars for secrets (API keys)
 3. **Start Simple**: Begin with default configs and modify incrementally
-4. **Document Changes**: Comment your config files
+4. **Document Changes**: Add version tags and descriptions in scene metadata
 5. **Use Profiles**: Create separate configs for development, testing, production
-6. **Validate Early**: Run validation before long training runs
-7. **Cache Carefully**: Enable caching for scene generation but clear cache periodically
+6. **Validate Scene Files**: Run `pytest tests/test_schema.py -v` after changes
+7. **Cache Carefully**: Scene generation caching is handled by `SceneLoader`; clear with `SceneLoader.clear_cache()`
 
 ### Example Project Structure
 
 ```
 project/
 ├── configs/
-│   ├── default_config.yaml
-│   ├── dev_config.yaml
-│   ├── prod_config.yaml
-│   └── experiments/
-│       ├── ppo_baseline.yaml
-│       └── sac_baseline.yaml
+│   └── default_config.yaml
 ├── scenes/
+│   ├── simple_suturing.json
+│   └── laparoscopic_dissection.yaml
+├── logs/
 │   └── ...
-└── logs/
-    └── ...
+├── .env
+└── src/surg_rl/
 ```
 
 ---
@@ -520,25 +427,16 @@ project/
 
 ### Common Issues
 
-**Issue**: Configuration not loading
-```
-Solution: Check YAML syntax with a validator. Ensure file paths are correct.
-```
+**Issue**: Configuration not loading  
+Solution: Ensure `.env` is in the project root and environment variables are spelled correctly (case-insensitive). Check `Settings()` directly in a Python shell.
 
-**Issue**: Environment variable not expanding
-```
-Solution: Use ${VAR_NAME} syntax. Ensure variable is set in environment.
-```
-
-**Issue**: Invalid parameter value
-```
-Solution: Check parameter type and range in documentation. Use validate_config().
-```
+**Issue**: Invalid parameter value  
+Solution: Check parameter types and ranges in `surg_rl.utils.config.Settings` or `surg_rl.scene_definition.schema`. Scene-level values are validated by Pydantic.
 
 ---
 
 ## See Also
 
-- [Getting Started](GETTING_STARTED.md) - Basic setup and usage
-- [API Reference](API_REFERENCE.md) - Detailed API documentation
-- [Architecture](ARCHITECTURE.md) - System design overview
+- [Getting Started](GETTING_STARTED.md) — Basic setup and usage
+- [API Reference](API_REFERENCE.md) — Detailed API documentation
+- [Architecture](ARCHITECTURE.md) — System design overview
