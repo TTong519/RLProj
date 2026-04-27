@@ -54,6 +54,7 @@ class MuJoCoSimulator(BaseSimulator):
         self._renderer = None
         self._mjcf_path: Optional[Path] = None
         self._renderer_available: Optional[bool] = None
+        self._control_map: List[Dict[str, Any]] = []
 
     def _check_mujoco(self) -> None:
         """Check if MuJoCo is available."""

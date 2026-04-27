@@ -258,21 +258,22 @@ class PyBulletSimulator(BaseSimulator):
     def _load_tissue(self, tissue: Any) -> None:
         """Load a tissue into the simulation."""
         # Get geometry
-        if tissue.geometry.primitive == "box":
+        primitive = tissue.geometry.primitive if tissue.geometry is not None else None
+        if primitive == "box":
             dims = tissue.geometry.dimensions or (0.1, 0.1, 0.01)
             shape_type = self._pb.GEOM_BOX
             half_extents = [d / 2 for d in dims]
-        elif tissue.geometry.primitive == "sphere":
+        elif primitive == "sphere":
             r = tissue.geometry.radius or 0.05
             shape_type = self._pb.GEOM_SPHERE
             half_extents = [r]
-        elif tissue.geometry.primitive == "cylinder":
+        elif primitive == "cylinder":
             shape_type = self._pb.GEOM_CYLINDER
             dims = tissue.geometry.dimensions or (0.05, 0.05, 0.1)
             half_extents = [dims[2] / 2, dims[0] / 2]  # height, radius
         else:
             # Default to box
-            dims = tissue.geometry.dimensions or (0.1, 0.1, 0.01)
+            dims = tissue.geometry.dimensions or (0.1, 0.1, 0.01) if tissue.geometry is not None else (0.1, 0.1, 0.01)
             shape_type = self._pb.GEOM_BOX
             half_extents = [d / 2 for d in dims]
 
@@ -300,7 +301,7 @@ class PyBulletSimulator(BaseSimulator):
 
         # Get color
         color = [0.95, 0.85, 0.8, 1.0]  # Default skin color
-        if tissue.color:
+        if hasattr(tissue, "color") and tissue.color is not None:
             color = [tissue.color.r, tissue.color.g, tissue.color.b, tissue.color.a]
 
         # Create visual shape - only pass the relevant parameters for each shape type
@@ -327,30 +328,30 @@ class PyBulletSimulator(BaseSimulator):
                 physicsClientId=self._physics_client,
             )
 
+        pose = tissue.pose
+        if pose is None or not hasattr(pose, "position"):
+            position = (0.0, 0.0, 0.0)
+            orientation = (0.0, 0.0, 0.0, 1.0)
+        else:
+            position = (pose.position.x, pose.position.y, pose.position.z)
+            orientation = (
+                pose.orientation.x,
+                pose.orientation.y,
+                pose.orientation.z,
+                pose.orientation.w,
+            )
+
         body_id = self._pb.createMultiBody(
             baseMass=0.0,  # Static (attached to ground in scene)
             baseCollisionShapeIndex=collision_shape,
             baseVisualShapeIndex=visual_shape,
-            basePosition=[
-                tissue.pose.position.x,
-                tissue.pose.position.y,
-                tissue.pose.position.z,
-            ],
+            basePosition=list(position),
             physicsClientId=self._physics_client,
         )
         self._body_ids[tissue.name] = body_id
         # Store initial position for reset
-        self._initial_positions[tissue.name] = [
-            tissue.pose.position.x,
-            tissue.pose.position.y,
-            tissue.pose.position.z,
-        ]
-        self._initial_orientations[tissue.name] = [
-            tissue.pose.orientation.x,
-            tissue.pose.orientation.y,
-            tissue.pose.orientation.z,
-            tissue.pose.orientation.w,
-        ]
+        self._initial_positions[tissue.name] = list(position)
+        self._initial_orientations[tissue.name] = list(orientation)
 
     def _load_instrument(self, instrument: Any) -> None:
         """Load an instrument into the simulation."""
@@ -367,39 +368,40 @@ class PyBulletSimulator(BaseSimulator):
             physicsClientId=self._physics_client,
         )
 
+        pose = instrument.pose
+        if pose is None or not hasattr(pose, "position"):
+            position = (0.0, 0.0, 0.0)
+            orientation = (0.0, 0.0, 0.0, 1.0)
+        else:
+            position = (pose.position.x, pose.position.y, pose.position.z)
+            orientation = (
+                pose.orientation.x,
+                pose.orientation.y,
+                pose.orientation.z,
+                pose.orientation.w,
+            )
+
         body_id = self._pb.createMultiBody(
             baseMass=0.0,  # Static (no control implemented yet)
             baseCollisionShapeIndex=collision_shape,
             baseVisualShapeIndex=visual_shape,
-            basePosition=[
-                instrument.pose.position.x,
-                instrument.pose.position.y,
-                instrument.pose.position.z,
-            ],
+            basePosition=list(position),
             physicsClientId=self._physics_client,
         )
         self._body_ids[instrument.name] = body_id
         # Store initial position for reset
-        self._initial_positions[instrument.name] = [
-            instrument.pose.position.x,
-            instrument.pose.position.y,
-            instrument.pose.position.z,
-        ]
-        self._initial_orientations[instrument.name] = [
-            instrument.pose.orientation.x,
-            instrument.pose.orientation.y,
-            instrument.pose.orientation.z,
-            instrument.pose.orientation.w,
-        ]
+        self._initial_positions[instrument.name] = list(position)
+        self._initial_orientations[instrument.name] = list(orientation)
 
     def _load_environment(self, scene_definition: Any) -> None:
         """Load environment elements."""
         # Load ground plane
-        if (
-            hasattr(scene_definition, "physics")
-            and scene_definition.physics is not None
-            and scene_definition.physics.ground_plane
-        ):
+        ground_enabled = False
+        if hasattr(scene_definition, "environment") and scene_definition.environment is not None:
+            env = scene_definition.environment
+            if hasattr(env, "ground_plane") and env.ground_plane is not None:
+                ground_enabled = getattr(env.ground_plane, "enabled", False)
+        if ground_enabled:
             try:
                 import pybullet_data
                 self._pb.setAdditionalSearchPath(pybullet_data.getDataPath())

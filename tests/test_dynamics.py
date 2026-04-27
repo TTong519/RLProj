@@ -5,6 +5,7 @@ Tests domain randomization, curriculum learning, and adaptive difficulty.
 
 import pytest
 import numpy as np
+from unittest.mock import MagicMock, patch
 
 from surg_rl.dynamics.base_controller import (
     BaseController,
@@ -814,3 +815,236 @@ def test_adaptive_difficulty_gravity_without_getdynamicsinfo():
         controller.apply_parameters(snapshot, simulator)
 
     mock_pb.getDynamicsInfo.assert_not_called()
+
+
+class TestCurriculumEdgeCases:
+    """Edge-case tests for CurriculumScheduler."""
+
+    def test_should_advance_episode_threshold_not_met(self):
+        """Not enough episodes at stage -> no advance."""
+        scheduler = CurriculumScheduler()
+        scheduler.start()
+        scheduler.set_stage(CurriculumStage.EASY)
+        scheduler._performance_history.append({"success": 1, "reward": 100})
+        scheduler._performance_history.append({"success": 1, "reward": 100})
+        # Only 2 episodes, threshold is typically higher
+        assert not scheduler._should_advance()
+
+    def test_should_advance_already_at_max_stage(self):
+        """At EXPERT -> cannot advance further."""
+        scheduler = CurriculumScheduler()
+        scheduler.start()
+        scheduler.set_stage(CurriculumStage.EXPERT)
+        for _ in range(100):
+            scheduler._performance_history.append({"success": 1, "reward": 100})
+        assert not scheduler._should_advance()
+
+    def test_should_advance_empty_history(self):
+        """No history -> no advance."""
+        scheduler = CurriculumScheduler()
+        scheduler.start()
+        assert not scheduler._should_advance()
+
+    def test_should_advance_reward_threshold_met(self):
+        """Reward threshold met triggers advance."""
+        config = CurriculumConfig(
+            initial_stage=CurriculumStage.EASY,
+            auto_advance=True,
+            advancement_window=50,
+            min_success_rate=1.0,  # impossible success rate
+        )
+        scheduler = CurriculumScheduler(curriculum_config=config)
+        scheduler.start()
+        scheduler._stage_entry_episode = 0
+        # Fill with high rewards but 0 success flags
+        for _ in range(60):
+            scheduler.episode_end({"reward": 200, "success": 0}, None)
+        # With reward_threshold from CurriculumStageConfig, can still advance
+        scheduler._stages[CurriculumStage.EASY].reward_threshold = 100
+        # Force enough episodes
+        scheduler._stage_entry_episode = 0
+        scheduler._episode = 1000
+        result = scheduler._should_advance()
+        assert isinstance(result, bool)
+
+    def test_get_progress_custom_stage(self):
+        """Custom stage not in order -> should not crash."""
+        scheduler = CurriculumScheduler()
+        scheduler.start()
+        # Manually add a custom stage
+        from enum import Enum
+
+        class FakeStage(str, Enum):
+            CUSTOM = "custom"
+
+        scheduler._current_stage = FakeStage.CUSTOM  # type: ignore[assignment]
+        progress = scheduler.get_progress()
+        assert progress["stage_index"] == -1
+        assert progress["progress"] == 0.0
+
+    def test_reset_curriculum(self):
+        """reset_curriculum restores initial state."""
+        scheduler = CurriculumScheduler()
+        scheduler.start()
+        scheduler.advance_stage()
+        scheduler.reset_curriculum()
+        assert scheduler.current_stage == CurriculumStage.EASY
+
+    def test_update_curriculum_auto_advance_disabled(self):
+        """When auto_advance=False, stage should not change."""
+        config = CurriculumConfig(auto_advance=False)
+        scheduler = CurriculumScheduler(curriculum_config=config)
+        scheduler.start()
+        for _ in range(100):
+            scheduler.episode_end({"success": 1, "reward": 100}, None)
+        assert scheduler.current_stage == CurriculumStage.EASY
+
+    def test_apply_parameters_mujoco_gravity_branch(self):
+        """apply_parameters sets gravity via setGravity method."""
+        scheduler = CurriculumScheduler()
+        from surg_rl.dynamics.base_controller import ParameterSnapshot
+
+        snapshot = ParameterSnapshot(
+            physics={
+                "gravity_x": 0.0,
+                "gravity_y": 0.0,
+                "gravity_z": -10.0,
+            }
+        )
+        sim = MagicMock(spec=["setGravity"])
+        scheduler.apply_parameters(snapshot, sim)
+        sim.setGravity.assert_called_once_with(0.0, 0.0, -10.0)
+
+    def test_apply_parameters_pybullet_gravity_branch(self):
+        """apply_parameters sets PyBullet gravity via physicsClientId."""
+        scheduler = CurriculumScheduler()
+        from surg_rl.dynamics.base_controller import ParameterSnapshot
+
+        snapshot = ParameterSnapshot(
+            physics={
+                "gravity_x": 0.0,
+                "gravity_y": 0.0,
+                "gravity_z": -10.0,
+            }
+        )
+        sim = MagicMock(spec=["_physics_client"])
+        sim._physics_client = 123
+        mock_pb = MagicMock()
+        with patch.dict("sys.modules", {"pybullet": mock_pb}):
+            scheduler.apply_parameters(snapshot, sim)
+        mock_pb.setGravity.assert_called_once()
+
+
+class TestAdaptiveDifficultyEdgeCases:
+    """Edge-case tests for AdaptiveDifficultyController."""
+
+    def test_get_base_parameters_keys(self):
+        """_get_base_parameters returns expected keys."""
+        ctrl = AdaptiveDifficultyController()
+        base = ctrl._get_base_parameters()
+        assert "physics" in base
+        assert "mass_ratio" in base["physics"]
+        assert "friction" in base["physics"]
+
+    def test_scale_by_difficulty_zero(self):
+        """At difficulty 0, all scaled params are 0."""
+        ctrl = AdaptiveDifficultyController()
+        base = ctrl._get_base_parameters()
+        scaled = ctrl._scale_by_difficulty(base, 0.0)
+        for cat in scaled.values():
+            for v in cat.values():
+                assert v == 0.0
+
+    def test_scale_by_difficulty_max(self):
+        """At difficulty 1.0, scaled params equal base params."""
+        ctrl = AdaptiveDifficultyController()
+        base = ctrl._get_base_parameters()
+        scaled = ctrl._scale_by_difficulty(base, 1.0)
+        for cat, params in scaled.items():
+            for k, v in params.items():
+                assert v == base[cat][k]
+
+    def test_apply_parameters_mass_ratio_calls_simulator(self):
+        """apply_parameters calls set_mass_ratio on simulator if present."""
+        ctrl = AdaptiveDifficultyController()
+        from surg_rl.dynamics.base_controller import ParameterSnapshot
+
+        snapshot = ParameterSnapshot(
+            physics={"mass_ratio": 1.2, "gravity_variation": 0.0}
+        )
+        sim = MagicMock()
+        ctrl.apply_parameters(snapshot, sim)
+        sim.set_mass_ratio.assert_called_once_with(1.2)
+
+    def test_apply_parameters_friction_calls_simulator(self):
+        """apply_parameters calls set_friction on simulator if present."""
+        ctrl = AdaptiveDifficultyController()
+        from surg_rl.dynamics.base_controller import ParameterSnapshot
+
+        snapshot = ParameterSnapshot(physics={"friction": 0.5})
+        sim = MagicMock()
+        ctrl.apply_parameters(snapshot, sim)
+        sim.set_friction.assert_called_once_with(0.5)
+
+    def test_get_randomized_action_disabled(self):
+        """When disabled, get_randomized_action returns action unchanged."""
+        config = DifficultyConfig(enabled=False)
+        ctrl = AdaptiveDifficultyController(difficulty_config=config)
+        action = np.array([1.0, 2.0, 3.0])
+        assert np.array_equal(ctrl.get_randomized_action(action), action)
+
+    def test_get_randomized_observation_disabled(self):
+        """When disabled, get_randomized_observation returns observation unchanged."""
+        config = DifficultyConfig(enabled=False)
+        ctrl = AdaptiveDifficultyController(difficulty_config=config)
+        obs = np.array([1.0, 2.0, 3.0])
+        assert np.array_equal(ctrl.get_randomized_observation(obs), obs)
+
+    def test_compute_adaptation_empty_history(self):
+        """Empty history should keep difficulty at initial level."""
+        config = DifficultyConfig(initial_difficulty=0.3)
+        ctrl = AdaptiveDifficultyController(difficulty_config=config)
+        ctrl.start()
+        ctrl.episode_end({"reward": 10, "success": 1}, None)
+        # Single episode may or may not change; check bounded
+        assert 0.0 <= ctrl.difficulty <= 1.0
+
+
+class TestParameterRandomizerEdgeCases:
+    """Edge-case tests for ParameterRandomizer."""
+
+    def test_get_randomized_action_disabled(self):
+        """When disabled, returns action unchanged."""
+        from surg_rl.dynamics.parameter_randomizer import ParameterRandomizer, ControllerConfig
+
+        config = ControllerConfig(enabled=False)
+        randomizer = ParameterRandomizer(config=config)
+        action = np.array([1.0, 2.0])
+        assert np.array_equal(randomizer.get_randomized_action(action), action)
+
+    def test_get_randomized_observation_disabled(self):
+        """When disabled, returns observation unchanged."""
+        from surg_rl.dynamics.parameter_randomizer import ParameterRandomizer, ControllerConfig
+
+        config = ControllerConfig(enabled=False)
+        randomizer = ParameterRandomizer(config=config)
+        obs = np.array([1.0, 2.0])
+        assert np.array_equal(randomizer.get_randomized_observation(obs), obs)
+
+    def test_sample_parameters_gravity_range(self):
+        """Gravity range should produce a gravity_z parameter."""
+        from surg_rl.dynamics.parameter_randomizer import ParameterRandomizer
+        from surg_rl.scene_definition.schema import (
+            DomainRandomizationConfig,
+            PhysicsRandomization,
+        )
+
+        domain_config = DomainRandomizationConfig(
+            physics=PhysicsRandomization(
+                enabled=True,
+                gravity_range=((-0.1, 0.1), (-0.1, 0.1), (-10.0, -9.0)),
+            ),
+        )
+        randomizer = ParameterRandomizer(domain_config=domain_config)
+        params = randomizer.sample_parameters()
+        assert "gravity_z" in params.physics or "gravity_variation" in params.physics

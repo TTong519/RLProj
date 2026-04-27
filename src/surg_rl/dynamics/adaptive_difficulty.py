@@ -161,8 +161,8 @@ class AdaptiveDifficultyController(BaseController):
         """
         return {
             "physics": {
-                "mass_ratio_range": 0.2,  # +/- 20% variation at max difficulty
-                "friction_range": 0.3,   # Friction variation
+                "mass_ratio": 0.2,  # +/- 20% variation at max difficulty
+                "friction": 0.3,   # Friction variation
                 "gravity_variation": 1.0,  # Gravity variation
             },
             "dynamics": {

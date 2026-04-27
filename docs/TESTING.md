@@ -31,12 +31,13 @@ Surg-RL uses `pytest` as its testing framework. The test suite includes:
 
 | Module | Tests | Coverage |
 |--------|-------|----------|
-| scene_definition | 45 | 92% |
-| scene_generation | 35 | 88% |
-| simulators | 45 | 85% |
-| dynamics | 37 | 90% |
-| rl | 54 | 88% |
-| config | 15 | 95% |
+| scene_definition | 118 | 94% |
+| scene_generation | 59 | 92% |
+| simulators | 60 | 92% |
+| dynamics | 66 | 94% |
+| rl (training) | 167 | 92% |
+| config | 10 | 96% |
+| **Total** | **487** | **~92%** |
 
 ### Test Dependencies
 
@@ -69,14 +70,28 @@ pytest -vv
 ### Run Specific Test Files
 
 ```bash
-# Run a specific test file
+# Run all tests
+pytest tests/ -v
+
+# Run specific module tests
 pytest tests/test_loader.py
+pytest tests/test_scene_generation.py
+pytest tests/test_simulators.py
+pytest tests/test_dynamics.py
+pytest tests/test_rl.py
+pytest tests/test_rewards.py
+pytest tests/test_config.py
 
-# Run multiple test files
-pytest tests/test_loader.py tests/test_schema.py
+# Run new test files added in coverage expansion
+pytest tests/test_cli.py -v
+pytest tests/test_rl_training.py -v
+pytest tests/test_rl_callbacks.py -v
+pytest tests/test_rl_environment.py -v
+pytest tests/test_rl_observation_action.py -v
+pytest tests/test_scene_builder.py -v
 
-# Run dynamics tests
-pytest tests/test_dynamics.py -v
+# Run with coverage
+pytest tests/ --cov=surg_rl --cov-report=html
 ```
 
 ### Run Specific Tests
@@ -117,14 +132,22 @@ The test suite is organized as follows:
 ```
 tests/
 ├── __init__.py
-├── conftest.py              # Shared fixtures
+├── conftest.py              # Shared fixtures (CLI runner, scene fixtures)
 ├── test_imports.py          # Import validation
 ├── test_loader.py           # Scene loader tests
 ├── test_schema.py           # Schema validation tests
 ├── test_config.py           # Configuration tests
-├── test_simulators.py       # Simulator tests
+├── test_simulators.py       # Simulator tests (MuJoCo + PyBullet)
 ├── test_scene_generation.py # Scene generation tests
-├── test_dynamics.py         # Dynamics module tests (NEW)
+├── test_dynamics.py         # Dynamics module tests
+├── test_rl.py               # RL: observation, action, environment
+├── test_rewards.py          # RL reward function tests
+├── test_rl_training.py      # TrainingManager mocks
+├── test_rl_callbacks.py     # SB3 callback tests
+├── test_rl_environment.py   # SurgicalEnv lifecycle tests
+├── test_rl_observation_action.py # Observation/action deep tests
+├── test_scene_builder.py    # MJCF builder tests
+├── test_cli.py              # CLI subprocess tests
 └── fixtures/                # Test fixtures
     ├── minimal_scene.json
     └── test_config.yaml
@@ -152,7 +175,80 @@ Test the dynamic environment control system:
 - TestCurriculumScheduler: 8 tests (stages, progression, performance)
 - TestAdaptiveDifficultyController: 8 tests (adaptation, bounds, state)
 - TestEnvironmentController: 9 tests (integration, status, utility methods)
+- TestCurriculumEdgeCases: 9 tests (threshold, max stage, custom stage, reset, auto-advance, gravity branches)
+- TestAdaptiveDifficultyEdgeCases: 8 tests (base params, scale by difficulty, apply mass/friction, disabled passthrough, empty history)
+- TestParameterRandomizerEdgeCases: 3 tests (disabled, gravity range)
 ```
+
+#### RL Training Tests (`test_rl_training.py`)
+
+Mock-based tests for `TrainingManager`:
+
+```python
+- TestAlgorithmSelection: 7 tests (import errors, unknown algorithm, PPO/SAC/TD3/DDPG/A2C)
+- TestEnvironmentCreation: 2 tests (single env, vectorized env)
+- TestModelCreation: 2 tests (MultiInputPolicy, MlpPolicy)
+- TestTrainingLoop: 3 tests (train + save, config dict, save/load round-trip)
+- TestEvaluation: 3 tests (single env, vec env, missing model)
+- TestModelPersistence: 2 tests (save without model, load sets model)
+- TestCleanup: 1 test (close cleans envs)
+```
+
+#### RL Callback Tests (`test_rl_callbacks.py`)
+
+Custom Stable-Baselines3 callback coverage:
+
+```python
+- TestTrainingProgressCallback: 2 tests (log progress, no episode in info)
+- TestCheckpointCallback: 2 tests (save frequency, failure logs warning)
+- TestCurriculumCallback: 1 test (episode end calls controller)
+- TestEvaluationCallback: 2 tests (evaluate + log, get results copy)
+- TestTensorBoardCallback: 3 tests (controller state, no controller, no logger)
+```
+
+#### RL Environment Tests (`test_rl_environment.py`)
+
+SurgicalEnv lifecycle and state:
+
+```python
+- TestSurgicalEnvDefaults: 4 tests (obs config, action config, controller, invalid simulator)
+- TestSurgicalEnvLifecycle: 5 tests (reset, step, truncation, render rgb/human)
+- TestSurgicalEnvInfo: 1 test (build info distance)
+- TestSurgicalEnvState: 2 tests (set target, state roundtrip)
+- TestMakeEnvFactory: 2 tests (make_env, make_vec_env)
+```
+
+#### Observation/Action Deep Tests (`test_rl_observation_action.py`)
+
+Detailed coverage of builder internals:
+
+```python
+- TestObservationBuilderDeep: 8 tests (flat space, normalize mismatch, quaternion, unflatten, fallbacks, padding, tool positions)
+- TestActionBuilderDeep: 4 tests (discrete space, tanh, relative actions, normalize)
+```
+
+#### Scene Builder Tests (`test_scene_builder.py`)
+
+MJCF generation and asset resolution:
+
+```python
+- TestAssetResolution: 5 tests (relative exists/missing, absolute exists/missing, mesh fallback)
+- TestMJCFGeneration: 8 tests (robot, ground plane, camera, directional light, point light, tissue sphere, tissue cylinder, instrument)
+```
+
+#### CLI Tests (`test_cli.py`)
+
+Subprocess CLI command coverage:
+
+```python
+- TestCLIVersion: 1 test (version command)
+- TestCLIConfig: 1 test (config command)
+- TestCLISetup: 1 test (setup creates directories)
+- TestCLIGenerate: 4 tests (template JSON/YAML, no input, nonexistent template)
+- TestCLITrain: 1 test (train import error)
+- TestCLIEvaluate: 1 test (evaluate import error)
+```
+
 
 #### Integration Tests
 
@@ -317,6 +413,36 @@ filterwarnings =
 # tests/conftest.py
 import pytest
 import numpy as np
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+@pytest.fixture
+def cli_runner():
+    """Fixture to run CLI commands via subprocess."""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(Path(__file__).parent.parent / "src")
+    def _run(*args, check=False):
+        cmd = [sys.executable, "-m", "surg_rl.cli", *args]
+        return subprocess.run(cmd, capture_output=True, text=True, env=env, check=check)
+    return _run
+
+@pytest.fixture
+def minimal_scene():
+    """Load the minimal scene from scenes/minimal_scene.json."""
+    from surg_rl.scene_definition import SceneLoader
+    loader = SceneLoader()
+    scene_path = Path(__file__).parent.parent / "scenes" / "minimal_scene.json"
+    return loader.load(scene_path)
+
+@pytest.fixture
+def suturing_scene():
+    """Load the suturing scene from scenes/simple_suturing.json."""
+    from surg_rl.scene_definition import SceneLoader
+    loader = SceneLoader()
+    scene_path = Path(__file__).parent.parent / "scenes" / "simple_suturing.json"
+    return loader.load(scene_path)
 
 @pytest.fixture
 def sample_scene():

@@ -298,11 +298,12 @@ class CurriculumScheduler(BaseController):
                 gy = snapshot.physics.get("gravity_y", 0.0)
                 gz = snapshot.physics.get("gravity_z", -9.81)
                 simulator.setGravity(gx, gy, gz)
-            elif hasattr(simulator, "_pb") and "gravity_x" in snapshot.physics:
+            elif hasattr(simulator, "_physics_client") and "gravity_x" in snapshot.physics:
+                import pybullet as p
                 gx = snapshot.physics.get("gravity_x", 0.0)
                 gy = snapshot.physics.get("gravity_y", 0.0)
                 gz = snapshot.physics.get("gravity_z", -9.81)
-                simulator._pb.setGravity(
+                p.setGravity(
                     gx, gy, gz,
                     physicsClientId=simulator._physics_client,
                 )
@@ -365,6 +366,8 @@ class CurriculumScheduler(BaseController):
             return False
         
         # Check if already at max stage
+        if self._current_stage not in self._stage_order:
+            return False
         current_idx = self._stage_order.index(self._current_stage)
         if current_idx >= len(self._stage_order) - 1:
             return False
@@ -401,6 +404,8 @@ class CurriculumScheduler(BaseController):
         Returns:
             Dictionary with progress details.
         """
+        if self._current_stage not in self._stage_order:
+            return {"current_stage": self._current_stage.value, "stage_index": -1, "progress": 0.0}
         stage_idx = self._stage_order.index(self._current_stage)
         progress = stage_idx / (len(self._stage_order) - 1) if len(self._stage_order) > 1 else 1.0
         

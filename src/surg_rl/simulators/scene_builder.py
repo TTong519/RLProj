@@ -423,7 +423,12 @@ f 5 1 4 8
             self._add_instrument_to_mjcf(mujoco, instrument, i, asset)
 
         # Add ground plane if enabled
-        if scene_definition.physics.ground_plane:
+        ground_enabled = False
+        if hasattr(scene_definition, "environment") and scene_definition.environment is not None:
+            env = scene_definition.environment
+            if hasattr(env, "ground_plane") and env.ground_plane is not None:
+                ground_enabled = getattr(env.ground_plane, "enabled", False)
+        if ground_enabled:
             self._add_ground_plane_to_mjcf(worldbody, scene_definition)
 
         # Add cameras

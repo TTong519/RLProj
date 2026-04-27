@@ -121,7 +121,7 @@ def generate(
                 import yaml
                 content = yaml.dump(_yaml_serialize(scene), default_flow_style=False, sort_keys=False)
             else:
-                content = json.dumps(scene.model_dump(), indent=2)
+                content = json.dumps(scene.model_dump(mode="json"), indent=2)
 
             output_path.write_text(content)
             console.print(f"[bold green]✓[/bold green] Scene saved to: {output_path}")
@@ -150,7 +150,7 @@ def generate(
                 import yaml
                 content = yaml.dump(_yaml_serialize(scene), default_flow_style=False, sort_keys=False)
             else:
-                content = json.dumps(scene.model_dump(), indent=2)
+                content = json.dumps(scene.model_dump(mode="json"), indent=2)
 
             output_path.write_text(content)
             console.print(f"[bold green]✓[/bold green] Scene saved to: {output_path}")
@@ -179,7 +179,7 @@ def generate(
                 import yaml
                 content = yaml.dump(_yaml_serialize(scene), default_flow_style=False, sort_keys=False)
             else:
-                content = json.dumps(scene.model_dump(), indent=2)
+                content = json.dumps(scene.model_dump(mode="json"), indent=2)
 
             output_path.write_text(content)
             console.print(f"[bold green]✓[/bold green] Scene saved to: {output_path}")

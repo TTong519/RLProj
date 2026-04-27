@@ -8,9 +8,15 @@ import numpy as np
 import pytest
 
 from surg_rl.rl.rewards import (
+    ActionPenalty,
+    CollisionPenalty,
     CompositeReward,
+    DistanceReward,
     DissectionReward,
     NeedlePassingReward,
+    OrientationReward,
+    RewardConfig,
+    SuccessReward,
     SuturingReward,
     create_default_reward,
 )
@@ -280,5 +286,110 @@ class TestCreateDefaultReward:
         assert result.total <= 0, f"Total reward on collision should be non-positive, got {result.total}"
 
 
+
+# ============================================================================
+# Branch Coverage Tests
+# ============================================================================
+
+
+class TestDistanceRewardBranches:
+    def test_distance_from_info_dict(self):
+        config = RewardConfig()
+        reward_fn = DistanceReward(weight=1.0, shape="linear", scale=1.0)
+        obs = {"distance_to_target": None}
+        action = np.zeros(3)
+        info = {"distance_to_target": 0.5}
+        result = reward_fn.compute(obs, action, info)
+        assert result.total != 0.0
+
+    def test_unknown_shape_defaults_to_negative_distance(self):
+        reward_fn = DistanceReward(weight=1.0, shape="unknown", scale=1.0)
+        obs = {"distance_to_target": np.array([0.2])}
+        action = np.zeros(3)
+        info = {}
+        result = reward_fn.compute(obs, action, info)
+        assert result.total < 0
+
+    def test_no_distance_data_returns_zero(self):
+        reward_fn = DistanceReward()
+        obs = {}
+        action = np.zeros(3)
+        info = {}
+        result = reward_fn.compute(obs, action, info)
+        assert result.total == 0.0
+        assert result.components["distance"] == 0.0
+
+
+class TestOrientationRewardBranches:
+    def test_no_angle_data_returns_zero(self):
+        reward_fn = OrientationReward()
+        obs = {}
+        action = np.zeros(3)
+        info = {}
+        result = reward_fn.compute(obs, action, info)
+        assert result.total == 0.0
+        assert result.components["orientation"] == 0.0
+
+
+class TestActionPenaltyBranches:
+    def test_max_penalty_type(self):
+        reward_fn = ActionPenalty(penalty_type="max")
+        action = np.array([1.0, -2.0, 0.5])
+        result = reward_fn.compute({}, action, {})
+        assert result.total <= 0
+
+    def test_unknown_penalty_type_defaults_l2(self):
+        reward_fn = ActionPenalty(penalty_type="unknown")
+        action = np.array([1.0, 1.0])
+        result = reward_fn.compute({}, action, {})
+        assert result.total < 0
+
+
+class TestSuccessRewardBranches:
+    def test_distance_based_success(self):
+        reward_fn = SuccessReward(distance_threshold=0.1)
+        obs = {"distance_to_target": np.array([0.05])}
+        action = np.zeros(3)
+        info = {"terminated": True}
+        result = reward_fn.compute(obs, action, info)
+        assert result.total > 0
+
+
+class TestCollisionPenaltyBranches:
+    def test_collision_force_penalty(self):
+        reward_fn = CollisionPenalty()
+        obs = {}
+        action = np.zeros(3)
+        info = {"collision": True, "collision_force": 5.0}
+        result = reward_fn.compute(obs, action, info)
+        assert result.total < 0
+
+
+class TestCompositeRewardAdd:
+    def test_add_method_appends_component(self):
+        composite = CompositeReward()
+        dr = DistanceReward()
+        composite.add(dr, weight=1.0)
+        assert len(composite.components) == 1
+
+
+class TestCreateDefaultRewardBranches:
+    def test_task_specific_suturing(self):
+        reward = create_default_reward(task_name="suturing_task")
+        assert isinstance(reward, CompositeReward)
+        assert len(reward.components) > 5  # default + suturing
+
+    def test_task_specific_dissection(self):
+        reward = create_default_reward(task_name="dissection_task")
+        assert isinstance(reward, CompositeReward)
+        assert len(reward.components) > 5
+
+    def test_task_specific_needle_passing(self):
+        reward = create_default_reward(task_name="needle_passing_task")
+        assert isinstance(reward, CompositeReward)
+        assert len(reward.components) > 5
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+

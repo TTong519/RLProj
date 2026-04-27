@@ -289,7 +289,11 @@ class ActionBuilder:
         low = np.concatenate(lows) if lows else -np.ones(total_size)
         high = np.concatenate(highs) if highs else np.ones(total_size)
 
-        return gym.spaces.Box(low=low.astype(np.float32), high=high.astype(np.float32), dtype=np.float32)
+        return gym.spaces.Box(
+            low=low.astype(np.float32),
+            high=high.astype(np.float32),
+            dtype=np.float32,
+        )
 
     def process_action(self, action: np.ndarray) -> np.ndarray:
         """Process a raw action from the RL agent for the simulator.

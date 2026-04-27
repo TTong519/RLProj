@@ -256,6 +256,13 @@ class BaseSimulator(ABC):
         """
         self._apply_action(action)
 
+    def get_num_controls(self) -> int:
+        """Return the number of controllable DOFs.
+
+        Subclasses should override this after load_scene().
+        """
+        return 0
+
     def _apply_action(self, action: np.ndarray) -> None:
         """Internal implementation of action application.
 

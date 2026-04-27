@@ -8,12 +8,11 @@
 |-----------|--------|-------|
 | Project Structure | ✅ Complete | Directory structure, config, logging |
 | Scene Schema | ✅ Complete | Full Pydantic models, validation |
-| Scene Generation | ✅ Complete | LLM/VLM parsers, templates |
-| Scene Loader | ✅ Complete | JSON/YAML loading, caching |
-| Simulator Layer | ✅ Complete | MuJoCo + PyBullet backends |
+| Scene Generation | ✅ Complete | LLM/VLM parsers, templates, mocked tests |
+| Scene Loader | ✅ Complete | JSON/YAML loading, caching, edge cases |
+| Simulator Layer | ✅ Complete | MuJoCo + PyBullet backends, render/state tests |
 | Environment Controller | ✅ Complete | Domain randomization, curriculum, adaptive difficulty |
-| RL Training | ✅ Complete | Gymnasium env, rewards, SB3 training pipeline |
-| Demos | ✅ Complete | Training, evaluation, benchmark, visualization demos |
+| RL Training | ✅ Complete | Gymnasium env, rewards, SB3 training pipeline, CLI subprocess tests |
 
 **Active Step:** Complete (Steps 1-8 all done)
 
@@ -61,7 +60,7 @@
 - CurriculumScheduler for progressive learning stages
 - AdaptiveDifficultyController for performance-based difficulty
 - EnvironmentController integrating all components
-- Full test coverage (37 tests)
+- Full test coverage (66 tests)
 
 ### ✅ Step 7: RL Training Pipeline
 - **Observation module** (`observation.py`): ObservationType enum, ObservationSpec, ObservationConfig, ObservationBuilder with Gymnasium space generation, normalization, and noise support
@@ -71,7 +70,7 @@
 - **Training module** (`training.py`): AlgorithmConfig, TrainingConfig, TrainingManager — SB3 integration for PPO/SAC/TD3/DDPG/A2C with checkpointing and evaluation
 - **Callbacks module** (`callbacks.py`): TrainingProgressCallback, CheckpointCallback, CurriculumCallback, EvaluationCallback
 - **CLI updates**: `surg-rl train` and `surg-rl evaluate` commands fully implemented with rich options
-- **54 tests** covering observation spaces, action spaces, rewards, training config, and callbacks
+- **167 tests** covering observation spaces, action spaces, rewards, training config, callbacks, environment lifecycle, scene builder, and CLI
 
 ### ✅ Step 8: CLI Interface and Demos
 - `surg-rl version` - Show version
@@ -182,10 +181,10 @@ print(f"Mean reward: {results['mean_reward']:.2f}")
 ```bash
 pytest tests/ -v
 # Result: All core tests passing
-# - Steps 1-5: ~170 tests
-# - Step 6: 37 tests (dynamics)
-# - Step 7: 54 tests (RL)
-# - Step 8: Integration via CLI
+# - Steps 1-5: ~247 tests
+# - Step 6: 66 tests (dynamics)
+# - Step 7: 167 tests (RL)
+# - Step 8: 22 tests (CLI 9 + scene builder 13)
 ```
 
 ---
@@ -194,7 +193,7 @@ pytest tests/ -v
 
 1. **Missing Asset Files**: The `assets/` directory does not contain actual mesh/URDF files. The simulator uses primitive shapes (boxes, spheres, cylinders) as fallbacks.
 
-2. **Async Test**: One async test in test_scene_generation.py needs pytest-asyncio configuration (marked as skip).
+2. **Async Tests**: Two integration tests in `test_scene_generation.py` require LLM API access (marked as skip).
 
 3. **SB3 Dependency**: The training and evaluation demos require `stable-baselines3` to be installed (`pip install stable-baselines3`).
 
@@ -226,7 +225,7 @@ RLProj/
 │   ├── utils/               # Config, logging
 │   └── cli.py               # Command line interface
 ├── tests/                   # pytest tests
-│   ├── test_rl.py           # RL module tests (54 tests)
+│   ├── test_rl.py           # RL module tests (72 tests)
 │   └── ...
 ├── docs/                    # Documentation
 ├── scenes/                  # Example scene files

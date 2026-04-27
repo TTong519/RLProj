@@ -710,7 +710,7 @@ class TestTensorBoardCallback:
 
     def test_on_step_logs_fps(self):
         """Test that _on_step logs training FPS."""
-        from unittest.mock import MagicMock
+        from unittest.mock import MagicMock, patch
 
         callback = TensorBoardCallback(verbose=0)
         model = MagicMock()
@@ -720,8 +720,9 @@ class TestTensorBoardCallback:
         callback.init_callback(model)
 
         callback.locals = {"infos": []}
-        callback._on_training_start()
-        callback.on_step()
+        with patch("surg_rl.rl.callbacks.time.time", side_effect=[100.0, 101.0]):
+            callback._on_training_start()
+            callback.on_step()
 
         assert logger.record.called
         fps_calls = [

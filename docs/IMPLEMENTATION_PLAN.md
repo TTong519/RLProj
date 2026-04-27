@@ -88,11 +88,11 @@ This project creates an AI-powered system for generating surgical robotics train
 | 4 | Scene Loader and Parser | ✅ COMPLETED | 2026-04-06 |
 | 5 | Simulator Abstraction Layer | ✅ COMPLETED | 2026-04-06 |
 | 6 | Dynamic Environment Controller | ✅ COMPLETED | 2026-04-07 |
-| 7 | RL Training Pipeline | ⏳ PENDING | - |
-| 8 | CLI Interface and Demos | ⏳ PARTIAL | In Progress |
+| 7 | RL Training Pipeline | ✅ COMPLETED | 2026-04-07 |
+| 8 | CLI Interface and Demos | ✅ COMPLETED | 2026-04-07 |
 
-**Active Step:** 7 (RL Training Pipeline)
-**Last Completed:** 6 (Dynamic Environment Controller)
+**Active Step:** Complete (Steps 1-8 all done)
+**Last Completed:** 8 (CLI Interface and Demos)
 
 ---
 
@@ -231,7 +231,7 @@ for episode in range(1000):
 - ✅ AlgorithmConfig and TrainingConfig dataclasses with save/load
 - ✅ Custom callbacks: TrainingProgressCallback, CheckpointCallback, CurriculumCallback, EvaluationCallback
 - ✅ CLI train and evaluate commands with full option support
-- ✅ 54 tests covering all RL module components
+- ✅ 167 tests covering all RL module components (observation, action, rewards, environment, training, callbacks, scene builder, CLI)
 
 **Module Structure:**
 
@@ -275,10 +275,20 @@ All steps must pass:
 pytest tests/ -v
 ```
 
-Current: **262 passed, 2 skipped**
-- Step 1-5: 170 tests
-- Step 6: 37 tests (NEW)
-- Note: 1 async test requires pytest-asyncio configuration
+Current: **487 passed, 2 skipped**
+- Steps 1-5: ~247 tests
+- Step 6: 66 tests (dynamics, edge cases)
+- Step 7: 167 tests (RL training, callbacks, env, observation/action)
+- Step 8: 22 tests (9 CLI integration + 13 scene builder tests)
+- Note: 2 async tests require LLM API access (marked as skip)
+
+**Key fixes during coverage expansion:**
+- `cli.py`: JSON serialization uses `model_dump(mode="json")` for Enum conversion
+- `loader.py`: `validate=False` no longer crashes with `validate_assets=True`
+- `pybullet_simulator.py`: `tissue.geometry.primitive` and `instrument.pose` guarded against `None`
+- `pybullet_simulator.py`: Ground plane check uses `environment.ground_plane` instead of `physics.ground_plane`
+- `adaptive_difficulty.py`: `mass_ratio` / `friction` keys aligned between `_get_base_parameters` and `apply_parameters`
+- `curriculum.py`: `list.index()` guarded for custom stages, PyBullet detection uses `_physics_client`
 
 ---
 

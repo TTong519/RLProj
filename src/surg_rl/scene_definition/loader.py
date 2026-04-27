@@ -580,7 +580,7 @@ class SceneLoader:
             )
 
         # Validate assets if enabled
-        if self.validate_assets:
+        if validate and self.validate_assets:
             missing = self.asset_manager.validate_scene_assets(scene)
             if missing:
                 logger.warning(f"Missing assets for scene {file_path}: {missing}")

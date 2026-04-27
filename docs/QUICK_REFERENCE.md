@@ -13,8 +13,19 @@ PYTHONPATH=src pytest tests/ -v
 PYTHONPATH=src pytest tests/test_dynamics.py -v
 PYTHONPATH=src pytest tests/test_schema.py -v
 PYTHONPATH=src pytest tests/test_simulators.py -v
+PYTHONPATH=src pytest tests/test_cli.py -v                      # CLI subprocess tests
+PYTHONPATH=src pytest tests/test_rl.py -v                          # RL observation/action/env
+PYTHONPATH=src pytest tests/test_rl_training.py -v                 # Training manager mocks
+PYTHONPATH=src pytest tests/test_rl_callbacks.py -v                # SB3 callback coverage
+PYTHONPATH=src pytest tests/test_rl_environment.py -v               # Env wrapper lifecycle
+PYTHONPATH=src pytest tests/test_rl_observation_action.py -v       # Observation/action deep tests
+PYTHONPATH=src pytest tests/test_scene_builder.py -v               # MJCF builder tests
+PYTHONPATH=src pytest tests/test_loader.py -v                      # Scene loader tests
+PYTHONPATH=src pytest tests/test_scene_generation.py -v            # Scene generation pipeline tests
+PYTHONPATH=src pytest tests/test_rewards.py -v                     # Reward function tests
+PYTHONPATH=src pytest tests/test_config.py -v                      # Configuration tests
 
-# Run with coverage
+# Run with coverage (requires pytest-cov)
 PYTHONPATH=src pytest tests/ --cov=surg_rl --cov-report=term-missing
 ```
 

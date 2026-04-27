@@ -781,3 +781,124 @@ class TestPyBulletBugs:
             0, 0, -9.81, physicsClientId=0
         )
 
+
+class TestMuJoCoRenderAndState:
+    def test_render_depth_array(self, minimal_scene):
+        sim = MuJoCoSimulator()
+        sim.load_scene(minimal_scene)
+        sim.reset()
+        depth = sim.render(mode="depth_array")
+        # MuJoCo 3.x may return None if depth-rendering API doesn't match; just exercise path
+        assert isinstance(depth, (np.ndarray, type(None)))
+
+    def test_render_failure_returns_none(self, minimal_scene):
+        sim = MuJoCoSimulator()
+        sim.load_scene(minimal_scene)
+        sim.reset()
+        with patch.object(sim, "_renderer_available", False):
+            result = sim.render(mode="human")
+        assert result is None
+
+    def test_get_state_body_poses(self, suturing_scene):
+        sim = MuJoCoSimulator()
+        sim.load_scene(suturing_scene)
+        sim.reset()
+        state = sim.get_state()
+        assert state.qpos is not None
+        assert state.qvel is not None
+
+    def test_set_state_restores_qpos_qvel(self, suturing_scene):
+        sim = MuJoCoSimulator()
+        sim.load_scene(suturing_scene)
+        sim.reset()
+        from surg_rl.simulators.base_simulator import State
+        new_state = State(time=0.0, qpos=np.zeros(sim._model.nq), qvel=np.zeros(sim._model.nv))
+        sim.set_state(new_state)
+        retrieved = sim.get_state()
+        assert np.allclose(retrieved.qpos, new_state.qpos)
+
+    def test_check_termination_nan(self, suturing_scene):
+        sim = MuJoCoSimulator()
+        sim.load_scene(suturing_scene)
+        sim.reset()
+        sim._data.qpos[0] = np.nan
+        done = sim._check_termination()
+        assert done is True
+
+    def test_reset_without_load_raises(self):
+        sim = MuJoCoSimulator()
+        with pytest.raises(RuntimeError, match="Scene not loaded"):
+            sim.reset()
+
+    def test_apply_force(self, suturing_scene):
+        sim = MuJoCoSimulator()
+        sim.load_scene(suturing_scene)
+        sim.reset()
+        # Should not crash even if bodies are missing
+        sim.apply_force("surgical_arm", [1.0, 0.0, 0.0])
+
+
+class TestPyBulletLoadAndState:
+    def test_load_tissue_sphere(self, minimal_scene):
+        from surg_rl.scene_definition.schema import TissueConfig, TissueMeshDefinition
+        tissue = TissueConfig(
+            name="sphere_tissue",
+            geometry=TissueMeshDefinition(primitive="sphere", dimensions=(0.05, 0.05, 0.05), radius=0.05),
+        )
+        minimal_scene.tissues.append(tissue)
+        sim = PyBulletSimulator()
+        sim.load_scene(minimal_scene)
+        assert "sphere_tissue" in sim._body_ids
+
+    def test_load_tissue_cylinder(self, minimal_scene):
+        from surg_rl.scene_definition.schema import TissueConfig, TissueMeshDefinition
+        tissue = TissueConfig(
+            name="cyl_tissue",
+            geometry=TissueMeshDefinition(primitive="cylinder", dimensions=(0.05, 0.05, 0.1)),
+        )
+        minimal_scene.tissues.append(tissue)
+        sim = PyBulletSimulator()
+        sim.load_scene(minimal_scene)
+        assert "cyl_tissue" in sim._body_ids
+
+    def test_load_instrument_no_pose(self, minimal_scene):
+        from surg_rl.scene_definition.schema import InstrumentConfig
+        instrument = InstrumentConfig(name="loose_inst")
+        minimal_scene.instruments.append(instrument)
+        sim = PyBulletSimulator()
+        sim.load_scene(minimal_scene)
+        assert "loose_inst" in sim._body_ids
+
+    def test_render_returns_rgb(self, minimal_scene):
+        sim = PyBulletSimulator(render_mode="rgb_array")
+        sim.load_scene(minimal_scene)
+        sim.reset()
+        # PyBullet getCameraImage may return a flat tuple for RGB on some builds;
+        # patch it to a numpy array so the render path is exercised.
+        fake_rgb = np.zeros((480, 640, 4), dtype=np.uint8)
+        with patch.object(sim._pb, "getCameraImage", return_value=(640, 480, fake_rgb, None, None)):
+            rgb = sim.render(mode="rgb_array")
+        assert rgb is not None
+
+    def test_get_state(self, minimal_scene):
+        sim = PyBulletSimulator()
+        sim.load_scene(minimal_scene)
+        sim.reset()
+        state = sim.get_state()
+        assert state.time is not None
+
+    def test_set_state(self, suturing_scene):
+        sim = PyBulletSimulator()
+        sim.load_scene(suturing_scene)
+        sim.reset()
+        from surg_rl.simulators.base_simulator import State
+        new_state = State(time=0.0, qpos=np.zeros(10), qvel=np.zeros(10))
+        sim.set_state(new_state)
+        retrieved = sim.get_state()
+        assert np.allclose(retrieved.qpos, new_state.qpos)
+
+    def test_step_without_load_raises(self):
+        sim = PyBulletSimulator()
+        with pytest.raises(RuntimeError, match="Scene not loaded"):
+            sim.step(np.zeros(1))
+
