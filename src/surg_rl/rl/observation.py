@@ -33,6 +33,10 @@ class ObservationType(str, Enum):
     TOOL_POSITIONS = "tool_positions"
     DISTANCE_TO_TARGET = "distance_to_target"
     ANGLE_TO_TARGET = "angle_to_target"
+    NEEDLE_POS = "needle_pos"
+    ENTRY_POINT = "entry_point"
+    EXIT_POINT = "exit_point"
+    INCISION_PROGRESS = "incision_progress"
     CUSTOM = "custom"
 
 
@@ -272,6 +276,47 @@ SEGMENTATION_SPEC = ObservationSpec(
     description="Segmentation mask",
 )
 
+# Task-specific observations
+NEEDLE_POS_SPEC = ObservationSpec(
+    name="needle_pos",
+    obs_type=ObservationType.NEEDLE_POS,
+    shape=(3,),
+    low=-1.0 * np.ones(3),
+    high=1.0 * np.ones(3),
+    normalize=True,
+    description="Needle tool position (x, y, z)",
+)
+
+ENTRY_POINT_SPEC = ObservationSpec(
+    name="entry_point",
+    obs_type=ObservationType.ENTRY_POINT,
+    shape=(3,),
+    low=-1.0 * np.ones(3),
+    high=1.0 * np.ones(3),
+    normalize=True,
+    description="Suture entry point on tissue (x, y, z)",
+)
+
+EXIT_POINT_SPEC = ObservationSpec(
+    name="exit_point",
+    obs_type=ObservationType.EXIT_POINT,
+    shape=(3,),
+    low=-1.0 * np.ones(3),
+    high=1.0 * np.ones(3),
+    normalize=True,
+    description="Suture exit point on tissue (x, y, z)",
+)
+
+INCISION_PROGRESS_SPEC = ObservationSpec(
+    name="incision_progress",
+    obs_type=ObservationType.INCISION_PROGRESS,
+    shape=(1,),
+    low=np.zeros(1),
+    high=np.ones(1),
+    normalize=True,
+    description="Incision completion ratio (0.0–1.0)",
+)
+
 
 # ============================================================================
 # Observation Builder
@@ -290,6 +335,10 @@ DEFAULT_SPECS: Dict[ObservationType, ObservationSpec] = {
     ObservationType.TARGET_QUAT: TARGET_QUAT_SPEC,
     ObservationType.DISTANCE_TO_TARGET: DISTANCE_TO_TARGET_SPEC,
     ObservationType.ANGLE_TO_TARGET: ANGLE_TO_TARGET_SPEC,
+    ObservationType.NEEDLE_POS: NEEDLE_POS_SPEC,
+    ObservationType.ENTRY_POINT: ENTRY_POINT_SPEC,
+    ObservationType.EXIT_POINT: EXIT_POINT_SPEC,
+    ObservationType.INCISION_PROGRESS: INCISION_PROGRESS_SPEC,
     ObservationType.RGB_IMAGE: RGB_IMAGE_SPEC,
     ObservationType.DEPTH_IMAGE: DEPTH_IMAGE_SPEC,
     ObservationType.SEGMENTATION: SEGMENTATION_SPEC,
@@ -638,6 +687,24 @@ class ObservationBuilder:
             if observation.custom.get("tool_positions") is not None:
                 return np.array(observation.custom["tool_positions"])
             return self._fallback_cache[spec.name]
+
+        elif obs_type == ObservationType.NEEDLE_POS:
+            if observation.needle_pos is not None:
+                return observation.needle_pos.copy()
+            return self._fallback_cache[spec.name]
+
+        elif obs_type == ObservationType.ENTRY_POINT:
+            if observation.entry_point is not None:
+                return observation.entry_point.copy()
+            return self._fallback_cache[spec.name]
+
+        elif obs_type == ObservationType.EXIT_POINT:
+            if observation.exit_point is not None:
+                return observation.exit_point.copy()
+            return self._fallback_cache[spec.name]
+
+        elif obs_type == ObservationType.INCISION_PROGRESS:
+            return np.array([observation.incision_progress], dtype=spec.dtype)
 
         elif obs_type == ObservationType.CUSTOM:
             if spec.name in observation.custom:

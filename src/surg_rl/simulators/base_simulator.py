@@ -44,6 +44,10 @@ class Observation:
     force_torque: Optional[np.ndarray] = None
     tissue_state: Optional[Dict[str, np.ndarray]] = None
     collision_detected: bool = False
+    needle_pos: Optional[np.ndarray] = None
+    entry_point: Optional[np.ndarray] = None
+    exit_point: Optional[np.ndarray] = None
+    incision_progress: float = 0.0
     custom: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -57,6 +61,11 @@ class Observation:
             "end_effector_quat": self.end_effector_quat,
             "force_torque": self.force_torque,
             "tissue_state": self.tissue_state,
+            "collision_detected": self.collision_detected,
+            "needle_pos": self.needle_pos,
+            "entry_point": self.entry_point,
+            "exit_point": self.exit_point,
+            "incision_progress": self.incision_progress,
             "custom": self.custom,
         }
 
