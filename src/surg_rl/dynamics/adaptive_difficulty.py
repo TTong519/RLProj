@@ -247,12 +247,24 @@ class AdaptiveDifficultyController(BaseController):
             mass_ratio = snapshot.physics["mass_ratio"]
             if hasattr(simulator, "set_mass_ratio"):
                 simulator.set_mass_ratio(mass_ratio)
+            elif hasattr(simulator, "set_body_property"):
+                for b in getattr(snapshot, "bodies", []) or []:
+                    try:
+                        simulator.set_body_property(b, "mass", mass_ratio)
+                    except Exception:
+                        pass
 
         # Apply friction if present
         if "friction" in snapshot.physics:
             friction = snapshot.physics["friction"]
             if hasattr(simulator, "set_friction"):
                 simulator.set_friction(friction)
+            elif hasattr(simulator, "set_body_property"):
+                for b in getattr(snapshot, "bodies", []) or []:
+                    try:
+                        simulator.set_body_property(b, "friction", friction)
+                    except Exception:
+                        pass
 
         return True
 

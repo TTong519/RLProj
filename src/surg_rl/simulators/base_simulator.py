@@ -380,6 +380,22 @@ class BaseSimulator(ABC):
         """
         return None
 
+    def set_body_property(self, body_name: str, property_name: str, value: float) -> bool:
+        """Set a named property on a body.
+
+        Subclasses should override to support backend-specific property setting
+        (e.g., mass via MuJoCo body_mass, friction via PyBullet dynamics).
+
+        Args:
+            body_name: Name of the body.
+            property_name: Property name (e.g., 'mass', 'friction').
+            value: New value.
+
+        Returns:
+            True if applied successfully.
+        """
+        return False
+
     def __enter__(self):
         """Context manager entry."""
         return self

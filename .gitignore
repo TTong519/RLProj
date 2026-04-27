@@ -98,3 +98,5 @@ logs/
 # Temporary files
 demo_results/
 *.tmp
+.opencode/
+.claude/worktrees/

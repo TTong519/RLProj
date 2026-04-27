@@ -502,7 +502,7 @@ class PyBulletSimulator(BaseSimulator):
             physicsClientId=self._physics_client,
         )
 
-        _, _, rgb, _, _ = self._pb.getCameraImage(
+        _, _, rgb, depth, seg = self._pb.getCameraImage(
             width=width,
             height=height,
             viewMatrix=view_matrix,
@@ -510,7 +510,24 @@ class PyBulletSimulator(BaseSimulator):
             physicsClientId=self._physics_client,
         )
 
-        return rgb[:, :, :3]  # Remove alpha channel
+        rgb_array = rgb[:, :, :3] if hasattr(rgb, 'shape') else (
+            np.array(rgb).reshape((height, width, 4))[:, :, :3]
+            if len(rgb) == width * height * 4 else
+            np.zeros((height, width, 3), dtype=np.uint8)
+        )
+
+        # Store depth for later retrieval via render('depth_array')
+        if isinstance(depth, (tuple, list)):
+            try:
+                self._last_depth = np.array(depth).reshape((height, width, 1))
+            except Exception:
+                self._last_depth = None
+        elif isinstance(depth, np.ndarray):
+            self._last_depth = depth.reshape((height, width, 1)) if depth.ndim == 1 else depth
+        else:
+            self._last_depth = None
+
+        return rgb_array
 
     def get_state(self) -> State:
         """Get current simulation state."""
@@ -588,6 +605,41 @@ class PyBulletSimulator(BaseSimulator):
                     orn.tolist() if hasattr(orn, 'tolist') else orn,
                     physicsClientId=self._physics_client,
                 )
+
+    def set_body_property(self, body_name: str, property_name: str, value: float) -> bool:
+        """Set a named property on a body (mass or friction).
+
+        Args:
+            body_name: Name of the body.
+            property_name: Property name ('mass' or 'friction').
+            value: New value.
+
+        Returns:
+            True if applied successfully.
+        """
+        if not self._loaded or body_name not in self._body_ids:
+            return False
+        try:
+            body_id = self._body_ids[body_name]
+            if property_name == "mass":
+                self._pb.changeDynamics(
+                    body_id,
+                    -1,
+                    mass=max(value, 1e-6),
+                    physicsClientId=self._physics_client,
+                )
+                return True
+            elif property_name == "friction":
+                self._pb.changeDynamics(
+                    body_id,
+                    -1,
+                    lateralFriction=max(value, 0.0),
+                    physicsClientId=self._physics_client,
+                )
+                return True
+        except Exception:
+            pass
+        return False
 
     def close(self) -> None:
         """Clean up simulator resources."""

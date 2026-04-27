@@ -445,6 +445,42 @@ class MuJoCoSimulator(BaseSimulator):
 
         self._mujoco.mj_forward(self._model, self._data)
 
+    def set_body_property(self, body_name: str, property_name: str, value: float) -> bool:
+        """Set a named property on a body (mass or friction).
+
+        Args:
+            body_name: Name of the body.
+            property_name: Property name ('mass' or 'friction').
+            value: New value.
+
+        Returns:
+            True if applied successfully.
+        """
+        if not self._loaded or self._model is None or self._data is None:
+            return False
+        try:
+            body_id = self._mujoco.mj_name2id(
+                self._model, self._mujoco.mjtObj.mjOBJ_BODY, body_name
+            )
+            if body_id < 0:
+                return False
+            if property_name == "mass":
+                if body_id < len(self._model.body_mass):
+                    self._model.body_mass[body_id] = value
+                    return True
+            elif property_name == "friction":
+                geom_start = self._model.body_geomadr[body_id]
+                geom_num = self._model.body_geomnum[body_id]
+                if geom_num > 0:
+                    friction_arr_len = len(self._model.geom_friction[geom_start])
+                    for g in range(geom_start, geom_start + geom_num):
+                        for d in range(friction_arr_len):
+                            self._model.geom_friction[g][d] = max(value, 0.0)
+                    return True
+        except Exception:
+            pass
+        return False
+
     def close(self) -> None:
         """Clean up simulator resources."""
         if self._viewer is not None:
