@@ -53,6 +53,7 @@ class PyBulletSimulator(BaseSimulator):
         self._physics_client = None
         self._body_ids: Dict[str, int] = {}
         self._joint_ids: Dict[str, Dict[str, int]] = {}
+        self._control_map: List[Dict[str, Any]] = []
         self._initial_positions: Dict[str, list] = {}  # Store initial positions
         self._initial_orientations: Dict[str, list] = {}  # Store initial orientations
 
@@ -134,6 +135,7 @@ class PyBulletSimulator(BaseSimulator):
         self._load_environment(scene_definition)
 
         self._loaded = True
+        self._build_control_map()
         
         # Let objects settle by stepping simulation a few times
         # This prevents objects from having initial velocities that cause them to fly off
@@ -598,6 +600,50 @@ class PyBulletSimulator(BaseSimulator):
         self._loaded = False
         self.scene_builder.cleanup()
 
+    def _build_control_map(self) -> None:
+        """Build mapping from flat action indices to PyBullet joint indices.
+
+        Populates self._control_map with dicts:
+        {"robot_name": str, "joint_name": str, "ctrl_index": int,
+         "is_gripper": bool}
+        """
+        self._control_map = []
+        if not self._loaded or not self._scene or not self._scene.robots:
+            return
+        ctrl_idx = 0
+        for robot in self._scene.robots:
+            joint_dict = self._joint_ids.get(robot.name, {})
+            for joint_name in sorted(joint_dict.keys()):
+                self._control_map.append(
+                    {
+                        "robot_name": robot.name,
+                        "joint_name": joint_name,
+                        "ctrl_index": ctrl_idx,
+                        "is_gripper": False,
+                    }
+                )
+                ctrl_idx += 1
+            # Minimal gripper placeholder (TODO: implement real gripper actuation)
+            if robot.end_effectors:
+                self._control_map.append(
+                    {
+                        "robot_name": robot.name,
+                        "joint_name": "gripper",
+                        "ctrl_index": ctrl_idx,
+                        "is_gripper": True,
+                    }
+                )
+                ctrl_idx += 1
+
+    def get_num_controls(self) -> int:
+        """Return number of controllable DOFs."""
+        if self._control_map:
+            return len(self._control_map)
+        total = 0
+        for joints in self._joint_ids.values():
+            total += len(joints)
+        return total
+
     def _apply_action(self, action: np.ndarray) -> None:
         """Apply action to the simulation.
 
@@ -607,6 +653,34 @@ class PyBulletSimulator(BaseSimulator):
         if action is None or len(action) == 0:
             return
 
+        # Use mapping if available
+        if self._control_map:
+            for mapping in self._control_map:
+                idx = mapping["ctrl_index"]
+                if idx >= len(action):
+                    continue
+                if mapping.get("is_gripper"):
+                    continue  # TODO real gripper actuation
+                robot_name = mapping["robot_name"]
+                joint_name = mapping["joint_name"]
+                if robot_name not in self._body_ids:
+                    continue
+                body_id = self._body_ids[robot_name]
+                joint_idx = self._joint_ids[robot_name].get(joint_name)
+                if joint_idx is None:
+                    continue
+                target = float(action[idx])
+                self._pb.setJointMotorControl2(
+                    body_id,
+                    joint_idx,
+                    self._pb.POSITION_CONTROL,
+                    targetPosition=target,
+                    force=100.0,
+                    physicsClientId=self._physics_client,
+                )
+            return
+
+        # Fallback sequential
         idx = 0
         for robot_name, joint_dict in self._joint_ids.items():
             if robot_name not in self._body_ids:

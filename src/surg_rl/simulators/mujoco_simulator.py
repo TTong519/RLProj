@@ -125,10 +125,77 @@ class MuJoCoSimulator(BaseSimulator):
             self._model = self._mujoco.MjModel.from_xml_path(str(self._mjcf_path))
             self._data = self._mujoco.MjData(self._model)
             self._loaded = True
+            self._build_control_map()
             logger.info(f"Loaded scene: {scene_definition.metadata.name}")
         except Exception as e:
             logger.error(f"Failed to load MuJoCo model: {e}")
             raise RuntimeError(f"Failed to load MuJoCo model: {e}")
+
+    def _build_control_map(self) -> None:
+        """Build mapping from flat action indices to MuJoCo ctrl indices.
+
+        Populates self._control_map with dicts:
+        {"robot_name": str, "joint_name": str, "ctrl_index": int,
+         "is_gripper": bool}
+        """
+        self._control_map = []
+        if not self._loaded or not self._scene or not self._scene.robots:
+            return
+        for robot in self._scene.robots:
+            if robot.joints:
+                for joint in robot.joints:
+                    ctrl_name = f"{joint.name}_motor"
+                    try:
+                        ctrl_idx = self._mujoco.mj_name2id(
+                            self._model, self._mujoco.mjtObj.mjOBJ_ACTUATOR, ctrl_name
+                        )
+                        if ctrl_idx >= 0:
+                            self._control_map.append(
+                                {
+                                    "robot_name": robot.name,
+                                    "joint_name": joint.name,
+                                    "ctrl_index": ctrl_idx,
+                                    "is_gripper": False,
+                                }
+                            )
+                    except Exception:
+                        pass
+            else:
+                ctrl_name = f"{robot.name}_motor"
+                try:
+                    ctrl_idx = self._mujoco.mj_name2id(
+                        self._model, self._mujoco.mjtObj.mjOBJ_ACTUATOR, ctrl_name
+                    )
+                    if ctrl_idx >= 0:
+                        self._control_map.append(
+                            {
+                                "robot_name": robot.name,
+                                "joint_name": f"{robot.name}_joint",
+                                "ctrl_index": ctrl_idx,
+                                "is_gripper": False,
+                            }
+                        )
+                except Exception:
+                    pass
+            # Minimal gripper placeholder (TODO: implement real gripper actuation)
+            if robot.end_effectors and self._data is not None:
+                if len(self._data.ctrl) > len(self._control_map):
+                    self._control_map.append(
+                        {
+                            "robot_name": robot.name,
+                            "joint_name": "gripper",
+                            "ctrl_index": len(self._control_map),
+                            "is_gripper": True,
+                        }
+                    )
+
+    def get_num_controls(self) -> int:
+        """Return number of controllable DOFs."""
+        if self._control_map:
+            return len(self._control_map)
+        if self._loaded and hasattr(self._data, "ctrl"):
+            return len(self._data.ctrl)
+        return 0
 
     def reset(self, seed: Optional[int] = None) -> Observation:
         """Reset the simulation to initial state.
@@ -397,6 +464,72 @@ class MuJoCoSimulator(BaseSimulator):
         # Clean up scene builder temp files
         self.scene_builder.cleanup()
 
+    def _build_control_map(self) -> None:
+        """Build mapping from flat action indices to MuJoCo ctrl indices.
+
+        Populates self._control_map with dicts:
+        {"robot_name": str, "joint_name": str, "ctrl_index": int,
+         "is_gripper": bool}
+        """
+        self._control_map = []
+        if not self._loaded or not self._scene or not self._scene.robots:
+            return
+        for robot in self._scene.robots:
+            if robot.joints:
+                for joint in robot.joints:
+                    ctrl_name = f"{joint.name}_motor"
+                    try:
+                        ctrl_idx = self._mujoco.mj_name2id(
+                            self._model, self._mujoco.mjtObj.mjOBJ_ACTUATOR, ctrl_name
+                        )
+                        if ctrl_idx >= 0:
+                            self._control_map.append(
+                                {
+                                    "robot_name": robot.name,
+                                    "joint_name": joint.name,
+                                    "ctrl_index": ctrl_idx,
+                                    "is_gripper": False,
+                                }
+                            )
+                    except Exception:
+                        pass
+            else:
+                ctrl_name = f"{robot.name}_motor"
+                try:
+                    ctrl_idx = self._mujoco.mj_name2id(
+                        self._model, self._mujoco.mjtObj.mjOBJ_ACTUATOR, ctrl_name
+                    )
+                    if ctrl_idx >= 0:
+                        self._control_map.append(
+                            {
+                                "robot_name": robot.name,
+                                "joint_name": f"{robot.name}_joint",
+                                "ctrl_index": ctrl_idx,
+                                "is_gripper": False,
+                            }
+                        )
+                except Exception:
+                    pass
+            # Minimal gripper placeholder (TODO: implement real gripper actuation)
+            if robot.end_effectors and self._data is not None:
+                if len(self._data.ctrl) > len(self._control_map):
+                    self._control_map.append(
+                        {
+                            "robot_name": robot.name,
+                            "joint_name": "gripper",
+                            "ctrl_index": len(self._control_map),
+                            "is_gripper": True,
+                        }
+                    )
+
+    def get_num_controls(self) -> int:
+        """Return number of controllable DOFs."""
+        if self._control_map:
+            return len(self._control_map)
+        if self._loaded and hasattr(self._data, "ctrl"):
+            return len(self._data.ctrl)
+        return 0
+
     def _apply_action(self, action: np.ndarray) -> None:
         """Apply action to the simulation.
 
@@ -406,7 +539,15 @@ class MuJoCoSimulator(BaseSimulator):
         if action is None or len(action) == 0:
             return
 
-        # Apply to controls (if defined)
+        if self._control_map:
+            for i, mapping in enumerate(self._control_map):
+                if i < len(action):
+                    ctrl_idx = mapping["ctrl_index"]
+                    if ctrl_idx < len(self._data.ctrl):
+                        self._data.ctrl[ctrl_idx] = action[i]
+            return
+
+        # Fallback: apply sequentially
         if hasattr(self._data, 'ctrl') and len(self._data.ctrl) > 0:
             n_controls = min(len(action), len(self._data.ctrl))
             self._data.ctrl[:n_controls] = action[:n_controls]

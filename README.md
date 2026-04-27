@@ -270,22 +270,38 @@ Example scenes are provided in the `scenes/` directory:
 # Run all tests
 PYTHONPATH=src pytest tests/ -v
 
-# Run dynamics tests
+# Run specific module tests
 PYTHONPATH=src pytest tests/test_dynamics.py -v
+PYTHONPATH=src pytest tests/test_schema.py -v
+PYTHONPATH=src pytest tests/test_simulators.py -v
+PYTHONPATH=src pytest tests/test_cli.py -v
+PYTHONPATH=src pytest tests/test_rl_training.py -v
+PYTHONPATH=src pytest tests/test_rl_callbacks.py -v
+PYTHONPATH=src pytest tests/test_rl_environment.py -v
+PYTHONPATH=src pytest tests/test_rl_observation_action.py -v
+PYTHONPATH=src pytest tests/test_scene_builder.py -v
+PYTHONPATH=src pytest tests/test_scene_generation.py -v
+PYTHONPATH=src pytest tests/test_rewards.py -v
+PYTHONPATH=src pytest tests/test_loader.py -v
 
 # Run with coverage
 PYTHONPATH=src pytest tests/ --cov=surg_rl --cov-report=html
 ```
 
-Current test status: **All core module tests passing**
+Current test status: **487 passed, 2 skipped**
 
 | Module | Tests | Coverage |
 |--------|-------|----------|
-| scene_definition | 45 | 92% |
-| scene_generation | 35 | 88% |
-| simulators | 45 | 85% |
-| dynamics | 37 | 90% |
-| config | 15 | 95% |
+| scene_definition | 118 | 94% |
+| scene_generation | 59 | 92% |
+| simulators | 60 | 92% |
+| dynamics | 66 | 94% |
+| rl (training) | 167 | 92% |
+| config | 10 | 96% |
+| **Total** | **487** | **~92%** |
+
+**Current Version:** 0.1.0
+**Status:** All core components complete, tested, and documented
 
 ## Roadmap
 

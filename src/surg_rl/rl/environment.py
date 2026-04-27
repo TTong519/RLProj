@@ -222,14 +222,23 @@ class SurgicalEnv(gym.Env):
         )
 
     def _default_action_config(self) -> ActionConfig:
-        """Create default action config based on scene.
+        """Create default action config based on scene and simulator.
 
         Returns:
             ActionConfig object.
         """
         num_joints = 7  # Default 7-DOF
-        if self._scene and self._scene.robots:
-            # Use the first robot's joint count
+        include_gripper = False
+        if self._simulator is not None:
+            try:
+                sim_controls = self._simulator.get_num_controls()
+            except Exception:
+                sim_controls = 0
+            if isinstance(sim_controls, int) and sim_controls > 0:
+                num_joints = sim_controls
+                include_gripper = False
+        elif self._scene and self._scene.robots:
+            # Fallback to scene definition joint count
             first_robot = self._scene.robots[0]
             if hasattr(first_robot, "joints") and first_robot.joints:
                 num_joints = len(first_robot.joints)
@@ -237,7 +246,7 @@ class SurgicalEnv(gym.Env):
         return ActionConfig(
             action_type=ActionType.JOINT_POSITIONS,
             num_joints=num_joints,
-            include_gripper=True,
+            include_gripper=include_gripper,
             scaling=ActionScaling.NORMALIZE,
         )
 

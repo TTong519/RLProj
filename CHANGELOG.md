@@ -8,9 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Initial public release preparation
-- Comprehensive documentation suite
-- GitHub community files (LICENSE, CODE_OF_CONDUCT, CONTRIBUTING)
+- **138 new tests** across 11 test files, raising total from 349 to 487 passing
+- `tests/test_cli.py` — CLI subprocess tests for version, config, setup, generate, train, evaluate
+- `tests/test_rl_training.py` — Mock-based TrainingManager tests for algorithm errors, env creation, model creation, training loop, evaluation, save/load, cleanup
+- `tests/test_rl_callbacks.py` — SB3 callback tests for progress, checkpoint, curriculum, evaluation, TensorBoard logging
+- `tests/test_rl_environment.py` — SurgicalEnv lifecycle tests for render modes, truncation, controller setup, state management
+- `tests/test_rl_observation_action.py` — Deep coverage of observation/action builders: flat space, quaternion, unflatten, normalize shape mismatch, discrete space, tanh scaling, relative actions
+- `tests/test_scene_builder.py` — MJCF builder tests for asset resolution, ground plane, camera, lights, tissue primitives, instrument
+- Extended `tests/test_dynamics.py` with curriculum edge cases (threshold, max stage, custom stage, reset, auto-advance), adaptive difficulty (base params, scale, mass/friction, disabled passthrough), parameter randomizer (disabled, gravity range)
+- Extended `tests/test_simulators.py` with MuJoCo render/state/NaN termination/apply_force and PyBullet tissue/instrument/render/state tests
+- Extended `tests/test_scene_generation.py` with mocked LLM/VLM parsing and SceneComposer merge logic
+- Extended `tests/test_rewards.py` with uncovered branches: distance from info, unknown shape, max/unknown penalty type, collision force, task-specific defaults
+- Extended `tests/test_loader.py` with `validate=False` no-crash, YAML enum conversion, empty `list_scenes`, cache deep-copy
+
+### Fixed
+- `cli.py`: `json.dumps(scene.model_dump())` → `model_dump(mode="json")` to prevent `TypeError` with Enum fields
+- `scene_definition/loader.py`: Guard asset validation with `validate and self.validate_assets` to avoid `AttributeError` on unvalidated model instances
+- `simulators/pybullet_simulator.py`: Guard `tissue.geometry.primitive` and `instrument.pose` against `None`; fix malformed `_load_environment` if-statement; correct ground plane check to use `environment.ground_plane`
+- `simulators/scene_builder.py`: Correct ground plane check from `physics.ground_plane` to `environment.ground_plane`
+- `dynamics/adaptive_difficulty.py`: Align `mass_ratio`/`friction` keys between `_get_base_parameters` and `apply_parameters`
+- `dynamics/curriculum.py`: Guard `list.index()` against custom stages; use `hasattr(simulator, "_physics_client")` instead of `_pb` per project rules
 
 ## [0.1.0] - 2026-04-07
 
