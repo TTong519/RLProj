@@ -269,6 +269,40 @@ class MuJoCoSimulator(BaseSimulator):
             logger.debug(f"Rendering failed: {e}")
             return None
 
+    def get_camera_image(
+        self,
+        camera_name: str,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+    ) -> Optional[np.ndarray]:
+        """Render an RGB image from a named scene camera.
+
+        Resolves the camera definition from `self._scene.environment.cameras`
+        and renders via MuJoCo 3.x by looking up the camera ID by name.
+        """
+        if not self._loaded or self._model is None or self._data is None:
+            return None
+        width = width or self.render_width
+        height = height or self.render_height
+        try:
+            cam_id = self._mujoco.mj_name2id(
+                self._model, self._mujoco.mjOBJ_CAMERA, camera_name
+            )
+        except Exception:
+            logger.warning(f"Camera '{camera_name}' not found in MuJoCo model.")
+            return None
+        if self._renderer is None:
+            self._renderer = self._mujoco.Renderer(self._model, height=height, width=width)
+        elif self._renderer.width != width or self._renderer.height != height:
+            try:
+                self._renderer.close()
+            except Exception:
+                pass
+            self._renderer = self._mujoco.Renderer(self._model, height=height, width=width)
+        self._mujoco.mj_forward(self._model, self._data)
+        self._renderer.update_scene(self._data, camera=cam_id)
+        return self._renderer.render()
+
     def get_state(self) -> State:
         """Get current simulation state.
 

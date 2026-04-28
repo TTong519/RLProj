@@ -217,25 +217,20 @@ class TrainingManager:
             )
 
         algo_name = self.config.algorithm.name.upper()
-        if algo_name == "PPO":
-            from stable_baselines3 import PPO
-            return PPO
-        elif algo_name == "SAC":
-            from stable_baselines3 import SAC
-            return SAC
-        elif algo_name == "TD3":
-            from stable_baselines3 import TD3
-            return TD3
-        elif algo_name == "DDPG":
-            from stable_baselines3 import DDPG
-            return DDPG
-        elif algo_name == "A2C":
-            from stable_baselines3 import A2C
-            return A2C
-        else:
+        try:
+            import importlib
+            module_name, class_name = self.ALGORITHM_MAP[algo_name].rsplit(".", 1)
+            module = importlib.import_module(module_name)
+            return getattr(module, class_name)
+        except KeyError:
             raise ValueError(
                 f"Unknown algorithm: {algo_name}. "
                 f"Supported: {list(self.ALGORITHM_MAP.keys())}"
+            )
+        except ImportError:
+            raise ImportError(
+                f"Algorithm {algo_name} import failed. "
+                "Ensure stable-baselines3 is installed: pip install stable-baselines3"
             )
 
     def _create_environment(self):

@@ -470,6 +470,59 @@ class PyBulletSimulator(BaseSimulator):
                 physicsClientId=self._physics_client,
             )
 
+    def get_camera_image(
+        self,
+        camera_name: str,
+        width: int | None = None,
+        height: int | None = None,
+    ) -> np.ndarray | None:
+        """Render from a named scene camera (scene.environment.cameras)."""
+        if not self._loaded:
+            return None
+        width = width or self.render_width
+        height = height or self.render_height
+        camera_pos = np.array([0.5, 0.0, 1.0], dtype=float)
+        target_pos = np.array([0.0, 0.0, 0.0], dtype=float)
+        # Attempt to resolve camera from scene definition
+        scene = getattr(self, "_scene", None)
+        if scene is not None and scene.environment is not None:
+            for cam in scene.environment.cameras:
+                if cam.name == camera_name:
+                    p = cam.pose.position
+                    camera_pos = np.array([p.x, p.y, p.z], dtype=float)
+                    if cam.look_at:
+                        la = cam.look_at
+                        target_pos = np.array([la.x, la.y, la.z], dtype=float)
+                    else:
+                        # Default: look slightly forward/down
+                        target_pos = camera_pos + np.array([0.3, 0.0, -0.3], dtype=float)
+                    break
+        else:
+            logger.warning(
+                f"Camera '{camera_name}' not defined in scene; using fallback position."
+            )
+        view_matrix = self._pb.computeViewMatrix(
+            cameraEyePosition=camera_pos.tolist(),
+            cameraTargetPosition=target_pos.tolist(),
+            cameraUpVector=[0, 0, 1],
+            physicsClientId=self._physics_client,
+        )
+        proj_matrix = self._pb.computeProjectionMatrixFOV(
+            fov=60,
+            aspect=width / height,
+            nearVal=0.1,
+            farVal=100.0,
+            physicsClientId=self._physics_client,
+        )
+        _, _, rgb, _, _ = self._pb.getCameraImage(
+            width=width,
+            height=height,
+            viewMatrix=view_matrix,
+            projectionMatrix=proj_matrix,
+            physicsClientId=self._physics_client,
+        )
+        return rgb
+
     def reset(self, seed: int | None = None) -> Observation:
         """Reset the simulation."""
         if not self._loaded:

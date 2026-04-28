@@ -17,6 +17,9 @@ from .base_controller import (
     ParameterBounds,
     ParameterSnapshot,
 )
+from surg_rl.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class CurriculumStage(Enum):
@@ -277,36 +280,116 @@ class CurriculumScheduler(BaseController):
 
     def apply_parameters(
         self,
-        snapshot: ParameterSnapshot,
-        simulator: Any,
+        snapshot,
+        simulator,
     ) -> bool:
         """Apply curriculum parameters to simulator.
-        
-        This is typically delegated to a ParameterRandomizer instance.
-        The curriculum scheduler primarily manages stage progression.
-        
+
+        Expands beyond gravity to include mass, friction, damping, and stiffness
+        when the simulator exposes the appropriate APIs.
+
         Args:
             snapshot: Parameters to apply.
             simulator: Simulator instance.
-            
+
         Returns:
             True if successful, False otherwise.
         """
         try:
-            if hasattr(simulator, "setGravity") and "gravity_x" in snapshot.physics:
+            # --- Physics ---
+            # Gravity
+            if "gravity_x" in snapshot.physics:
                 gx = snapshot.physics.get("gravity_x", 0.0)
                 gy = snapshot.physics.get("gravity_y", 0.0)
                 gz = snapshot.physics.get("gravity_z", -9.81)
-                simulator.setGravity(gx, gy, gz)
-            elif hasattr(simulator, "_physics_client") and "gravity_x" in snapshot.physics:
-                import pybullet as p
-                gx = snapshot.physics.get("gravity_x", 0.0)
-                gy = snapshot.physics.get("gravity_y", 0.0)
-                gz = snapshot.physics.get("gravity_z", -9.81)
-                p.setGravity(
-                    gx, gy, gz,
-                    physicsClientId=simulator._physics_client,
-                )
+                if hasattr(simulator, "setGravity"):
+                    simulator.setGravity(gx, gy, gz)
+                elif hasattr(simulator, "_physics_client"):
+                    import pybullet as p
+
+                    p.setGravity(
+                        gx,
+                        gy,
+                        gz,
+                        physicsClientId=simulator._physics_client,
+                    )
+
+            # Mass ratio applied via simulator.set_body_property when available
+            if "mass_ratio" in snapshot.physics and hasattr(
+                simulator, "set_body_property"
+            ):
+                ratio = snapshot.physics["mass_ratio"]
+                # Discover body names from simulator internals
+                body_names = []
+                if hasattr(simulator, "_body_ids"):
+                    body_names.extend(simulator._body_ids.keys())
+                elif hasattr(simulator, "_scene") and simulator._scene is not None:
+                    scene = simulator._scene
+                    body_names.extend(r.name for r in getattr(scene, "robots", []))
+                    body_names.extend(t.name for t in getattr(scene, "tissues", []))
+                    body_names.extend(i.name for i in getattr(scene, "instruments", []))
+                for name in body_names:
+                    try:
+                        simulator.set_body_property(name, "mass", ratio)
+                    except Exception:
+                        pass
+
+            # Friction coefficient applied via set_body_property
+            if "friction" in snapshot.physics and hasattr(
+                simulator, "set_body_property"
+            ):
+                friction = snapshot.physics["friction"]
+                body_names = []
+                if hasattr(simulator, "_body_ids"):
+                    body_names.extend(simulator._body_ids.keys())
+                elif hasattr(simulator, "_scene") and simulator._scene is not None:
+                    scene = simulator._scene
+                    body_names.extend(r.name for r in getattr(scene, "robots", []))
+                    body_names.extend(t.name for t in getattr(scene, "tissues", []))
+                for name in body_names:
+                    try:
+                        simulator.set_body_property(name, "friction", friction)
+                    except Exception:
+                        pass
+
+            # Damping coefficient (MuJoCo direct / PyBullet fallback)
+            if "damping" in snapshot.physics:
+                damping = snapshot.physics["damping"]
+                if hasattr(simulator, "_model") and hasattr(
+                    simulator._model, "dof_damping"
+                ):
+                    simulator._model.dof_damping[:] = damping
+                elif hasattr(simulator, "_physics_client") and hasattr(
+                    simulator, "_body_ids"
+                ):
+                    import pybullet as p
+
+                    for body_id in simulator._body_ids.values():
+                        p.changeDynamics(
+                            body_id,
+                            -1,
+                            linearDamping=damping,
+                            angularDamping=damping,
+                            physicsClientId=simulator._physics_client,
+                        )
+
+            # Stiffness (soft-body) — only MuJoCo flex has this natively
+            if "stiffness" in snapshot.physics:
+                stiffness = snapshot.physics["stiffness"]
+                if hasattr(simulator, "_model") and hasattr(
+                    simulator._model, "flex_stiffness"
+                ):
+                    try:
+                        simulator._model.flex_stiffness[:] = stiffness
+                    except Exception:
+                        pass
+
+            # --- Visual ---
+            if snapshot.visual and hasattr(simulator, "set_body_property"):
+                intensity = snapshot.visual.get("lighting_intensity")
+                if intensity is not None:
+                    # No universal lighting setter; log for now
+                    logger.debug(f"Visual parameter lighting_intensity={intensity} not applied (no simulator API)")
             return True
         except Exception:
             return False

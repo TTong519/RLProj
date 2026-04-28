@@ -16,6 +16,8 @@ from surg_rl.scene_definition import SceneDefinition
 from surg_rl.utils.config import get_settings
 from surg_rl.utils.logging import get_logger
 
+from pydantic import ValidationError
+
 from .base_parser import BaseParser, ParserError, ParseValidationError
 from .prompts.text_prompts import SYSTEM_PROMPT
 from .prompts.vision_prompts import (
@@ -307,11 +309,23 @@ class VisionParser(BaseParser):
             scene = self.validate_scene(scene_data)
             logger.info(f"Successfully parsed scene: {scene.metadata.name}")
             return scene
+        except ValidationError as e:
+            details: Dict[str, Any] = {
+                "raw_response": scene_data,
+                "errors": [
+                    {"loc": list(err.get("loc", [])), "msg": err.get("msg", "")}
+                    for err in e.errors()
+                ],
+            }
+            raise ParseValidationError(
+                f"Scene validation failed: {e}",
+                details=details,
+            ) from e
         except Exception as e:
             raise ParseValidationError(
                 f"Scene validation failed: {e}",
                 details={"raw_response": scene_data, "error": str(e)},
-            )
+            ) from e
 
     async def parse_with_context(
         self,

@@ -62,6 +62,7 @@ from .callbacks import (
     CheckpointCallback,
     CurriculumCallback,
     EvaluationCallback,
+    TensorBoardCallback,
     TrainingProgressCallback,
 )
 
@@ -187,5 +188,6 @@ __all__ = [
     "CheckpointCallback",
     "CurriculumCallback",
     "EvaluationCallback",
+    "TensorBoardCallback",
     "TrainingProgressCallback",
 ]
