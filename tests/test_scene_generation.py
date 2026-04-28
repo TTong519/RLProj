@@ -674,3 +674,64 @@ class TestSceneComposerMerge:
         result = composer._merge_two_scenes(a, b)
         names = {r.name for r in result.robots}
         assert names == {"r1", "r2"}
+
+    def test_merge_duplicate_name_same_type_raises(self):
+        """Two robots with the same name raises ValueError."""
+        from surg_rl.scene_generation.scene_composer import SceneComposer
+        from surg_rl.scene_definition import SceneDefinition, Metadata, RobotConfig
+        composer = SceneComposer()
+        a = SceneDefinition(
+            metadata=Metadata(name="a"),
+            robots=[RobotConfig(name="arm", urdf_path="a.urdf")],
+        )
+        b = SceneDefinition(
+            metadata=Metadata(name="b"),
+            robots=[RobotConfig(name="arm", urdf_path="b.urdf")],
+        )
+        with pytest.raises(ValueError, match="Duplicate entity name 'arm' during scene merge"):
+            composer._merge_two_scenes(a, b)
+
+    def test_merge_duplicate_name_different_type_ok(self):
+        """A robot and a tissue with the same name does NOT raise."""
+        from surg_rl.scene_generation.scene_composer import SceneComposer
+        from surg_rl.scene_definition import (
+            SceneDefinition, Metadata, RobotConfig, TissueConfig, TissueMeshDefinition,
+        )
+        composer = SceneComposer()
+        a = SceneDefinition(
+            metadata=Metadata(name="a"),
+            robots=[RobotConfig(name="arm", urdf_path="a.urdf")],
+        )
+        b = SceneDefinition(
+            metadata=Metadata(name="b"),
+            tissues=[TissueConfig(name="arm", geometry=TissueMeshDefinition(primitive="box", dimensions=(1.0, 1.0, 1.0)))],
+        )
+        result = composer._merge_two_scenes(a, b)
+        assert len(result.robots) == 1
+        assert len(result.tissues) == 1
+
+    def test_merge_domain_randomization_preserves_scene1_defaults(self):
+        """scene1 has explicit physics.enabled=True; scene2 has default DR; merged keeps it."""
+        from surg_rl.scene_generation.scene_composer import SceneComposer
+        from surg_rl.scene_definition import (
+            SceneDefinition, Metadata, DomainRandomizationConfig,
+        )
+        composer = SceneComposer()
+        dr1 = DomainRandomizationConfig(physics={"enabled": True})
+        a = SceneDefinition(metadata=Metadata(name="a"), domain_randomization=dr1)
+        b = SceneDefinition(metadata=Metadata(name="b"))
+        result = composer._merge_two_scenes(a, b)
+        assert result.domain_randomization.physics.enabled is True
+
+    def test_merge_environment_not_clobbered_by_defaults(self):
+        """scene1 has fog_enabled=True and background_color set; scene2 has no explicit env."""
+        from surg_rl.scene_generation.scene_composer import SceneComposer
+        from surg_rl.scene_definition import SceneDefinition, Metadata, EnvironmentConfig, RgbColor
+        composer = SceneComposer()
+        env1 = EnvironmentConfig(fog_enabled=True, background_color=RgbColor(r=0.2, g=0.3, b=0.4, a=1.0))
+        a = SceneDefinition(metadata=Metadata(name="a"), environment=env1)
+        b = SceneDefinition(metadata=Metadata(name="b"))
+        result = composer._merge_two_scenes(a, b)
+        assert result.environment.fog_enabled is True
+        assert result.environment.background_color.r == pytest.approx(0.2)
+

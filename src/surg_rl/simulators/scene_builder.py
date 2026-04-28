@@ -434,11 +434,11 @@ f 5 1 4 8
         env = getattr(scene_definition, "environment", None)
         if env is not None:
             # Add cameras
-            for camera in env.cameras:
+            for camera in getattr(env, "cameras", None) or []:
                 self._add_camera_to_mjcf(worldbody, camera)
 
             # Add lights
-            for light in env.lights:
+            for light in getattr(env, "lights", None) or []:
                 self._add_light_to_mjcf(worldbody, light)
 
         # Write to file
@@ -465,7 +465,8 @@ f 5 1 4 8
             resolved = self.resolve_asset_path(robot.urdf_path)
             if resolved:
                 urdf_resolved = True
-                ET.SubElement(mujoco, "include", file=str(resolved))
+                # TODO: full URDF-in-MuJoCo support requires conversion or direct loading.
+                return
             else:
                 logger.warning(f"Robot URDF not found: {robot.urdf_path}. Using primitive.")
 
@@ -480,9 +481,8 @@ f 5 1 4 8
         body.set("pos", pos)
         body.set("quat", quat)
 
-        if not urdf_resolved:
-            # Add simple geometry for now (box as placeholder)
-            ET.SubElement(body, "geom", name=f"{robot.name}_body", type="box", size="0.05 0.05 0.1")
+        # Add simple geometry for now (box as placeholder)
+        ET.SubElement(body, "geom", name=f"{robot.name}_body", type="box", size="0.05 0.05 0.1")
 
         # Add joints
         if robot.joints:

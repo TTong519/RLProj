@@ -95,8 +95,21 @@ def _get_visual_schema_example() -> Dict[str, Any]:
             "gravity": [0.0, 0.0, -9.81],
             "timestep": 0.002,
         },
+        "domain_randomization": {
+            "physics": {
+                "enabled": False,
+            },
+        },
+        "assets": {},
         "environment": {
             "name": "surgical_environment",
+            "fog_enabled": False,
+            "surgical_table": {
+                "name": "OR_table",
+            },
+            "skybox": {
+                "path": "sky.hdr",
+            },
             "lights": [
                 {
                     "name": "main_light",
@@ -118,13 +131,73 @@ def _get_visual_schema_example() -> Dict[str, Any]:
                 }
             ],
         },
-        "robots": [],
-        "tissues": [],
-        "instruments": [],
+        "robots": [
+            {
+                "name": "robot_name",
+                "type": "robotic_arm",
+                "urdf_path": "path/to/robot.urdf",
+                "base_pose": {
+                    "position": {"x": 0.0, "y": 0.0, "z": 0.0},
+                    "orientation": {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0},
+                },
+                "joints": [
+                    {
+                        "name": "joint1",
+                        "type": "revolute",
+                        "axis": [0.0, 0.0, 1.0],
+                    }
+                ],
+                "end_effectors": [
+                    {
+                        "name": "gripper",
+                        "type": "gripper",
+                    }
+                ],
+            }
+        ],
+        "tissues": [
+            {
+                "name": "tissue_name",
+                "type": "skin",
+                "geometry": {
+                    "primitive": "box",
+                    "dimensions": [0.1, 0.1, 0.01],
+                },
+                "physics": {
+                    "stiffness": 5000.0,
+                    "damping": 0.1,
+                    "density": 1000.0,
+                },
+                "pose": {
+                    "position": {"x": 0.3, "y": 0.0, "z": 0.05},
+                    "orientation": {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0},
+                },
+            }
+        ],
+        "instruments": [
+            {
+                "name": "scalpel",
+                "type": "scalpel",
+                "cutting": True,
+            }
+        ],
         "task": {
             "name": "visual_task",
             "description": "Task derived from visual analysis",
-            "objectives": [],
+            "objectives": [
+                {
+                    "name": "objective_name",
+                    "description": "Objective description",
+                    "success_criteria": "Success criteria description",
+                    "weight": 1.0,
+                }
+            ],
+            "constraints": [
+                {
+                    "name": "tissue_boundary",
+                    "description": "Stay within tissue",
+                }
+            ],
         },
         "simulator": "mujoco",
     }

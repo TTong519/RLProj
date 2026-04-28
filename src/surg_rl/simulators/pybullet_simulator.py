@@ -100,29 +100,21 @@ class PyBulletSimulator(BaseSimulator):
             self._initial_orientations.clear()
 
         # Configure physics
-        if (
-            hasattr(scene_definition, "physics")
-            and scene_definition.physics is not None
-            and hasattr(scene_definition.physics, "gravity")
-        ):
+        physics = getattr(scene_definition, "physics", None)
+        if physics is not None:
             self._pb.setGravity(
-                scene_definition.physics.gravity[0],
-                scene_definition.physics.gravity[1],
-                scene_definition.physics.gravity[2],
+                getattr(physics, "gravity", [0, 0, -9.81])[0],
+                getattr(physics, "gravity", [0, 0, -9.81])[1],
+                getattr(physics, "gravity", [0, 0, -9.81])[2],
+                physicsClientId=self._physics_client,
+            )
+            self._pb.setTimeStep(
+                getattr(physics, "timestep", self.timestep),
                 physicsClientId=self._physics_client,
             )
         else:
             self._pb.setGravity(0, 0, -9.81, physicsClientId=self._physics_client)
-
-        if (
-            hasattr(scene_definition, "physics")
-            and scene_definition.physics is not None
-            and hasattr(scene_definition.physics, "timestep")
-        ):
-            self._pb.setTimeStep(
-                scene_definition.physics.timestep,
-                physicsClientId=self._physics_client,
-            )
+            self._pb.setTimeStep(self.timestep, physicsClientId=self._physics_client)
 
         # Load robots
         for robot in scene_definition.robots:
@@ -577,7 +569,7 @@ class PyBulletSimulator(BaseSimulator):
         terminated = self._check_termination()
         truncated = self._check_truncation()
 
-        info = {"simulation_time": self._simulation_time}
+        info = {"simulation_time": self._simulation_time, "collateral_damage": 0.0}
 
         return StepResult(observation=obs, reward=reward, terminated=terminated, truncated=truncated, info=info)
 
@@ -600,10 +592,7 @@ class PyBulletSimulator(BaseSimulator):
             return None
 
         if camera_name is not None:
-            logger.warning(
-                f"Named camera rendering is not yet supported (requested '{camera_name}'). "
-                "Falling back to default view."
-            )
+            return self.get_camera_image(camera_name, width=width, height=height)
 
         # Offscreen rendering
         view_matrix = self._pb.computeViewMatrixFromYawPitchRoll(
@@ -1070,6 +1059,33 @@ class PyBulletSimulator(BaseSimulator):
                     break
             if obs.collision_detected:
                 break
+
+        # New observation fields (H7 wiring)
+        obs.thread_tension = np.array([0.0])
+        if self._scene is not None and self._scene.robots:
+            contacts = self.get_contact_points(self._scene.robots[0].name)
+            total_force = sum(c.get("normal_force", 0.0) for c in contacts)
+            obs.cut_force = np.array([total_force])
+        else:
+            obs.cut_force = np.array([0.0])
+
+        if self._scene is not None:
+            if len(self._scene.instruments) > 1:
+                pose = self.get_body_pose(self._scene.instruments[1].name)
+                if pose is not None:
+                    obs.receiver_pos = pose[0]
+            elif len(self._scene.robots) > 1:
+                pose = self.get_end_effector_pose(self._scene.robots[1].name)
+                if pose is not None:
+                    obs.receiver_pos = pose[0]
+
+        if self._scene is not None and self._scene.robots:
+            try:
+                ee = self.get_end_effector_pose(self._scene.robots[0].name)
+                if ee is not None:
+                    obs.tool_positions = np.concatenate([ee[0], ee[1][:3]])
+            except Exception:
+                pass
 
         return obs
 

@@ -337,9 +337,9 @@ class SceneComposer:
         for field in ["robots", "tissues", "instruments"]:
             merged_data[field] = merged_data.get(field, []) + scene2_data.get(field, [])
 
-        # Check for duplicate entity names
-        seen_names: set[str] = set()
+        # Check for duplicate entity names (per entity type)
         for field in ["robots", "tissues", "instruments"]:
+            seen_names: set[str] = set()
             for item in merged_data.get(field, []):
                 name = item.get("name")
                 if name is not None:
@@ -355,11 +355,11 @@ class SceneComposer:
             }
 
         # Merge environment (scene2's cameras/lights added)
-        if "environment" in scene2_data and scene2_data["environment"] is not None:
+        if "environment" in scene2.model_fields_set and scene2.environment is not None:
             env1 = merged_data.get("environment") or {}
-            env2 = scene2_data["environment"]
+            env2 = scene2.environment.model_dump(exclude_unset=True)
 
-            # Explicitly preserve certain fields from scene1 unless scene2 has non-None values
+            # Explicitly preserve certain fields from scene1 unless scene2 has set values
             merged_env: dict[str, Any] = {}
             preserve_fields = {
                 "surgical_table",
@@ -370,9 +370,7 @@ class SceneComposer:
             }
             for key in {*env1.keys(), *env2.keys()}:
                 if key in preserve_fields:
-                    merged_env[key] = (
-                        env2.get(key) if key in env2 and env2[key] is not None else env1.get(key)
-                    )
+                    merged_env[key] = env2.get(key) if key in env2 else env1.get(key)
                 elif key in ("cameras", "lights"):
                     merged_env[key] = (env1.get(key) or []) + (env2.get(key) or [])
                 else:
@@ -404,9 +402,9 @@ class SceneComposer:
             merged_data["task"] = scene2_data.get("task")
 
         # Deep-merge domain randomization
-        dr1 = merged_data.get("domain_randomization") or {}
-        dr2 = scene2_data.get("domain_randomization") or {}
-        if dr1 or dr2:
+        if "domain_randomization" in scene2.model_fields_set:
+            dr1 = merged_data.get("domain_randomization") or {}
+            dr2 = scene2.domain_randomization.model_dump(exclude_unset=True)
             merged_data["domain_randomization"] = self._deep_merge_dicts(dr1, dr2)
 
         # Use scene2's simulator only if explicitly set

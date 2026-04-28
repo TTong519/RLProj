@@ -191,3 +191,31 @@ class TestMJCFGeneration:
         content = mjcf.read_text()
         # Instrument should be added as a body or geom
         assert "body" in content.lower() or "geom" in content.lower()
+
+
+class TestSceneBuilderNoneLists:
+    """Regression tests for None camera/light lists."""
+
+    def test_scene_builder_environment_none_lists(self, tmp_path):
+        """MJCF generation must not crash when cameras or lights are None."""
+        builder = SceneBuilder(assets_dir=str(tmp_path))
+        scene = SceneDefinition(
+            metadata=Metadata(name="none_env"),
+        )
+        # Bypass Pydantic default factories by constructing manually
+        from surg_rl.scene_definition.schema import EnvironmentConfig
+        env = EnvironmentConfig.model_construct(
+            name="empty_room",
+            cameras=None,
+            lights=None,
+            ground_plane=None,
+            surgical_table=None,
+            environment_mesh=None,
+            background_color=None,
+        )
+        scene = scene.model_copy(update={"environment": env})
+        mjcf = builder.create_mjcf(scene, output_path=tmp_path / "scene.xml")
+        assert mjcf.exists()
+        content = mjcf.read_text()
+        # Should contain basic MJCF without cameras/lights
+        assert "mujoco" in content.lower()

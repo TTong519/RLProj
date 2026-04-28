@@ -110,8 +110,21 @@ def _get_minimal_schema_example() -> Dict[str, Any]:
             "gravity": [0.0, 0.0, -9.81],
             "timestep": 0.002,
         },
+        "domain_randomization": {
+            "physics": {
+                "enabled": False,
+            },
+        },
+        "assets": {},
         "environment": {
             "name": "environment_name",
+            "fog_enabled": False,
+            "surgical_table": {
+                "name": "OR_table",
+            },
+            "skybox": {
+                "path": "sky.hdr",
+            },
             "lights": [
                 {
                     "name": "main_light",
@@ -142,6 +155,19 @@ def _get_minimal_schema_example() -> Dict[str, Any]:
                     "position": {"x": 0.0, "y": 0.0, "z": 0.0},
                     "orientation": {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0},
                 },
+                "joints": [
+                    {
+                        "name": "joint1",
+                        "type": "revolute",
+                        "axis": [0.0, 0.0, 1.0],
+                    }
+                ],
+                "end_effectors": [
+                    {
+                        "name": "gripper",
+                        "type": "gripper",
+                    }
+                ],
             }
         ],
         "tissues": [
@@ -163,7 +189,13 @@ def _get_minimal_schema_example() -> Dict[str, Any]:
                 },
             }
         ],
-        "instruments": [],
+        "instruments": [
+            {
+                "name": "scalpel",
+                "type": "scalpel",
+                "cutting": True,
+            }
+        ],
         "task": {
             "name": "task_name",
             "description": "Task description",
@@ -173,6 +205,12 @@ def _get_minimal_schema_example() -> Dict[str, Any]:
                     "description": "Objective description",
                     "success_criteria": "Success criteria description",
                     "weight": 1.0,
+                }
+            ],
+            "constraints": [
+                {
+                    "name": "tissue_boundary",
+                    "description": "Stay within tissue",
                 }
             ],
         },

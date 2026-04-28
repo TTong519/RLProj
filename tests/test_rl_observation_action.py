@@ -88,6 +88,16 @@ class TestObservationBuilderDeep:
         result = builder.extract_observation(sim_obs)
         assert "tool_positions" in result
 
+    def test_extract_observation_tool_positions_native_field(self):
+        """M9: TOOL_POSITIONS must read observation.tool_positions, not custom."""
+        config = ObservationConfig(observation_types=[ObservationType.TOOL_POSITIONS])
+        builder = ObservationBuilder(config)
+        from surg_rl.simulators.base_simulator import Observation
+        sim_obs = Observation(tool_positions=np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6]))
+        result = builder.extract_observation(sim_obs)
+        assert "tool_positions" in result
+        assert not np.allclose(result["tool_positions"], 0.0)
+
 
 class TestActionBuilderDeep:
     def test_discrete_action_space(self):

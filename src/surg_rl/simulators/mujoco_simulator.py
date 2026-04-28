@@ -80,12 +80,8 @@ class MuJoCoSimulator(BaseSimulator):
         # On macOS, check if we have a display connection
         import platform
         if platform.system() == 'Darwin':
-            # macOS uses CGL, not EGL
-            # Simple heuristic: if DISPLAY is not set, assume no display
-            if os.environ.get('DISPLAY'):
-                self._renderer_available = True
-            else:
-                self._renderer_available = False
+            # macOS uses CGL, not EGL; just try initialising Renderer
+            self._renderer_available = True
             return self._renderer_available
         
         # For Linux, try EGL for headless GPU rendering
@@ -185,6 +181,7 @@ class MuJoCoSimulator(BaseSimulator):
         # Info
         info = {
             "simulation_time": self._simulation_time,
+            "collateral_damage": 0.0,
             "robot_positions": self._data.qpos.copy() if self._data.qpos is not None else None,
         }
 
@@ -254,8 +251,19 @@ class MuJoCoSimulator(BaseSimulator):
 
             # Update scene and render
             self._mujoco.mj_forward(self._model, self._data)
-            self._renderer.update_scene(self._data)
-            
+            cam_id = -1
+            if camera_name is not None:
+                try:
+                    cam_id = self._mujoco.mj_name2id(
+                        self._model, self._mujoco.mjtObj.mjOBJ_CAMERA, camera_name
+                    )
+                except Exception:
+                    logger.warning(f"Camera '{camera_name}' not found in MuJoCo model.")
+            if cam_id >= 0:
+                self._renderer.update_scene(self._data, camera=cam_id)
+            else:
+                self._renderer.update_scene(self._data)
+
             if mode == "depth_array":
                 # Get depth image
                 depth = self._renderer.render(depth=True)
@@ -644,6 +652,31 @@ class MuJoCoSimulator(BaseSimulator):
                     1 for obj in task.objectives if "complete" in obj.success_criteria.lower()
                 )
                 obs.incision_progress = completed / total if total > 0 else 0.0
+
+        # New observation fields (H7 wiring)
+        obs.thread_tension = np.array([0.0])
+        if obs.force_torque is not None:
+            obs.cut_force = np.array([np.linalg.norm(obs.force_torque[:3])])
+        else:
+            obs.cut_force = np.array([0.0])
+
+        if self._scene is not None:
+            if len(self._scene.instruments) > 1:
+                pose = self.get_body_pose(self._scene.instruments[1].name)
+                if pose is not None:
+                    obs.receiver_pos = pose[0]
+            elif len(self._scene.robots) > 1:
+                pose = self.get_end_effector_pose(self._scene.robots[1].name)
+                if pose is not None:
+                    obs.receiver_pos = pose[0]
+
+        if self._scene is not None and self._scene.robots:
+            try:
+                ee = self.get_end_effector_pose(self._scene.robots[0].name)
+                if ee is not None:
+                    obs.tool_positions = np.concatenate([ee[0], ee[1][:3]])
+            except Exception:
+                pass
 
         return obs
 

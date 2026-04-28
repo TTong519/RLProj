@@ -81,6 +81,14 @@ class TestSuturingReward:
         assert result.total == 0.0
         assert result.components == {}
 
+    def test_suturing_reward_with_thread_tension(self):
+        """H7: SuturingReward must penalise non-zero thread_tension."""
+        reward_fn = SuturingReward(weight=1.0, tension_threshold=0.5)
+        obs = {"thread_tension": np.array([1.0])}
+        result = reward_fn.compute(obs, np.zeros(7), {})
+        assert result.total < 0
+        assert "thread_tension" in result.components
+
 
 # ============================================================================
 # Dissection Reward Tests
@@ -139,6 +147,14 @@ class TestDissectionReward:
         reward_fn.compute(obs, np.zeros(7), {})
         reward_fn.reset()
         assert reward_fn._prev_progress == 0.0
+
+    def test_dissection_reward_with_cut_force(self):
+        """H7: DissectionReward must use cut_force observation."""
+        reward_fn = DissectionReward(weight=1.0, force_threshold=2.0, clean_cut_bonus=2.0)
+        obs = {"cut_force": np.array([5.0])}
+        result = reward_fn.compute(obs, np.zeros(7), {"cutting": True})
+        assert result.total == 0.0  # force above threshold → no bonus
+        assert "clean_cut" not in result.components
 
 
 # ============================================================================
@@ -205,6 +221,17 @@ class TestNeedlePassingReward:
         result = reward_fn.compute({}, np.zeros(7), {})
         assert result.total == 0.0
         assert result.components == {}
+
+    def test_needle_passing_reward_with_receiver_pos(self):
+        """H7: NeedlePassingReward must compute distance-based reward with receiver_pos."""
+        reward_fn = NeedlePassingReward(weight=1.0, handoff_threshold=0.02)
+        obs = {
+            "needle_pos": np.array([0.0, 0.0, 0.0]),
+            "receiver_pos": np.array([0.01, 0.0, 0.0]),
+        }
+        result = reward_fn.compute(obs, np.zeros(7), {})
+        assert result.total > 0
+        assert "handoff_proximity" in result.components
 
 
 # ============================================================================

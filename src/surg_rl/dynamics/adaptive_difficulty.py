@@ -242,29 +242,39 @@ class AdaptiveDifficultyController(BaseController):
             except Exception:
                 pass
 
-        # Apply mass ratio if present
-        if "mass_ratio" in snapshot.physics:
+        # Apply mass ratio
+        if "mass_ratio" in snapshot.physics and hasattr(simulator, "set_body_property"):
             mass_ratio = snapshot.physics["mass_ratio"]
-            if hasattr(simulator, "set_mass_ratio"):
-                simulator.set_mass_ratio(mass_ratio)
-            elif hasattr(simulator, "set_body_property"):
-                for b in getattr(snapshot, "bodies", []) or []:
-                    try:
-                        simulator.set_body_property(b, "mass", mass_ratio)
-                    except Exception:
-                        pass
+            body_names = []
+            if hasattr(simulator, "_body_ids"):
+                body_names.extend(simulator._body_ids.keys())
+            elif hasattr(simulator, "_scene") and simulator._scene is not None:
+                scene = simulator._scene
+                body_names.extend(r.name for r in getattr(scene, "robots", []))
+                body_names.extend(t.name for t in getattr(scene, "tissues", []))
+                body_names.extend(i.name for i in getattr(scene, "instruments", []))
+            for name in body_names:
+                try:
+                    simulator.set_body_property(name, "mass", mass_ratio)
+                except Exception:
+                    pass
 
-        # Apply friction if present
-        if "friction" in snapshot.physics:
+        # Apply friction (same body discovery pattern)
+        if "friction" in snapshot.physics and hasattr(simulator, "set_body_property"):
             friction = snapshot.physics["friction"]
-            if hasattr(simulator, "set_friction"):
-                simulator.set_friction(friction)
-            elif hasattr(simulator, "set_body_property"):
-                for b in getattr(snapshot, "bodies", []) or []:
-                    try:
-                        simulator.set_body_property(b, "friction", friction)
-                    except Exception:
-                        pass
+            body_names = []
+            if hasattr(simulator, "_body_ids"):
+                body_names.extend(simulator._body_ids.keys())
+            elif hasattr(simulator, "_scene") and simulator._scene is not None:
+                scene = simulator._scene
+                body_names.extend(r.name for r in getattr(scene, "robots", []))
+                body_names.extend(t.name for t in getattr(scene, "tissues", []))
+                body_names.extend(i.name for i in getattr(scene, "instruments", []))
+            for name in body_names:
+                try:
+                    simulator.set_body_property(name, "friction", friction)
+                except Exception:
+                    pass
 
         return True
 

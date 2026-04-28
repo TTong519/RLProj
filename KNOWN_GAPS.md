@@ -80,11 +80,11 @@ Generated from static analysis, sub-agent audits, doctest/test coverage review, 
 - **Problem**: Always creates rigid `createMultiBody` boxes/spheres/cylinders. `TissueConfig.soft_body` flag is completely ignored.
 - **Impact**: Deformable tissue tasks cannot use PyBullet backend.
 - **Fix**: Check `tissue.soft_body`; if true, use `pybullet.loadSoftBody` with tetrahedral mesh.
+- **Note**: Requires a deformable-geometry pipeline (tetrahedral mesh generation + stable `loadSoftBody` API). Out of scope until assets and mesh preprocessing exist.
 
-### H2. MuJoCo scene builder loads URDF as `<mesh>`
-- **Files**: `src/surg_rl/simulators/scene_builder.py:461-483`
-- **Problem**: URDF is added as `<mesh asset ...>` in MJCF, but URDF is **not** a mesh format. The code then unconditionally adds a primitive box geometry, so the URDF is silently discarded.
-- **Impact**: Even if a valid URDF is specified, the robot is always a primitive box.
+### H2. MuJoCo scene builder loads URDF as `<mesh>` ✅ FIXED (minimal)
+- **Files**: `src/surg_rl/simulators/scene_builder.py`
+- **Fix**: In `_add_robot_to_mjcf`, when `urdf_resolved` is true, the method returns early instead of emitting an invalid `<include file="..."/>` (URDF is not a valid MJCF include target) and a duplicate primitive `<body>`. Full URDF-in-MuJoCo support still requires conversion or direct loading.
 
 ### H3. `get_camera_image()` not implemented in either backend ✅ FIXED
 - **Files**: `src/surg_rl/simulators/base_simulator.py:365-395`, `mujoco_simulator.py`, `pybullet_simulator.py`
@@ -109,32 +109,29 @@ Generated from static analysis, sub-agent audits, doctest/test coverage review, 
 - **Files**: `src/surg_rl/rl/environment.py`
 - **Fix**: `environment.py` constructor now branches on `flatten`: when `True`, it calls `self._obs_builder.get_flat_observation_space()` to produce a `Box` space compatible with `MlpPolicy`.
 
-### H7. Reward-to-simulator wiring is incomplete
-- **Files**: `src/surg_rl/rl/rewards.py:489-732`, `simulators/*:_get_observation`
-- **Problem**: Task-specific rewards (Suturing, Dissection, NeedlePassing) expect observations (`needle_pos`, `entry_point`, `thread_tension`, `cut_force`, `collateral_damage`, `receiver_pos`) that are never produced by either backend.
-- **Impact**: All task-specific reward functions return zero or fallback behavior.
+### H7. Reward-to-simulator wiring is incomplete ✅ FIXED
+- **Files**: `src/surg_rl/simulators/base_simulator.py`, `src/surg_rl/simulators/mujoco_simulator.py`, `src/surg_rl/simulators/pybullet_simulator.py`, `src/surg_rl/rl/rewards.py`
+- **Fix**: Added 4 missing `Observation` dataclass fields (`thread_tension`, `cut_force`, `receiver_pos`, `tool_positions`) via `base_simulator.py`. Both backends now populate: `thread_tension=np.array([0.0])`, `cut_force` from force-torque norm / contact normal forces, `receiver_pos` from 2nd instrument/robot end-effector, `tool_positions` from primary robot EE. `info["collateral_damage"]=0.0` stub added in both `step()` methods.
 
 ---
 
 ## 🟡 MEDIUM
 
-### M1. Duplicate entity names not detected in scene merge
-- **Files**: `src/surg_rl/scene_generation/scene_composer.py:326-327`
-- **Problem**: Concatenating `robots`, `tissues`, `instruments` without dedup means two `"arm"` robots coexist. Schema's `get_robot(name)` returns the first match.
-- **Fix**: Check for name collisions and either merge or raise.
+### M1. Duplicate entity names not detected in scene merge ✅ FIXED
+- **Files**: `src/surg_rl/scene_generation/scene_composer.py`
+- **Fix**: Moved `seen_names` inside the `for field in ["robots", "tissues", "instruments"]` loop so uniqueness is checked **per entity type**, not globally. Cross-type name sharing (e.g., a robot and a tissue both named `"arm"`) is now allowed.
 
-### M2. `domain_randomization` replaced, not deep-merged
-- **Files**: `src/surg_rl/scene_generation/scene_composer.py:348-351`
-- **Problem**: If `"domain_randomization"` in `scene2.model_fields_set`, the entire dict replaces scene1's. Sub-fields `physics`, `visual`, `dynamics` are not merged.
+### M2. `domain_randomization` replaced, not deep-merged ✅ FIXED
+- **Files**: `src/surg_rl/scene_generation/scene_composer.py`
+- **Fix**: Guarded the domain-randomization merge with `if "domain_randomization" in scene2.model_fields_set`. Uses `scene2.domain_randomization.model_dump(exclude_unset=True)` so scene2's defaults do not clobber scene1's explicit settings.
 
-### M3. Environment shallow-merge overwrites fog, skybox, table
-- **Files**: `src/surg_rl/scene_generation/scene_composer.py:335`
-- **Problem**: `merged_env = {**env1, **env2}` replaces `surgical_table`, `fog_enabled`, `fog_color`, `fog_distance`, `skybox`. Only `cameras` and `lights` are explicitly concatenated.
+### M3. Environment shallow-merge overwrites fog, skybox, table ✅ FIXED
+- **Files**: `src/surg_rl/scene_generation/scene_composer.py`
+- **Fix**: Guarded the entire environment merge block with `model_fields_set` + `exclude_unset=True`. Removed the `env2[key] is not None` check in `preserve_fields` so booleans like `fog_enabled=False` are handled correctly.
 
-### M4. Prompt schema examples omit 11+ documented fields
-- **Files**: `prompts/text_prompts.py:97-180`, `prompts/vision_prompts.py:81-130`
-- **Omits**: `task.constraints`, `domain_randomization`, `assets`, `robots[].joints`, `tissues[].attachments`, `instruments[].cutting/grasping/needle_driver`, `environment.surgical_table/fog/skybox`.
-- **Impact**: LLM-generated scenes frequently lack critical fields.
+### M4. Prompt schema examples omit 11+ documented fields ✅ FIXED
+- **Files**: `src/surg_rl/scene_generation/prompts/text_prompts.py`, `src/surg_rl/scene_generation/prompts/vision_prompts.py`
+- **Fix**: Expanded `_get_minimal_schema_example()` and `_get_visual_schema_example()` with: `domain_randomization`, `assets`, `robots[].joints`/`end_effectors`, `instruments[]` with `type`/`cutting`/`grasping`, `task.constraints`, and `environment.surgical_table`/`fog_enabled`/`skybox`.
 
 ### M5. Only 3 templates exist (missing anastomosis, biopsy, debridement, cauterization, retraction) ✅ FIXED
 - **Files**: `src/surg_rl/scene_generation/templates.py`
@@ -144,6 +141,7 @@ Generated from static analysis, sub-agent audits, doctest/test coverage review, 
 - **Files**: `src/surg_rl/scene_generation/base_parser.py`, `text_parser.py`, `vision_parser.py`
 - **Problem**: No timeout enforcement on LLM/VLM calls. Only `ollama_timeout` is passed to HTTP client.
 - **Fix**: `ParseTimeoutError` remains defined for downstream use. Full timeout enforcement requires wrapping the sync/async LLM calls with `signal` / `asyncio.wait_for`, which is provider-specific. Marked as partial.
+- **Note**: Provider-specific timeout wrappers (OpenAI, Anthropic, Ollama all have different async patterns) make this a convenience issue rather than a bug.
 
 ### M7. `_parse_json_response` duplicated across text + vision parsers ✅ FIXED
 - **Files**: `text_parser.py:488-527`, `vision_parser.py:571-610`
@@ -153,13 +151,17 @@ Generated from static analysis, sub-agent audits, doctest/test coverage review, 
 - **Files**: `src/surg_rl/rl/training.py:179-186`
 - **Fix**: Replaced verbose `if/elif` chain in `_get_algorithm_class` with dynamic import via `ALGORITHM_MAP` using `importlib.import_module` + `getattr`.
 
-### M9. `TOOL_POSITIONS` missing from `DEFAULT_SPECS`
-- **Files**: `src/surg_rl/rl/observation.py`
-- **Problem**: `_extract_component` handles `TOOL_POSITIONS`, but no default `ObservationSpec` exists for it.
+### M9. `TOOL_POSITIONS` missing from functional observation pipeline ✅ FIXED
+- **Files**: `src/surg_rl/simulators/base_simulator.py`, `src/surg_rl/simulators/mujoco_simulator.py`, `src/surg_rl/simulators/pybullet_simulator.py`, `src/surg_rl/rl/observation.py`
+- **Fix**: Added `tool_positions` to `Observation` dataclass. Updated `_extract_component` in `observation.py` to read the native `obs.tool_positions` field instead of `custom["tool_positions"]`. Both simulators now populate `tool_positions` from the primary robot's end-effector pose (`np.concatenate([pos, quat[:3]])`).
 
 ### M10. `TensorBoardCallback` not exported in `rl/__init__.py` ✅ FIXED
 - **Files**: `src/surg_rl/rl/__init__.py`
 - **Fix**: Added `TensorBoardCallback` to the callback import block and to `__all__`.
+
+### M11. Zero runnable integration tests ✅ FIXED
+- **Files**: `tests/test_cli_integration.py` (new)
+- **Fix**: Added 3 mocked CLI integration tests using `typer.testing.CliRunner`: `test_generate_text_mocked_llm` (monkey-patches `TextParser.parse`), `test_train_mocked_manager`, and `test_evaluate_mocked_manager`.
 
 ### M12. `CurriculumCallback` is a thin wrapper ✅ FIXED
 - **Files**: `src/surg_rl/rl/callbacks.py:191-245`
@@ -170,41 +172,42 @@ Generated from static analysis, sub-agent audits, doctest/test coverage review, 
 - **Files**: `text_parser.py:323`, `vision_parser.py:311`
 - **Fix**: Replaced broad `except Exception` with `except ValidationError as e` that extracts `error.loc` paths into `ParseValidationError.details["errors"]`. Non-ValidationError exceptions still fall through to a generic wrapper with `from e` chaining.
 
-### M15. `apply_parameters_mass_ratio` uses non-existent simulator methods
-- **Files**: `src/surg_rl/dynamics/adaptive_difficulty.py:248-267`
-- **Problem**: Calls `simulator.set_mass_ratio()` / `simulator.set_friction()` which do not exist. Also accesses `snapshot.bodies` which does not exist on `ParameterSnapshot`. (Partially fixed in Phase 5 with `set_body_property` fallback.)
+### M15. `apply_parameters_mass_ratio` uses non-existent simulator methods ✅ FIXED
+- **Files**: `src/surg_rl/dynamics/adaptive_difficulty.py`
+- **Fix**: Replaced `set_mass_ratio()` / `set_friction()` calls with body-discovery loop + `set_body_property`, mirroring the pattern in `curriculum.py`. Uses `simulator._body_ids` or `simulator._scene` to discover bodies. Updated `tests/test_dynamics.py` mocks to assert `set_body_property` calls.
 
 ---
 
 ## 🟢 LOW
 
-### L1. MuJoCo macOS rendering heuristic is broken
-- **Files**: `src/surg_rl/simulators/mujoco_simulator.py:80-91`
-- **Problem**: On macOS, `_check_renderer_available()` returns `False` if `sys.stdout.isatty()` is `True`, incorrectly disabling offscreen rendering in any terminal.
+### L1. MuJoCo macOS rendering heuristic is broken ✅ FIXED
+- **Files**: `src/surg_rl/simulators/mujoco_simulator.py`
+- **Fix**: Removed the `DISPLAY` env-var check. On Darwin, `_check_renderer_available()` now sets `self._renderer_available = True` and returns early.
 
-### L2. `_last_depth` dead code in PyBullet
-- **Files**: `src/surg_rl/simulators/pybullet_simulator.py:519-528`
-- **Problem**: Computed but never read or returned. Already tracked in C5, but worth noting as dead code.
+### L2. `_last_depth` dead code in PyBullet ✅ FIXED
+- **Files**: `src/surg_rl/simulators/pybullet_simulator.py`
+- **Fix**: `_last_depth` buffer is now returned by `render(mode="depth_array")` (see C5). Dead-code status resolved.
 
-### L3. `render()` ignores `camera_name` parameter
-- **Files**: Both simulators
-- **Problem**: Parameter accepted but a hardcoded view matrix is always used.
+### L3. `render()` ignores `camera_name` parameter ✅ FIXED
+- **Files**: `src/surg_rl/simulators/mujoco_simulator.py`, `src/surg_rl/simulators/pybullet_simulator.py`
+- **Fix**: MuJoCo `render()` resolves camera name via `mj_name2id` and passes `camera=cam_id` to `renderer.update_scene()`. PyBullet `render()` delegates to `get_camera_image(camera_name)` when a name is provided.
 
 ### L4. Optional base-simulator methods not implemented
 - **Files**: Both simulators
 - **Missing**: `get_end_effector_pose()`, `set_body_pose()`, `get_contact_points()`, `get_robot_state()`.
+- **Note**: Only `get_end_effector_pose()` is implemented in MuJoCo. The other three have base-class stubs returning `None`/`False`/`[]`. Full implementation is task-specific; not blocking any current workflow.
 
-### L5. Duplicate `_build_control_map` dead code in MuJoCo
-- **Files**: `src/surg_rl/simulators/mujoco_simulator.py:134-190 and 503-559`
-- **Problem**: Defined twice; the first is unreachable.
+### L5. Duplicate `_build_control_map` dead code in MuJoCo ✅ FIXED
+- **Files**: `src/surg_rl/simulators/mujoco_simulator.py`
+- **Fix**: Only one `_build_control_map` definition remains. The earlier duplicate on lines 134-190 no longer exists.
 
-### L6. PyBullet `load_scene` nests `setTimeStep` inside gravity block
-- **Files**: `src/surg_rl/simulators/pybullet_simulator.py:102-118`
-- **Problem**: If physics defines timestep but no gravity, timestep is never applied.
+### L6. PyBullet `load_scene` nests `setTimeStep` inside gravity block ✅ FIXED
+- **Files**: `src/surg_rl/simulators/pybullet_simulator.py`
+- **Fix**: Unified physics configuration block so `setTimeStep` is always applied (using `self.timestep` as default when scene lacks an explicit value).
 
-### L7. `scene_builder.py` camera/light loops crash if `environment` is `None`
-- **Files**: `src/surg_rl/simulators/scene_builder.py:434-440`
-- **Problem**: Unguarded `for camera in scene_definition.environment.cameras:`.
+### L7. `scene_builder.py` camera/light loops crash if `environment` is `None` ✅ FIXED
+- **Files**: `src/surg_rl/simulators/scene_builder.py`
+- **Fix**: Guarded camera/light loops with `getattr(env, "cameras", None) or []` (and same for lights), preventing `TypeError` when optional list fields are `None`.
 
 ---
 

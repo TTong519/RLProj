@@ -782,10 +782,11 @@ def test_adaptive_difficulty_applies_mass_and_friction():
         visual={}, dynamics={}, episode=1, step=0,
     )
     simulator = MagicMock()
+    simulator._body_ids = {"body1": 1}
 
     controller.apply_parameters(snapshot, simulator)
 
-    assert simulator.set_mass_ratio.called or simulator.set_friction.called, \
+    assert simulator.set_body_property.called, \
         "apply_parameters did not apply mass_ratio or friction"
 
 
@@ -965,26 +966,30 @@ class TestAdaptiveDifficultyEdgeCases:
                 assert v == base[cat][k]
 
     def test_apply_parameters_mass_ratio_calls_simulator(self):
-        """apply_parameters calls set_mass_ratio on simulator if present."""
+        """apply_parameters calls set_body_property on simulator for mass."""
         ctrl = AdaptiveDifficultyController()
+        from unittest.mock import ANY
         from surg_rl.dynamics.base_controller import ParameterSnapshot
 
         snapshot = ParameterSnapshot(
             physics={"mass_ratio": 1.2, "gravity_variation": 0.0}
         )
         sim = MagicMock()
+        sim._body_ids = {"body1": 1}
         ctrl.apply_parameters(snapshot, sim)
-        sim.set_mass_ratio.assert_called_once_with(1.2)
+        sim.set_body_property.assert_called_with(ANY, "mass", 1.2)
 
     def test_apply_parameters_friction_calls_simulator(self):
-        """apply_parameters calls set_friction on simulator if present."""
+        """apply_parameters calls set_body_property on simulator for friction."""
         ctrl = AdaptiveDifficultyController()
+        from unittest.mock import ANY
         from surg_rl.dynamics.base_controller import ParameterSnapshot
 
         snapshot = ParameterSnapshot(physics={"friction": 0.5})
         sim = MagicMock()
+        sim._body_ids = {"body1": 1}
         ctrl.apply_parameters(snapshot, sim)
-        sim.set_friction.assert_called_once_with(0.5)
+        sim.set_body_property.assert_called_with(ANY, "friction", 0.5)
 
     def test_get_randomized_action_disabled(self):
         """When disabled, get_randomized_action returns action unchanged."""

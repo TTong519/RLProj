@@ -695,8 +695,8 @@ class ObservationBuilder:
             return self._fallback_cache[spec.name]
 
         elif obs_type == ObservationType.TOOL_POSITIONS:
-            if observation.custom.get("tool_positions") is not None:
-                return np.array(observation.custom["tool_positions"])
+            if observation.tool_positions is not None:
+                return observation.tool_positions.copy()
             return self._fallback_cache[spec.name]
 
         elif obs_type == ObservationType.NEEDLE_POS:

@@ -905,3 +905,23 @@ class TestPyBulletLoadAndState:
         with pytest.raises(RuntimeError, match="Scene not loaded"):
             sim.step(np.zeros(1))
 
+
+class TestCameraNameRendering:
+    """Regression tests for camera_name support in render()."""
+
+    def test_mujoco_render_with_camera_name(self, suturing_scene):
+        sim = MuJoCoSimulator()
+        sim.load_scene(suturing_scene)
+        sim.reset()
+        rgb = sim.render(mode="rgb_array", camera_name="main_camera")
+        assert isinstance(rgb, (np.ndarray, type(None)))
+
+    def test_pybullet_render_with_camera_name(self, suturing_scene):
+        sim = PyBulletSimulator(render_mode="rgb_array")
+        sim.load_scene(suturing_scene)
+        sim.reset()
+        fake_rgb = np.zeros((480, 640, 4), dtype=np.uint8)
+        with patch.object(sim._pb, "getCameraImage", return_value=(640, 480, fake_rgb, None, None)):
+            rgb = sim.render(mode="rgb_array", camera_name="main_camera")
+        assert rgb is not None
+

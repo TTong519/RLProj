@@ -48,6 +48,10 @@ class Observation:
     entry_point: Optional[np.ndarray] = None
     exit_point: Optional[np.ndarray] = None
     incision_progress: float = 0.0
+    thread_tension: Optional[np.ndarray] = None
+    cut_force: Optional[np.ndarray] = None
+    receiver_pos: Optional[np.ndarray] = None
+    tool_positions: Optional[np.ndarray] = None
     custom: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -66,6 +70,10 @@ class Observation:
             "entry_point": self.entry_point,
             "exit_point": self.exit_point,
             "incision_progress": self.incision_progress,
+            "thread_tension": self.thread_tension,
+            "cut_force": self.cut_force,
+            "receiver_pos": self.receiver_pos,
+            "tool_positions": self.tool_positions,
             "custom": self.custom,
         }
 
