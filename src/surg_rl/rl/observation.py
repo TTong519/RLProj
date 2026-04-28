@@ -317,6 +317,16 @@ INCISION_PROGRESS_SPEC = ObservationSpec(
     description="Incision completion ratio (0.0–1.0)",
 )
 
+TOOL_POSITIONS_SPEC = ObservationSpec(
+    name="tool_positions",
+    obs_type=ObservationType.TOOL_POSITIONS,
+    shape=(6,),  # position + orientation for primary tool
+    low=-1.0 * np.ones(6),
+    high=1.0 * np.ones(6),
+    normalize=True,
+    description="Tool end-effector position and orientation",
+)
+
 
 # ============================================================================
 # Observation Builder
@@ -342,6 +352,7 @@ DEFAULT_SPECS: Dict[ObservationType, ObservationSpec] = {
     ObservationType.RGB_IMAGE: RGB_IMAGE_SPEC,
     ObservationType.DEPTH_IMAGE: DEPTH_IMAGE_SPEC,
     ObservationType.SEGMENTATION: SEGMENTATION_SPEC,
+    ObservationType.TOOL_POSITIONS: TOOL_POSITIONS_SPEC,
 }
 
 

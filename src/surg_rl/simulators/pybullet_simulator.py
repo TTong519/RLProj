@@ -1,12 +1,12 @@
 """PyBullet simulator backend implementation."""
 
-import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 
 from surg_rl.utils.logging import get_logger
+
 from .base_simulator import BaseSimulator, Observation, State, StepResult
 from .scene_builder import SceneBuilder
 
@@ -27,7 +27,7 @@ class PyBulletSimulator(BaseSimulator):
         frame_skip: int = 1,
         render_width: int = 640,
         render_height: int = 480,
-        assets_dir: Optional[Union[str, Path]] = None,
+        assets_dir: str | Path | None = None,
         render_mode: str = "DIRECT",
     ):
         """Initialize PyBullet simulator.
@@ -51,11 +51,11 @@ class PyBulletSimulator(BaseSimulator):
         self.render_mode = render_mode
 
         self._physics_client = None
-        self._body_ids: Dict[str, int] = {}
-        self._joint_ids: Dict[str, Dict[str, int]] = {}
-        self._control_map: List[Dict[str, Any]] = []
-        self._initial_positions: Dict[str, list] = {}  # Store initial positions
-        self._initial_orientations: Dict[str, list] = {}  # Store initial orientations
+        self._body_ids: dict[str, int] = {}
+        self._joint_ids: dict[str, dict[str, int]] = {}
+        self._control_map: list[dict[str, Any]] = []
+        self._initial_positions: dict[str, list] = {}  # Store initial positions
+        self._initial_orientations: dict[str, list] = {}  # Store initial orientations
 
     def _check_pybullet(self) -> None:
         """Check if PyBullet is available."""
@@ -65,7 +65,7 @@ class PyBulletSimulator(BaseSimulator):
         except ImportError:
             raise ImportError(
                 "PyBullet is not installed. Install it with: pip install pybullet"
-            )
+            ) from None
 
     def load_scene(self, scene_definition: Any) -> None:
         """Load a scene definition into PyBullet.
@@ -111,13 +111,18 @@ class PyBulletSimulator(BaseSimulator):
                 scene_definition.physics.gravity[2],
                 physicsClientId=self._physics_client,
             )
-            if hasattr(scene_definition.physics, "timestep"):
-                self._pb.setTimeStep(
-                    scene_definition.physics.timestep,
-                    physicsClientId=self._physics_client,
-                )
         else:
             self._pb.setGravity(0, 0, -9.81, physicsClientId=self._physics_client)
+
+        if (
+            hasattr(scene_definition, "physics")
+            and scene_definition.physics is not None
+            and hasattr(scene_definition.physics, "timestep")
+        ):
+            self._pb.setTimeStep(
+                scene_definition.physics.timestep,
+                physicsClientId=self._physics_client,
+            )
 
         # Load robots
         for robot in scene_definition.robots:
@@ -136,12 +141,12 @@ class PyBulletSimulator(BaseSimulator):
 
         self._loaded = True
         self._build_control_map()
-        
+
         # Let objects settle by stepping simulation a few times
         # This prevents objects from having initial velocities that cause them to fly off
         for _ in range(100):
             self._pb.stepSimulation(physicsClientId=self._physics_client)
-        
+
         logger.info(f"Loaded scene: {scene_definition.metadata.name}")
 
     def _load_robot(self, robot: Any) -> None:
@@ -172,7 +177,7 @@ class PyBulletSimulator(BaseSimulator):
                 except Exception as e:
                     logger.warning(f"Failed to load robot URDF: {e}. Using primitive.")
 
-        # Primitive fallback: create a base + 1-DOF revolute joint
+        # Primitive fallback: create a base + 1-DOF revolute joint (+ optional gripper)
         base_collision = self._pb.createCollisionShape(
             self._pb.GEOM_BOX,
             halfExtents=[0.05, 0.05, 0.1],
@@ -196,6 +201,42 @@ class PyBulletSimulator(BaseSimulator):
             physicsClientId=self._physics_client,
         )
 
+        has_end_effectors = bool(getattr(robot, "end_effectors", None))
+
+        if has_end_effectors:
+            gripper_collision = self._pb.createCollisionShape(
+                self._pb.GEOM_BOX,
+                halfExtents=[0.02, 0.02, 0.02],
+                physicsClientId=self._physics_client,
+            )
+            gripper_visual = self._pb.createVisualShape(
+                self._pb.GEOM_BOX,
+                halfExtents=[0.02, 0.02, 0.02],
+                rgbaColor=[0.5, 0.5, 0.5, 1.0],
+                physicsClientId=self._physics_client,
+            )
+            link_masses = [0.5, 0.1]
+            link_collision_indices = [link_collision, gripper_collision]
+            link_visual_indices = [link_visual, gripper_visual]
+            link_positions = [[0.0, 0.0, 0.15], [0.0, 0.0, 0.1]]
+            link_orientations = [[0.0, 0.0, 0.0, 1.0], [0.0, 0.0, 0.0, 1.0]]
+            link_inertial_positions = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+            link_inertial_orientations = [[0.0, 0.0, 0.0, 1.0], [0.0, 0.0, 0.0, 1.0]]
+            link_parent_indices = [0, 1]
+            link_joint_types = [self._pb.JOINT_REVOLUTE, self._pb.JOINT_PRISMATIC]
+            link_joint_axes = [[0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+        else:
+            link_masses = [0.5]
+            link_collision_indices = [link_collision]
+            link_visual_indices = [link_visual]
+            link_positions = [[0.0, 0.0, 0.15]]
+            link_orientations = [[0.0, 0.0, 0.0, 1.0]]
+            link_inertial_positions = [[0.0, 0.0, 0.0]]
+            link_inertial_orientations = [[0.0, 0.0, 0.0, 1.0]]
+            link_parent_indices = [0]
+            link_joint_types = [self._pb.JOINT_REVOLUTE]
+            link_joint_axes = [[0.0, 1.0, 0.0]]
+
         body_id = self._pb.createMultiBody(
             baseMass=0.0,
             baseCollisionShapeIndex=base_collision,
@@ -211,20 +252,30 @@ class PyBulletSimulator(BaseSimulator):
                 robot.base_pose.orientation.z,
                 robot.base_pose.orientation.w,
             ],
-            linkMasses=[0.5],
-            linkCollisionShapeIndices=[link_collision],
-            linkVisualShapeIndices=[link_visual],
-            linkPositions=[[0.0, 0.0, 0.15]],
-            linkOrientations=[[0.0, 0.0, 0.0, 1.0]],
-            linkInertialFramePositions=[[0.0, 0.0, 0.0]],
-            linkInertialFrameOrientations=[[0.0, 0.0, 0.0, 1.0]],
-            linkParentIndices=[0],
-            linkJointTypes=[self._pb.JOINT_REVOLUTE],
-            linkJointAxis=[[0.0, 1.0, 0.0]],
+            linkMasses=link_masses,
+            linkCollisionShapeIndices=link_collision_indices,
+            linkVisualShapeIndices=link_visual_indices,
+            linkPositions=link_positions,
+            linkOrientations=link_orientations,
+            linkInertialFramePositions=link_inertial_positions,
+            linkInertialFrameOrientations=link_inertial_orientations,
+            linkParentIndices=link_parent_indices,
+            linkJointTypes=link_joint_types,
+            linkJointAxis=link_joint_axes,
             physicsClientId=self._physics_client,
         )
         self._body_ids[robot.name] = body_id
         self._collect_joint_info(robot.name, body_id)
+        # Map pybullet's auto-named prismatic joint to "gripper" if end_effectors exist.
+        if has_end_effectors and robot.name in self._joint_ids:
+            for joint_name, joint_idx in list(self._joint_ids[robot.name].items()):
+                info = self._pb.getJointInfo(
+                    body_id, joint_idx, physicsClientId=self._physics_client
+                )
+                if info[2] == self._pb.JOINT_PRISMATIC:
+                    del self._joint_ids[robot.name][joint_name]
+                    self._joint_ids[robot.name]["gripper"] = joint_idx
+                    break
         # Store initial pose for reset
         self._initial_positions[robot.name] = [
             robot.base_pose.position.x,
@@ -241,7 +292,7 @@ class PyBulletSimulator(BaseSimulator):
     def _collect_joint_info(self, robot_name: str, body_id: int) -> None:
         """Collect joint indices for a loaded robot body."""
         num_joints = self._pb.getNumJoints(body_id, physicsClientId=self._physics_client)
-        joint_dict: Dict[str, int] = {}
+        joint_dict: dict[str, int] = {}
         for j in range(num_joints):
             info = self._pb.getJointInfo(body_id, j, physicsClientId=self._physics_client)
             joint_name = info[1].decode("utf-8")
@@ -259,6 +310,11 @@ class PyBulletSimulator(BaseSimulator):
 
     def _load_tissue(self, tissue: Any) -> None:
         """Load a tissue into the simulation."""
+        if getattr(tissue, "soft_body", False):
+            raise NotImplementedError(
+                "Soft body support in PyBullet is not yet implemented. "
+                "Use MuJoCo backend for deformable tissues."
+            )
         # Get geometry
         primitive = tissue.geometry.primitive if tissue.geometry is not None else None
         if primitive == "box":
@@ -409,12 +465,12 @@ class PyBulletSimulator(BaseSimulator):
                 self._pb.setAdditionalSearchPath(pybullet_data.getDataPath())
             except ImportError:
                 logger.warning("pybullet_data not available; ground plane URDF may fail to load")
-            ground_id = self._pb.loadURDF(
+            self._pb.loadURDF(
                 "plane.urdf",
                 physicsClientId=self._physics_client,
             )
 
-    def reset(self, seed: Optional[int] = None) -> Observation:
+    def reset(self, seed: int | None = None) -> Observation:
         """Reset the simulation."""
         if not self._loaded:
             raise RuntimeError("Scene not loaded. Call load_scene() first.")
@@ -472,7 +528,13 @@ class PyBulletSimulator(BaseSimulator):
 
         return StepResult(observation=obs, reward=reward, terminated=terminated, truncated=truncated, info=info)
 
-    def render(self, mode: str = "rgb_array", width: Optional[int] = None, height: Optional[int] = None, camera_name: Optional[str] = None) -> Optional[np.ndarray]:
+    def render(
+        self,
+        mode: str = "rgb_array",
+        width: int | None = None,
+        height: int | None = None,
+        camera_name: str | None = None,
+    ) -> np.ndarray | None:
         """Render the current simulation state."""
         if not self._loaded:
             return None
@@ -483,6 +545,12 @@ class PyBulletSimulator(BaseSimulator):
         if mode == "human":
             # Already handled by GUI mode
             return None
+
+        if camera_name is not None:
+            logger.warning(
+                f"Named camera rendering is not yet supported (requested '{camera_name}'). "
+                "Falling back to default view."
+            )
 
         # Offscreen rendering
         view_matrix = self._pb.computeViewMatrixFromYawPitchRoll(
@@ -510,10 +578,10 @@ class PyBulletSimulator(BaseSimulator):
             physicsClientId=self._physics_client,
         )
 
-        rgb_array = rgb[:, :, :3] if hasattr(rgb, 'shape') else (
+        rgb_array = rgb[:, :, :3] if hasattr(rgb, "shape") else (
             np.array(rgb).reshape((height, width, 4))[:, :, :3]
-            if len(rgb) == width * height * 4 else
-            np.zeros((height, width, 3), dtype=np.uint8)
+            if len(rgb) == width * height * 4
+            else np.zeros((height, width, 3), dtype=np.uint8)
         )
 
         # Store depth for later retrieval via render('depth_array')
@@ -526,6 +594,9 @@ class PyBulletSimulator(BaseSimulator):
             self._last_depth = depth.reshape((height, width, 1)) if depth.ndim == 1 else depth
         else:
             self._last_depth = None
+
+        if mode == "depth_array":
+            return self._last_depth
 
         return rgb_array
 
@@ -547,7 +618,7 @@ class PyBulletSimulator(BaseSimulator):
         joint_states = self.get_joint_states()
         qpos_list = []
         qvel_list = []
-        for robot_name, states in joint_states.items():
+        for _robot_name, states in joint_states.items():
             qpos_list.append(states["positions"])
             qvel_list.append(states["velocities"])
 
@@ -562,13 +633,13 @@ class PyBulletSimulator(BaseSimulator):
             body_orientations=body_orientations,
         )
 
-    def get_joint_states(self) -> Dict[str, Dict[str, np.ndarray]]:
+    def get_joint_states(self) -> dict[str, dict[str, np.ndarray]]:
         """Get joint positions and velocities for all robots.
 
         Returns:
             Dictionary mapping robot name to {'positions': array, 'velocities': array}.
         """
-        result: Dict[str, Dict[str, np.ndarray]] = {}
+        result: dict[str, dict[str, np.ndarray]] = {}
         if not self._loaded:
             return result
 
@@ -641,6 +712,127 @@ class PyBulletSimulator(BaseSimulator):
             pass
         return False
 
+    # Optional controller stubs -----------------------------------------------------
+
+    def get_robot_state(self, robot_name: str) -> np.ndarray | None:
+        """Get joint state for a specific robot."""
+        # TODO: Extend to include velocities or full state once needed.
+        if not self._loaded or robot_name not in self._joint_ids:
+            return None
+        body_id = self._body_ids.get(robot_name)
+        if body_id is None:
+            return None
+        positions = []
+        for joint_name in sorted(self._joint_ids[robot_name].keys()):
+            joint_idx = self._joint_ids[robot_name][joint_name]
+            state = self._pb.getJointState(
+                body_id, joint_idx, physicsClientId=self._physics_client
+            )
+            positions.append(state[0])
+        return np.array(positions, dtype=np.float32)
+
+    def get_end_effector_pose(
+        self, robot_name: str
+    ) -> tuple[np.ndarray, np.ndarray] | None:
+        """Get end effector pose for a specific robot."""
+        # TODO: Map to a dedicated end-effector link instead of base.
+        if not self._loaded or robot_name not in self._body_ids:
+            return None
+        body_id = self._body_ids[robot_name]
+        pos, orn = self._pb.getBasePositionAndOrientation(
+            body_id, physicsClientId=self._physics_client
+        )
+        return np.array(pos), np.array(orn)
+
+    def get_body_pose(
+        self, body_name: str
+    ) -> tuple[np.ndarray, np.ndarray] | None:
+        """Get pose of a named body in the simulation."""
+        if not self._loaded or body_name not in self._body_ids:
+            return None
+        body_id = self._body_ids[body_name]
+        pos, orn = self._pb.getBasePositionAndOrientation(
+            body_id, physicsClientId=self._physics_client
+        )
+        return np.array(pos), np.array(orn)
+
+    def set_body_pose(
+        self,
+        body_name: str,
+        position: np.ndarray,
+        orientation: np.ndarray,
+    ) -> bool:
+        """Set pose of a named body in the simulation."""
+        if not self._loaded or body_name not in self._body_ids:
+            return False
+        self._pb.resetBasePositionAndOrientation(
+            self._body_ids[body_name],
+            position.tolist(),
+            orientation.tolist(),
+            physicsClientId=self._physics_client,
+        )
+        return True
+
+    def apply_force(
+        self,
+        body_name: str,
+        force: np.ndarray,
+        torque: np.ndarray | None = None,
+    ) -> bool:
+        """Apply external force to a body."""
+        if not self._loaded or body_name not in self._body_ids:
+            return False
+        body_id = self._body_ids[body_name]
+        try:
+            self._pb.applyExternalForce(
+                body_id,
+                -1,
+                force.tolist(),
+                self._pb.getBasePositionAndOrientation(
+                    body_id, physicsClientId=self._physics_client
+                )[0],
+                self._pb.WORLD_FRAME,
+                physicsClientId=self._physics_client,
+            )
+            if torque is not None:
+                self._pb.applyExternalTorque(
+                    body_id,
+                    -1,
+                    torque.tolist(),
+                    self._pb.WORLD_FRAME,
+                    physicsClientId=self._physics_client,
+                )
+            return True
+        except Exception:
+            return False
+
+    def get_contact_points(self, body_name: str) -> list[dict[str, Any]]:
+        """Get contact points for a body."""
+        if not self._loaded or body_name not in self._body_ids:
+            return []
+        body_id = self._body_ids[body_name]
+        contacts: list[dict[str, Any]] = []
+        for other_name, other_id in self._body_ids.items():
+            if other_name == body_name:
+                continue
+            points = self._pb.getContactPoints(
+                bodyA=body_id,
+                bodyB=other_id,
+                physicsClientId=self._physics_client,
+            )
+            for point in points:
+                contacts.append(
+                    {
+                        "body_a": body_name,
+                        "body_b": other_name,
+                        "position": np.array(point[5]),
+                        "normal": np.array(point[7]),
+                        "distance": float(point[8]),
+                        "normal_force": float(point[9]),
+                    }
+                )
+        return contacts
+
     def close(self) -> None:
         """Clean up simulator resources."""
         if self._physics_client is not None:
@@ -712,7 +904,25 @@ class PyBulletSimulator(BaseSimulator):
                 if idx >= len(action):
                     continue
                 if mapping.get("is_gripper"):
-                    continue  # TODO real gripper actuation
+                    robot_name = mapping["robot_name"]
+                    gripper_target = float(action[idx])
+                    if robot_name in self._joint_ids and "gripper" in self._joint_ids[robot_name]:
+                        body_id = self._body_ids[robot_name]
+                        joint_idx = self._joint_ids[robot_name]["gripper"]
+                        self._pb.setJointMotorControl2(
+                            body_id,
+                            joint_idx,
+                            self._pb.POSITION_CONTROL,
+                            targetPosition=gripper_target,
+                            force=100.0,
+                            physicsClientId=self._physics_client,
+                        )
+                    else:
+                        logger.debug(
+                            "Gripper actuation is not yet fully implemented for %s (TODO).",
+                            robot_name,
+                        )
+                    continue
                 robot_name = mapping["robot_name"]
                 joint_name = mapping["joint_name"]
                 if robot_name not in self._body_ids:
@@ -755,13 +965,13 @@ class PyBulletSimulator(BaseSimulator):
 
     def _get_observation(self) -> Observation:
         """Get current observation."""
+        import contextlib
+
         obs = Observation()
 
         # Render image
-        try:
+        with contextlib.suppress(Exception):
             obs.rgb_image = self.render("rgb_array")
-        except Exception:
-            pass
 
         # Get body positions
         obs.tissue_state = {}
@@ -777,6 +987,26 @@ class PyBulletSimulator(BaseSimulator):
                 all_positions.append(joint_states[robot_name]["positions"])
             if all_positions:
                 obs.robot_state = np.concatenate(all_positions)
+
+        # Populate task-related observation fields if a task is defined
+        if self._scene and self._scene.task and self._scene.task.objectives and self._body_ids:
+            # TODO: Extract geometry from objectives once schema is finalized.
+            for name, body_id in self._body_ids.items():
+                if name in ("needle",):
+                    pos, _ = self._pb.getBasePositionAndOrientation(
+                        body_id, physicsClientId=self._physics_client
+                    )
+                    obs.needle_pos = np.array(pos)
+                if name in ("entry_point",):
+                    pos, _ = self._pb.getBasePositionAndOrientation(
+                        body_id, physicsClientId=self._physics_client
+                    )
+                    obs.entry_point = np.array(pos)
+                if name in ("exit_point",):
+                    pos, _ = self._pb.getBasePositionAndOrientation(
+                        body_id, physicsClientId=self._physics_client
+                    )
+                    obs.exit_point = np.array(pos)
 
         # Collision detection: check contact points between any two bodies
         for i, body_a in enumerate(self._body_ids.values()):

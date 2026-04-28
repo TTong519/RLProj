@@ -5,9 +5,8 @@ surgical robotics RL environments, supporting joint-space control,
 task-space control, and gripper actions.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Union
 
 import gymnasium as gym
 import numpy as np
@@ -52,9 +51,9 @@ class ActionSpec:
 
     name: str
     action_type: ActionType
-    shape: Tuple[int, ...]
-    low: Optional[np.ndarray] = None
-    high: Optional[np.ndarray] = None
+    shape: tuple[int, ...]
+    low: np.ndarray | None = None
+    high: np.ndarray | None = None
     num_actions: int = 0
     dtype: type = np.float32
     scaling: ActionScaling = ActionScaling.NONE
@@ -100,12 +99,13 @@ class ActionConfig:
     action_type: ActionType = ActionType.JOINT_POSITIONS
     num_joints: int = 7
     include_gripper: bool = True
-    gripper_bounds: Tuple[float, float] = (0.0, 1.0)
+    gripper_bounds: tuple[float, float] = (0.0, 1.0)
     endeffector_dims: int = 6  # x, y, z, roll, pitch, yaw
     scaling: ActionScaling = ActionScaling.NORMALIZE
     action_scale: float = 1.0
     clip_actions: bool = True
     relative_actions: bool = False
+    num_actions: int = 3  # Number of discrete actions per DOF (for DISCRETE mode)
 
 
 # ============================================================================
@@ -177,7 +177,7 @@ GRIPPER_SPEC = ActionSpec(
 # Action Builder
 # ============================================================================
 
-DEFAULT_ACTION_SPECS: Dict[ActionType, ActionSpec] = {
+DEFAULT_ACTION_SPECS: dict[ActionType, ActionSpec] = {
     ActionType.JOINT_POSITIONS: JOINT_POSITIONS_SPEC,
     ActionType.JOINT_VELOCITIES: JOINT_VELOCITIES_SPEC,
     ActionType.JOINT_TORQUES: JOINT_TORQUES_SPEC,
@@ -206,8 +206,8 @@ class ActionBuilder:
 
     def __init__(
         self,
-        config: Optional[ActionConfig] = None,
-        custom_specs: Optional[Dict[str, ActionSpec]] = None,
+        config: ActionConfig | None = None,
+        custom_specs: dict[str, ActionSpec] | None = None,
     ):
         """Initialize the action builder.
 
@@ -219,11 +219,11 @@ class ActionBuilder:
         self.custom_specs = custom_specs or {}
 
         # Build action specs
-        self._specs: Dict[str, ActionSpec] = {}
+        self._specs: dict[str, ActionSpec] = {}
         self._build_specs()
 
         # Previous action for relative mode
-        self._last_action: Optional[np.ndarray] = None
+        self._last_action: np.ndarray | None = None
 
     def _build_specs(self) -> None:
         """Build action specifications from configuration."""
@@ -250,8 +250,15 @@ class ActionBuilder:
                     description=spec.description,
                 )
             self._specs[spec.name] = spec
+        elif primary_type == ActionType.DISCRETE:
+            self._specs["discrete"] = ActionSpec(
+                name="discrete",
+                action_type=ActionType.DISCRETE,
+                shape=(self.config.num_joints,),
+                num_actions=self.config.num_actions,
+                description="Discrete joint actions",
+            )
 
-        # Gripper action
         if self.config.include_gripper and primary_type != ActionType.GRIPPER:
             gripper_spec = ActionSpec(
                 name="gripper",
@@ -259,6 +266,7 @@ class ActionBuilder:
                 shape=(1,),
                 low=np.array([self.config.gripper_bounds[0]]),
                 high=np.array([self.config.gripper_bounds[1]]),
+                num_actions=self.config.num_actions,
                 scaling=ActionScaling.NONE,
                 description="Gripper open/close",
             )
@@ -268,17 +276,24 @@ class ActionBuilder:
         for name, spec in self.custom_specs.items():
             self._specs[name] = spec
 
-    def get_action_space(self) -> gym.spaces.Box:
+    def get_action_space(self) -> gym.Space:
         """Create the Gymnasium action space.
 
         Returns:
-            Box action space with all action dimensions concatenated.
+            Gymnasium Space object matching the action configuration.
         """
+        if self.config.action_type == ActionType.DISCRETE:
+            n = self.config.num_joints
+            num_actions = self.config.num_actions
+            if self.config.include_gripper and n > 1:
+                return gym.spaces.MultiDiscrete([num_actions] * (n + 1))
+            return gym.spaces.Discrete(num_actions)
+
         total_size = 0
         lows = []
         highs = []
 
-        for name, spec in self._specs.items():
+        for _name, spec in self._specs.items():
             size = int(np.prod(spec.shape))
             total_size += size
             low = spec.low.flatten() if spec.low is not None else -np.ones(size)
@@ -305,7 +320,21 @@ class ActionBuilder:
 
         Returns:
             Processed action ready for the simulator.
+
+        Raises:
+            NotImplementedError: If the action type lacks full backend support.
         """
+        # TODO: Implement backend support for torque and pose control.
+        if self.config.action_type in (
+            ActionType.JOINT_TORQUES,
+            ActionType.ENDEFFECTOR_POSE,
+            ActionType.ENDEFFECTOR_DELTA,
+        ):
+            raise NotImplementedError(
+                f"Action type {self.config.action_type} is not yet fully implemented. "
+                "Only POSITION_CONTROL is supported."
+            )
+
         action = np.array(action, dtype=np.float32)
 
         # Clip actions if configured
@@ -348,7 +377,7 @@ class ActionBuilder:
         # Scale from [-1, 1] to [low, high]
         return low + (action + 1.0) * (high - low) / 2.0
 
-    def split_action(self, action: np.ndarray) -> Dict[str, np.ndarray]:
+    def split_action(self, action: np.ndarray) -> dict[str, np.ndarray]:
         """Split a combined action into named components.
 
         Args:

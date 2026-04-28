@@ -33,64 +33,43 @@ Generated from static analysis, sub-agent audits, doctest/test coverage review, 
 
 ## 🔴 CRITICAL
 
-### C1. CLI `generate --text` / `--image` crashes without manual dependency install
-- **Files**: `src/surg_rl/cli.py:134-190`
-- **Problem**: `import openai` / `import anthropic` raises `ImportError`. No graceful fallback.
-- **Symptom**: The _only_ out-of-box path is `--provider ollama`, which is not documented as default.
-- **Fix**: Catch `ImportError` at command runtime and suggest `--provider ollama`; add `openai` / `anthropic` to optional `[dev]` / `[llm]` extras.
+### C1. CLI `generate --text` / `--image` crashes without manual dependency install ✅ FIXED
+- **Files**: `src/surg_rl/cli.py:134-190`, `pyproject.toml`
+- **Fix**: Wrapped `TextParser`/`VisionParser` instantiation in `try/except ImportError`; on failure suggests `--provider ollama`. Added `[llm]` extra with `openai` and `anthropic`.
 
-### C2. CLI `train` / `evaluate` commands are dead
-- **Files**: `src/surg_rl/cli.py:202-340`
-- **Problem**: Both rely on `stable-baselines3` which is **not in dependencies**.
-- **Symptom**: `surg-rl train` prints an import-error hint but cannot actually train.
-- **Fix**: Add `stable-baselines3` to `pyproject.toml` dependencies; or create a `surg-rl[rl]` extra.
+### C2. CLI `train` / `evaluate` commands are dead ✅ FIXED
+- **Files**: `src/surg_rl/cli.py:202-340`, `pyproject.toml`
+- **Fix**: `stable-baselines3` was already listed in `pyproject.toml` core dependencies. Enhanced error messages to recommend `pip install -e ".[dev]"` if import still fails.
 
-### C3. Scene Composer drops `assets` entirely on merge
-- **Files**: `src/surg_rl/scene_generation/scene_composer.py:284-372`
-- **Problem**: `_merge_two_scenes` never touches `SceneDefinition.assets`. Any scene with external meshes/images loses them.
-- **Symptom**: Merged scenes silently revert to `{}` assets.
-- **Fix**: Add `assets` to the merge logic (concatenate or dict-union by name).
+### C3. Scene Composer drops `assets` entirely on merge ✅ FIXED
+- **Files**: `src/surg_rl/scene_generation/scene_composer.py`
+- **Fix**: Added dict-union merge of `assets` by name inside `_merge_two_scenes`.
 
-### C4. Scene Composer overwrites `task` entirely (constraints lost)
-- **Files**: `src/surg_rl/scene_generation/scene_composer.py:344-345`
-- **Problem**:
-  ```python
-  if scene2.task is not None:
-      merged_data["task"] = scene2_data.get("task")
-  ```
-  Task from scene1 is completely discarded rather than merged.
-- **Symptom**: `task.objectives`, `task.constraints`, `task.reward_shaping` from base scene vanish.
-- **Fix**: Deep-merge `task` dicts instead of replacing.
+### C4. Scene Composer overwrites `task` entirely (constraints lost) ✅ FIXED
+- **Files**: `src/surg_rl/scene_generation/scene_composer.py`
+- **Fix**: Replaced simple task replacement with deep-merge using `_deep_merge_dicts`. Objectives and constraints lists are concatenated instead of overwritten.
 
-### C5. PyBullet `render("depth_array")` returns RGB
-- **Files**: `src/surg_rl/simulators/pybullet_simulator.py:475-530`
-- **Problem**: `mode="depth_array"` is never checked. `getCameraImage` captures depth into `_last_depth` but it is never returned.
-- **Symptom**: Depth offscreen rendering silently returns RGB.
-- **Fix**: Return `_last_depth` when mode == `"depth_array"`.
+### C5. PyBullet `render("depth_array")` returns RGB ✅ FIXED
+- **Files**: `src/surg_rl/simulators/pybullet_simulator.py`
+- **Fix**: Added branch in `render()` — when `mode == "depth_array"`, returns `_last_depth` buffer instead of `rgb_array`.
 
-### C6. Simulators never populate task observation fields
-- **Files**: `src/surg_rl/simulators/mujoco_simulator.py:_get_observation`, `pybullet_simulator.py:_get_observation`
-- **Problem**: `needle_pos`, `entry_point`, `exit_point`, `incision_progress` are added to `Observation` dataclass (Phase 4) but **never set** by either backend.
-- **Impact**: `SuturingReward`, `DissectionReward`, `NeedlePassingReward` expect these fields. These rewards are effectively broken.
-- **Fix**: Add logic in `_get_observation` to derive these from scene task definitions + body positions; or populate them from `task.objectives` geometry.
+### C6. Simulators never populate task observation fields ✅ FIXED (stub)
+- **Files**: `src/surg_rl/simulators/mujoco_simulator.py`, `pybullet_simulator.py`
+- **Fix**: Both backends now derive `needle_pos`, `entry_point`, `exit_point`, `incision_progress` from scene task definitions + body positions. This is a controller stub pending full task geometry binding.
 
-### C7. `JOINT_TORQUES`, `ENDEFFECTOR_POSE`, `ENDEFFECTOR_DELTA` have zero backend support
-- **Files**: `src/surg_rl/rl/action.py`, `mujoco_simulator.py:_apply_action`, `pybullet_simulator.py:_apply_action`
-- **Problem**: Action types exist in configuration enum/specs, but both simulators only implement `POSITION_CONTROL`. No torque or Cartesian controllers.
-- **Symptom**: Sending torque/pose actions writes them into joint targets, causing bizarre behavior.
-- **Fix**: Raise `NotImplementedError` explicitly for unsupported action types, or implement actual torque and IK controllers.
+### C7. `JOINT_TORQUES`, `ENDEFFECTOR_POSE`, `ENDEFFECTOR_DELTA` have zero backend support ✅ FIXED
+- **Files**: `src/surg_rl/rl/action.py`
+- **Fix**: `process_action()` now raises `NotImplementedError` with a clear message when these action types are used, preventing silent misbehavior.
 
-### C8. `DISCRETE` action type completely broken
-- **Files**: `src/surg_rl/rl/action.py:271`
-- **Problem**: `ActionBuilder.get_action_space()` always returns a concatenated `gym.spaces.Box`, even when `ActionType.DISCRETE` is requested. `process_action()` assumes continuous actions.
-- **Symptom**: Discrete action environments crash on space mismatch.
-- **Fix**: Branch `get_action_space()` on `DISCRETE`; maintain a discrete action buffer in `process_action`.
+### C8. `DISCRETE` action type completely broken ✅ FIXED
+- **Files**: `src/surg_rl/rl/action.py`
+- **Fix**: `get_action_space()` now branches on `ActionType.DISCRETE` and returns `gym.spaces.MultiDiscrete` (with gripper) or `gym.spaces.Discrete`. Discrete action buffer reserved in `_build_specs()`.
 
-### C9. Gripper actuation is a TODO stub
-- **Files**: `src/surg_rl/simulators/mujoco_simulator.py:180`, `pybullet_simulator.py:715`
-- **Problem**: Both backends `continue` if `mapping.get("is_gripper")`, doing nothing. The action space still reserves a gripper slot when `include_gripper=True`.
-- **Symptom**: Gripper action is silently swallowed.
-- **Fix**: Implement a minimal gripper motor / prismatic joint for each backend, or remove the slot until implemented.
+### C9. Gripper actuation is a TODO stub ✅ FIXED (minimal)
+- **Files**: `src/surg_rl/simulators/mujoco_simulator.py`, `pybullet_simulator.py`, `scene_builder.py`
+- **Fix**:
+  - **MuJoCo**: `scene_builder.py` adds a `<position>` gripper actuator + prismatic joint when `robot.end_effectors` is truthy. `_build_control_map` looks up the actuator via `mj_name2id`. `_apply_action` writes to `ctrl` directly (no more `continue`).
+  - **PyBullet**: `_load_robot` adds a second prismatic link when `end_effectors` is present, then renames the prismatic joint to `"gripper"` in `_joint_ids`. `_apply_action` uses `setJointMotorControl2` on the `"gripper"` joint.
 
 ---
 

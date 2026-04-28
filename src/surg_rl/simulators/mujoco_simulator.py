@@ -55,6 +55,7 @@ class MuJoCoSimulator(BaseSimulator):
         self._mjcf_path: Optional[Path] = None
         self._renderer_available: Optional[bool] = None
         self._control_map: List[Dict[str, Any]] = []
+        self._last_depth: Optional[np.ndarray] = None
 
     def _check_mujoco(self) -> None:
         """Check if MuJoCo is available."""
@@ -80,14 +81,11 @@ class MuJoCoSimulator(BaseSimulator):
         import platform
         if platform.system() == 'Darwin':
             # macOS uses CGL, not EGL
-            # If we're in a terminal without display, rendering won't work
-            # We'll try to detect this, but default to False for headless
-            import sys
-            if sys.stdout.isatty():
-                # We're in a terminal, likely no GUI
-                self._renderer_available = False
-            else:
+            # Simple heuristic: if DISPLAY is not set, assume no display
+            if os.environ.get('DISPLAY'):
                 self._renderer_available = True
+            else:
+                self._renderer_available = False
             return self._renderer_available
         
         # For Linux, try EGL for headless GPU rendering
@@ -130,72 +128,6 @@ class MuJoCoSimulator(BaseSimulator):
         except Exception as e:
             logger.error(f"Failed to load MuJoCo model: {e}")
             raise RuntimeError(f"Failed to load MuJoCo model: {e}")
-
-    def _build_control_map(self) -> None:
-        """Build mapping from flat action indices to MuJoCo ctrl indices.
-
-        Populates self._control_map with dicts:
-        {"robot_name": str, "joint_name": str, "ctrl_index": int,
-         "is_gripper": bool}
-        """
-        self._control_map = []
-        if not self._loaded or not self._scene or not self._scene.robots:
-            return
-        for robot in self._scene.robots:
-            if robot.joints:
-                for joint in robot.joints:
-                    ctrl_name = f"{joint.name}_motor"
-                    try:
-                        ctrl_idx = self._mujoco.mj_name2id(
-                            self._model, self._mujoco.mjtObj.mjOBJ_ACTUATOR, ctrl_name
-                        )
-                        if ctrl_idx >= 0:
-                            self._control_map.append(
-                                {
-                                    "robot_name": robot.name,
-                                    "joint_name": joint.name,
-                                    "ctrl_index": ctrl_idx,
-                                    "is_gripper": False,
-                                }
-                            )
-                    except Exception:
-                        pass
-            else:
-                ctrl_name = f"{robot.name}_motor"
-                try:
-                    ctrl_idx = self._mujoco.mj_name2id(
-                        self._model, self._mujoco.mjtObj.mjOBJ_ACTUATOR, ctrl_name
-                    )
-                    if ctrl_idx >= 0:
-                        self._control_map.append(
-                            {
-                                "robot_name": robot.name,
-                                "joint_name": f"{robot.name}_joint",
-                                "ctrl_index": ctrl_idx,
-                                "is_gripper": False,
-                            }
-                        )
-                except Exception:
-                    pass
-            # Minimal gripper placeholder (TODO: implement real gripper actuation)
-            if robot.end_effectors and self._data is not None:
-                if len(self._data.ctrl) > len(self._control_map):
-                    self._control_map.append(
-                        {
-                            "robot_name": robot.name,
-                            "joint_name": "gripper",
-                            "ctrl_index": len(self._control_map),
-                            "is_gripper": True,
-                        }
-                    )
-
-    def get_num_controls(self) -> int:
-        """Return number of controllable DOFs."""
-        if self._control_map:
-            return len(self._control_map)
-        if self._loaded and hasattr(self._data, "ctrl"):
-            return len(self._data.ctrl)
-        return 0
 
     def reset(self, seed: Optional[int] = None) -> Observation:
         """Reset the simulation to initial state.
@@ -546,17 +478,26 @@ class MuJoCoSimulator(BaseSimulator):
                         )
                 except Exception:
                     pass
-            # Minimal gripper placeholder (TODO: implement real gripper actuation)
-            if robot.end_effectors and self._data is not None:
-                if len(self._data.ctrl) > len(self._control_map):
-                    self._control_map.append(
-                        {
-                            "robot_name": robot.name,
-                            "joint_name": "gripper",
-                            "ctrl_index": len(self._control_map),
-                            "is_gripper": True,
-                        }
+            # Gripper actuator
+            if robot.end_effectors:
+                gripper_actuator_name = f"{robot.name}_gripper"
+                try:
+                    ctrl_idx = self._mujoco.mj_name2id(
+                        self._model,
+                        self._mujoco.mjtObj.mjOBJ_ACTUATOR,
+                        gripper_actuator_name,
                     )
+                    if ctrl_idx >= 0:
+                        self._control_map.append(
+                            {
+                                "robot_name": robot.name,
+                                "joint_name": "gripper",
+                                "ctrl_index": ctrl_idx,
+                                "is_gripper": True,
+                            }
+                        )
+                except Exception:
+                    pass
 
     def get_num_controls(self) -> int:
         """Return number of controllable DOFs."""
@@ -602,6 +543,13 @@ class MuJoCoSimulator(BaseSimulator):
                 obs.rgb_image = self.render("rgb_array")
             except Exception:
                 pass
+            try:
+                depth = self.render("depth_array")
+                if depth is not None:
+                    self._last_depth = depth
+                    obs.depth_image = depth
+            except Exception:
+                pass
 
         # Get robot state
         joint_states = self.get_joint_states()
@@ -626,6 +574,42 @@ class MuJoCoSimulator(BaseSimulator):
                 if hasattr(con, 'dist') and con.dist <= 0:
                     obs.collision_detected = True
                     break
+
+        # Populate task-specific observations from scene task definition
+        if self._scene is not None and getattr(self._scene, "task", None) is not None:
+            task = self._scene.task
+            # Attempt to find needle position from an instrument or robot EE
+            if self._scene.instruments:
+                # Use first instrument's body pose as needle position proxy
+                instrument_name = self._scene.instruments[0].name
+                pose = self.get_body_pose(instrument_name)
+                if pose is not None:
+                    obs.needle_pos = pose[0]
+            # Parse objectives for entry_point / exit_point if present
+            if hasattr(task, "objectives") and task.objectives:
+                objective_names = {obj.name for obj in task.objectives}
+                entry_point = None
+                exit_point = None
+                # Look for known suturing landmarks in scene entities
+                # Heuristic: search tissues for names containing entry/exit
+                for tissue in getattr(self._scene, "tissues", []):
+                    tissue_name = tissue.name.lower()
+                    t_pose = self.get_body_pose(tissue.name)
+                    if t_pose is not None:
+                        if "entry" in tissue_name:
+                            entry_point = t_pose[0]
+                        elif "exit" in tissue_name:
+                            exit_point = t_pose[0]
+                if "entry_point" in objective_names and entry_point is not None:
+                    obs.entry_point = entry_point
+                if "exit_point" in objective_names and exit_point is not None:
+                    obs.exit_point = exit_point
+                # Minimal progress stub: fraction of objectives mentioning completeness
+                total = len(task.objectives)
+                completed = sum(
+                    1 for obj in task.objectives if "complete" in obj.success_criteria.lower()
+                )
+                obs.incision_progress = completed / total if total > 0 else 0.0
 
         return obs
 
@@ -690,6 +674,33 @@ class MuJoCoSimulator(BaseSimulator):
             return pos, quat
         except (ValueError, KeyError):
             return None
+
+    def get_end_effector_pose(
+        self, robot_name: str
+    ) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+        """Get the current end effector position and orientation.
+
+        Args:
+            robot_name: Name of the robot.
+
+        Returns:
+            Tuple of (position, quaternion) or None.
+        """
+        if not self._loaded or self._scene is None:
+            return None
+
+        # Find the robot and its end effector
+        robot = None
+        for r in self._scene.robots:
+            if r.name == robot_name:
+                robot = r
+                break
+        if robot is None or not robot.end_effectors:
+            return None
+
+        ee = robot.end_effectors[0]
+        body_name = ee.tool_name if ee.tool_name else f"{robot_name}_ee"
+        return self.get_body_pose(body_name)
 
     def get_tissue_deformation(self, tissue_name: str) -> Optional[np.ndarray]:
         """Get vertex displacements for a soft body tissue.

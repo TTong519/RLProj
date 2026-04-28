@@ -6,7 +6,7 @@ text and image inputs, allowing incremental scene building.
 
 import asyncio
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from surg_rl.scene_definition import SceneDefinition
 from surg_rl.utils.logging import get_logger
@@ -32,8 +32,8 @@ class SceneComposer:
 
     def __init__(
         self,
-        text_parser: Optional[TextParser] = None,
-        vision_parser: Optional[VisionParser] = None,
+        text_parser: TextParser | None = None,
+        vision_parser: VisionParser | None = None,
     ):
         """Initialize the scene composer.
 
@@ -46,12 +46,23 @@ class SceneComposer:
         self.text_parser = text_parser or TextParser()
         self.vision_parser = vision_parser or VisionParser()
 
+    @staticmethod
+    def _deep_merge_dicts(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
+        """Recursively merge dict b into a, with b overriding on leaf conflicts."""
+        result = dict(a)
+        for key, value in b.items():
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = SceneComposer._deep_merge_dicts(result[key], value)
+            else:
+                result[key] = value
+        return result
+
     async def compose(
         self,
-        inputs: Optional[List[Union[str, Path, bytes]]] = None,
-        text_inputs: Optional[List[Union[str, Path]]] = None,
-        image_inputs: Optional[List[Union[str, Path, bytes]]] = None,
-        base_scene: Optional[SceneDefinition] = None,
+        inputs: list[str | Path | bytes] | None = None,
+        text_inputs: list[str | Path] | None = None,
+        image_inputs: list[str | Path | bytes] | None = None,
+        base_scene: SceneDefinition | None = None,
         merge_strategy: str = "sequential",
         **kwargs: Any,
     ) -> SceneDefinition:
@@ -105,10 +116,10 @@ class SceneComposer:
 
     async def _compose_sequential(
         self,
-        inputs: Optional[List[Union[str, Path, bytes]]] = None,
-        text_inputs: Optional[List[Union[str, Path]]] = None,
-        image_inputs: Optional[List[Union[str, Path, bytes]]] = None,
-        base_scene: Optional[SceneDefinition] = None,
+        inputs: list[str | Path | bytes] | None = None,
+        text_inputs: list[str | Path] | None = None,
+        image_inputs: list[str | Path | bytes] | None = None,
+        base_scene: SceneDefinition | None = None,
         **kwargs: Any,
     ) -> SceneDefinition:
         """Compose scene sequentially, each input modifying previous.
@@ -171,9 +182,9 @@ class SceneComposer:
 
     async def _compose_parallel(
         self,
-        text_inputs: Optional[List[Union[str, Path]]],
-        image_inputs: Optional[List[Union[str, Path, bytes]]],
-        base_scene: Optional[SceneDefinition],
+        text_inputs: list[str | Path] | None,
+        image_inputs: list[str | Path | bytes] | None,
+        base_scene: SceneDefinition | None,
         **kwargs: Any,
     ) -> SceneDefinition:
         """Compose scene in parallel, merging all results.
@@ -252,8 +263,8 @@ class SceneComposer:
 
     def _merge_scenes(
         self,
-        scenes: List[SceneDefinition],
-        base_scene: Optional[SceneDefinition] = None,
+        scenes: list[SceneDefinition],
+        base_scene: SceneDefinition | None = None,
     ) -> SceneDefinition:
         """Merge multiple scene definitions.
 
@@ -326,29 +337,77 @@ class SceneComposer:
         for field in ["robots", "tissues", "instruments"]:
             merged_data[field] = merged_data.get(field, []) + scene2_data.get(field, [])
 
+        # Check for duplicate entity names
+        seen_names: set[str] = set()
+        for field in ["robots", "tissues", "instruments"]:
+            for item in merged_data.get(field, []):
+                name = item.get("name")
+                if name is not None:
+                    if name in seen_names:
+                        raise ValueError(f"Duplicate entity name '{name}' during scene merge")
+                    seen_names.add(name)
+
+        # Merge assets by name (dict-union)
+        if scene2_data.get("assets"):
+            merged_data["assets"] = {
+                **merged_data.get("assets", {}),
+                **scene2_data["assets"],
+            }
+
         # Merge environment (scene2's cameras/lights added)
         if "environment" in scene2_data and scene2_data["environment"] is not None:
             env1 = merged_data.get("environment") or {}
             env2 = scene2_data["environment"]
 
-            # Start with scene1's environment, then overlay scene2's fields
-            merged_env = {**env1, **env2}
-
-            # Concatenate cameras and lights lists instead of overwriting
-            merged_env["cameras"] = (env1.get("cameras") or []) + (env2.get("cameras") or [])
-            merged_env["lights"] = (env1.get("lights") or []) + (env2.get("lights") or [])
+            # Explicitly preserve certain fields from scene1 unless scene2 has non-None values
+            merged_env: dict[str, Any] = {}
+            preserve_fields = {
+                "surgical_table",
+                "fog_enabled",
+                "fog_color",
+                "fog_distance",
+                "skybox",
+            }
+            for key in {*env1.keys(), *env2.keys()}:
+                if key in preserve_fields:
+                    merged_env[key] = (
+                        env2.get(key) if key in env2 and env2[key] is not None else env1.get(key)
+                    )
+                elif key in ("cameras", "lights"):
+                    merged_env[key] = (env1.get(key) or []) + (env2.get(key) or [])
+                else:
+                    merged_env[key] = env2.get(key) if key in env2 else env1.get(key)
 
             merged_data["environment"] = merged_env
 
-        # Use scene2's task if defined
-        if scene2.task is not None:
+        # Deep-merge task
+        if scene1.task is not None and scene2.task is not None:
+            scene1_task = (
+                scene1.task.model_dump()
+                if hasattr(scene1.task, "model_dump")
+                else dict(scene1.task)
+            )
+            scene2_task = (
+                scene2.task.model_dump()
+                if hasattr(scene2.task, "model_dump")
+                else dict(scene2.task)
+            )
+            merged_task = self._deep_merge_dicts(scene1_task, scene2_task)
+            # Concatenate list sub-fields
+            for list_key in ("objectives", "constraints"):
+                list1 = scene1_task.get(list_key) or []
+                list2 = scene2_task.get(list_key) or []
+                if list1 or list2:
+                    merged_task[list_key] = list1 + list2
+            merged_data["task"] = merged_task
+        elif scene2.task is not None:
             merged_data["task"] = scene2_data.get("task")
 
-        # Merge domain randomization (only if scene2 explicitly set it)
-        if "domain_randomization" in scene2.model_fields_set:
-            merged_data["domain_randomization"] = scene2_data.get(
-                "domain_randomization", {}
-            )
+        # Deep-merge domain randomization
+        dr1 = merged_data.get("domain_randomization") or {}
+        dr2 = scene2_data.get("domain_randomization") or {}
+        if dr1 or dr2:
+            merged_data["domain_randomization"] = self._deep_merge_dicts(dr1, dr2)
 
         # Use scene2's simulator only if explicitly set
         if "simulator" in scene2.model_fields_set:
@@ -375,10 +434,10 @@ class SceneComposer:
 
     def compose_sync(
         self,
-        inputs: Optional[List[Union[str, Path, bytes]]] = None,
-        text_inputs: Optional[List[Union[str, Path]]] = None,
-        image_inputs: Optional[List[Union[str, Path, bytes]]] = None,
-        base_scene: Optional[SceneDefinition] = None,
+        inputs: list[str | Path | bytes] | None = None,
+        text_inputs: list[str | Path] | None = None,
+        image_inputs: list[str | Path | bytes] | None = None,
+        base_scene: SceneDefinition | None = None,
         merge_strategy: str = "sequential",
         **kwargs: Any,
     ) -> SceneDefinition:

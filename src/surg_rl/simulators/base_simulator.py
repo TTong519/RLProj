@@ -285,6 +285,8 @@ class BaseSimulator(ABC):
     def get_robot_state(self, robot_name: str) -> Optional[np.ndarray]:
         """Get joint state for a specific robot.
 
+        (TODO: implement in subclass)
+
         Args:
             robot_name: Name of the robot.
 
@@ -296,6 +298,8 @@ class BaseSimulator(ABC):
     def get_end_effector_pose(self, robot_name: str) -> Optional[Tuple[np.ndarray, np.ndarray]]:
         """Get end effector pose for a specific robot.
 
+        (TODO: implement in subclass)
+
         Args:
             robot_name: Name of the robot.
 
@@ -306,6 +310,8 @@ class BaseSimulator(ABC):
 
     def get_body_pose(self, body_name: str) -> Optional[Tuple[np.ndarray, np.ndarray]]:
         """Get pose of a named body in the simulation.
+
+        (TODO: implement in subclass)
 
         Args:
             body_name: Name of the body.
@@ -322,6 +328,8 @@ class BaseSimulator(ABC):
         orientation: np.ndarray,
     ) -> bool:
         """Set pose of a named body in the simulation.
+
+        (TODO: implement in subclass)
 
         Args:
             body_name: Name of the body.
@@ -341,6 +349,8 @@ class BaseSimulator(ABC):
     ) -> bool:
         """Apply external force to a body.
 
+        (TODO: implement in subclass)
+
         Args:
             body_name: Name of the body.
             force: Force vector (fx, fy, fz).
@@ -353,6 +363,8 @@ class BaseSimulator(ABC):
 
     def get_contact_points(self, body_name: str) -> List[Dict[str, Any]]:
         """Get contact points for a body.
+
+        (TODO: implement in subclass)
 
         Args:
             body_name: Name of the body.
@@ -369,6 +381,8 @@ class BaseSimulator(ABC):
         height: Optional[int] = None,
     ) -> Optional[np.ndarray]:
         """Get image from a specific camera.
+
+        (TODO: implement in subclass)
 
         Args:
             camera_name: Name of the camera.

@@ -144,7 +144,10 @@ class SurgicalEnv(gym.Env):
         )
 
         # Define spaces
-        self.observation_space = self._obs_builder.get_observation_space()
+        if self.config.observation_config and self.config.observation_config.flatten:
+            self.observation_space = self._obs_builder.get_flat_observation_space()
+        else:
+            self.observation_space = self._obs_builder.get_observation_space()
         self.action_space = self._action_builder.get_action_space()
 
         # Initialize reward function

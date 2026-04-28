@@ -3,16 +3,15 @@
 import asyncio
 import json
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from surg_rl import __version__
+from surg_rl.scene_generation import TextParser, VisionParser, get_template
 from surg_rl.utils.config import get_settings
 from surg_rl.utils.logging import get_logger, setup_logging
-from surg_rl.scene_generation import TextParser, VisionParser, SceneComposer, get_template
 
 logger = get_logger(__name__)
 
@@ -112,7 +111,7 @@ def generate(
             except ValueError as e:
                 console.print(f"[bold red]Error:[/bold red] {e}")
                 console.print("[dim]Available templates: suturing, dissection, manipulation[/dim]")
-                raise typer.Exit(1)
+                raise typer.Exit(1) from e
 
             output_path = Path(output)
             output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -132,16 +131,24 @@ def generate(
             return
 
         if text:
-            console.print(f"[bold blue]Generating scene from text...[/bold blue]")
+            console.print("[bold blue]Generating scene from text...[/bold blue]")
             console.print(f"[dim]Provider: {provider or 'default'}[/dim]")
             console.print(f"[dim]Description: {text[:100]}{'...' if len(text) > 100 else ''}[/dim]")
 
-            parser = TextParser(
-                provider=provider,
-                model=model,
-                ollama_base_url=ollama_url,
-            )
-            scene = asyncio.run(parser.parse(text))
+            try:
+                parser = TextParser(
+                    provider=provider,
+                    model=model,
+                    ollama_base_url=ollama_url,
+                )
+                scene = asyncio.run(parser.parse(text))
+            except ImportError as e:
+                console.print(f"[bold red]Import Error:[/bold red] {e}")
+                console.print(
+                    "[dim]The required LLM package may not be installed. "
+                    "Try using --provider ollama to use a local model instead.[/dim]"
+                )
+                raise typer.Exit(1) from e
 
             output_path = Path(output)
             output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -165,12 +172,20 @@ def generate(
             console.print(f"[dim]Provider: {provider or 'default'}[/dim]")
             console.print(f"[dim]Image: {image}[/dim]")
 
-            parser = VisionParser(
-                provider=provider,
-                model=model,
-                ollama_base_url=ollama_url,
-            )
-            scene = asyncio.run(parser.parse(image))
+            try:
+                parser = VisionParser(
+                    provider=provider,
+                    model=model,
+                    ollama_base_url=ollama_url,
+                )
+                scene = asyncio.run(parser.parse(image))
+            except ImportError as e:
+                console.print(f"[bold red]Import Error:[/bold red] {e}")
+                console.print(
+                    "[dim]The required LLM package may not be installed. "
+                    "Try using --provider ollama to use a local model instead.[/dim]"
+                )
+                raise typer.Exit(1) from e
 
             output_path = Path(output)
             output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -196,7 +211,7 @@ def generate(
     except Exception as e:
         logger.error(f"Scene generation failed: {e}")
         console.print(f"[bold red]Error:[/bold red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @app.command()
@@ -227,7 +242,7 @@ def train(
         surg-rl train --scene scenes/suturing.json --algorithm SAC --lr 1e-4 --curriculum
         surg-rl train --scene scenes/suturing.json --algorithm PPO --n-envs 4 --device cuda
     """
-    from surg_rl.rl.training import TrainingConfig, AlgorithmConfig, TrainingManager
+    from surg_rl.rl.training import AlgorithmConfig, TrainingConfig, TrainingManager
 
     console.print("[bold blue]Starting RL Training[/bold blue]")
     console.print(f"  • Scene: {scene}")
@@ -260,7 +275,7 @@ def train(
         )
 
         manager = TrainingManager(config)
-        model = manager.train()
+        manager.train()
 
         console.print("[bold green]✓ Training complete![/bold green]")
         console.print(f"  • Model saved to: {log_dir}/final_model")
@@ -268,11 +283,15 @@ def train(
     except ImportError as e:
         console.print(f"[bold red]Import Error:[/bold red] {e}")
         console.print("[dim]Make sure stable-baselines3 is installed: pip install stable-baselines3[/dim]")
-        raise typer.Exit(1)
+        console.print(
+            "[dim]stable-baselines3 is listed in pyproject.toml dependencies. "
+            "If the import still fails, reinstall with: pip install -e \".[dev]\"[/dim]"
+        )
+        raise typer.Exit(1) from e
     except Exception as e:
         logger.error(f"Training failed: {e}")
         console.print(f"[bold red]Error:[/bold red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @app.command()
@@ -333,11 +352,15 @@ def evaluate(
     except ImportError as e:
         console.print(f"[bold red]Import Error:[/bold red] {e}")
         console.print("[dim]Make sure stable-baselines3 is installed: pip install stable-baselines3[/dim]")
-        raise typer.Exit(1)
+        console.print(
+            "[dim]stable-baselines3 is listed in pyproject.toml dependencies. "
+            "If the import still fails, reinstall with: pip install -e \".[dev]\"[/dim]"
+        )
+        raise typer.Exit(1) from e
     except Exception as e:
         logger.error(f"Evaluation failed: {e}")
         console.print(f"[bold red]Error:[/bold red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 if __name__ == "__main__":

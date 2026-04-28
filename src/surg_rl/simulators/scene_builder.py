@@ -431,13 +431,15 @@ f 5 1 4 8
         if ground_enabled:
             self._add_ground_plane_to_mjcf(worldbody, scene_definition)
 
-        # Add cameras
-        for camera in scene_definition.environment.cameras:
-            self._add_camera_to_mjcf(worldbody, camera)
+        env = getattr(scene_definition, "environment", None)
+        if env is not None:
+            # Add cameras
+            for camera in env.cameras:
+                self._add_camera_to_mjcf(worldbody, camera)
 
-        # Add lights
-        for light in scene_definition.environment.lights:
-            self._add_light_to_mjcf(worldbody, light)
+            # Add lights
+            for light in env.lights:
+                self._add_light_to_mjcf(worldbody, light)
 
         # Write to file
         tree = ET.ElementTree(mujoco)
@@ -458,13 +460,12 @@ f 5 1 4 8
         from surg_rl.scene_definition import RobotType
 
         # Get robot mesh or create primitive
+        urdf_resolved = False
         if robot.urdf_path:
             resolved = self.resolve_asset_path(robot.urdf_path)
             if resolved:
-                # Include URDF as mesh
-                mesh_name = f"robot_{index}"
-                ET.SubElement(asset, "mesh", name=mesh_name, file=str(resolved))
-                # Will add as body with mesh geom
+                urdf_resolved = True
+                ET.SubElement(mujoco, "include", file=str(resolved))
             else:
                 logger.warning(f"Robot URDF not found: {robot.urdf_path}. Using primitive.")
 
@@ -479,8 +480,9 @@ f 5 1 4 8
         body.set("pos", pos)
         body.set("quat", quat)
 
-        # Add simple geometry for now (box as placeholder)
-        geom = ET.SubElement(body, "geom", name=f"{robot.name}_body", type="box", size="0.05 0.05 0.1")
+        if not urdf_resolved:
+            # Add simple geometry for now (box as placeholder)
+            ET.SubElement(body, "geom", name=f"{robot.name}_body", type="box", size="0.05 0.05 0.1")
 
         # Add joints
         if robot.joints:
@@ -528,6 +530,24 @@ f 5 1 4 8
                 name=f"{robot.name}_motor",
                 joint=f"{robot.name}_joint",
                 gear="100",
+            )
+
+        if robot.end_effectors:
+            ET.SubElement(
+                body,
+                "joint",
+                name=f"{robot.name}_gripper",
+                type="slide",
+                axis="0 0 1",
+                range="0 0.05",
+                damping="0.1",
+            )
+            ET.SubElement(
+                actuator,
+                "position",
+                name=f"{robot.name}_gripper",
+                joint=f"{robot.name}_gripper",
+                kp="100",
             )
 
     def _add_tissue_to_mjcf(
