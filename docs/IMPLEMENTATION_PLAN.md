@@ -312,3 +312,4 @@ Current: **487 passed, 2 skipped**
 4. **Pre-trained Model Zoo**: Create and share pre-trained models for common surgical tasks.
 5. **Robot Joint Control**: Add direct joint control to demo scripts for real robot interaction.
 6. **Web Dashboard**: Interactive web-based visualization of training progress.
+7. **PyBullet Soft Body**: Complete roadmap at `docs/SOFTBODY_PLAN.md` (A1 surface `.obj` → A2 procedural tetrahedral `.vtk` → B external mesher). A1 is ready to implement once pre-steps P1–P3 are done.

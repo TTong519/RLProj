@@ -75,12 +75,14 @@ Generated from static analysis, sub-agent audits, doctest/test coverage review, 
 
 ## 🟠 HIGH
 
-### H1. PyBullet soft body support absent
+### H1. PyBullet soft body support absent → see `docs/SOFTBODY_PLAN.md`
 - **Files**: `src/surg_rl/simulators/pybullet_simulator.py:260-357 (_load_tissue)`
 - **Problem**: Always creates rigid `createMultiBody` boxes/spheres/cylinders. `TissueConfig.soft_body` flag is completely ignored.
 - **Impact**: Deformable tissue tasks cannot use PyBullet backend.
-- **Fix**: Check `tissue.soft_body`; if true, use `pybullet.loadSoftBody` with tetrahedral mesh.
-- **Note**: Requires a deformable-geometry pipeline (tetrahedral mesh generation + stable `loadSoftBody` API). Out of scope until assets and mesh preprocessing exist.
+- **Full roadmap**: `docs/SOFTBODY_PLAN.md` details the complete progression from A1 (surface `.obj` pass-through) → A2 (procedural tetrahedral `.vtk` from all primitives, pure numpy) → B (external meshing library pipeline, dependency deferred).
+- **Pre-implementation steps** (before A1): Add `PyBulletSoftBodyConfig` nested model to schema, validate primitive `.obj` watertightness, create standalone manual test harness.
+- **Xfail policy**: macOS + known-bad CI runners will be xfailed for A1; A2 re-evaluated after manual testing.
+- **Note**: Requires a deformable-geometry pipeline. A1 is small (~80 lines, zero deps) and ready to implement once P1–P3 are done.
 
 ### H2. MuJoCo scene builder loads URDF as `<mesh>` ✅ FIXED (minimal)
 - **Files**: `src/surg_rl/simulators/scene_builder.py`
