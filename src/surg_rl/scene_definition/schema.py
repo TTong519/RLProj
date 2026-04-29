@@ -248,6 +248,80 @@ class PhysicsMaterial(BaseModel):
     )
 
 
+
+class PyBulletSoftBodyConfig(BaseModel):
+    """PyBullet-specific soft body parameters.
+
+    These are only used by the PyBullet backend. The MuJoCo backend uses
+    the parent SoftBodyPhysics fields directly (flexcomp has different
+    parameter semantics).
+    """
+
+    use_mass_spring: bool = Field(
+        default=True,
+        description="Enable mass-spring model (must be True for spring params)",
+    )
+    use_neo_hookean: bool = Field(
+        default=False,
+        description="Use Neo-Hookean constitutive model instead of mass-spring",
+    )
+    use_bending_springs: bool = Field(
+        default=False,
+        description="Enable bending springs (only when use_mass_spring=True)",
+    )
+    use_self_collision: bool = Field(
+        default=False, description="Enable self-collision"
+    )
+    spring_elastic_stiffness: float = Field(
+        default=1.0, ge=0.0,
+        description="Elastic stiffness for mass-spring model",
+    )
+    spring_damping_stiffness: float = Field(
+        default=0.1, ge=0.0,
+        description="Damping stiffness for mass-spring model",
+    )
+    spring_bending_stiffness: float = Field(
+        default=0.1, ge=0.0,
+        description="Bending stiffness for mass-spring model",
+    )
+    neo_hookean_mu: float = Field(
+        default=1.0, ge=0.0,
+        description="Shear modulus for Neo-Hookean model",
+    )
+    neo_hookean_lambda: float = Field(
+        default=1.0, ge=0.0,
+        description="Lame's first parameter for Neo-Hookean model",
+    )
+    neo_hookean_damping: float = Field(
+        default=0.1, ge=0.0,
+        description="Damping for Neo-Hookean model",
+    )
+    repulsion_stiffness: float = Field(
+        default=0.5, ge=0.0, description="Contact repulsion stiffness"
+    )
+    friction_coefficient: float = Field(
+        default=0.0, ge=0.0, description="Surface friction coefficient"
+    )
+    spring_damping_all_directions: bool = Field(
+        default=False,
+        description="Apply damping in all directions, not just along springs",
+    )
+    sim_mesh_path: Optional[str] = Field(
+        default=None,
+        description="Optional separate simulation mesh file (e.g. coarse .vtk)",
+    )
+    mass: Optional[float] = Field(
+        default=None, ge=0.0,
+        description="Override total mass (defaults to density * volume)",
+    )
+    scale: Optional[float] = Field(
+        default=None, gt=0.0, description="Geometry scale factor (>0 only)",
+    )
+    collision_margin: Optional[float] = Field(
+        default=None, gt=0.0, description="Collision margin (>0 only)",
+    )
+
+
 class SoftBodyPhysics(BaseModel):
     """Soft body physics parameters for tissues."""
 
@@ -279,6 +353,10 @@ class SoftBodyPhysics(BaseModel):
     )
     max_deformation: Optional[float] = Field(
         default=None, ge=0.0, description="Maximum allowed deformation"
+    )
+    pybullet: PyBulletSoftBodyConfig = Field(
+        default_factory=PyBulletSoftBodyConfig,
+        description="PyBullet-specific soft body parameters",
     )
 
 

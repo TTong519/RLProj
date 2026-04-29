@@ -253,6 +253,41 @@ class TestSoftBodyPhysics:
         assert sbp.bending_stiffness == 100.0
         assert sbp.self_collision is False
 
+    def test_pybullet_soft_body_defaults(self):
+        """Test PyBulletSoftBodyConfig defaults."""
+        from surg_rl.scene_definition import PyBulletSoftBodyConfig
+        pbc = PyBulletSoftBodyConfig()
+        assert pbc.use_mass_spring is True
+        assert pbc.use_neo_hookean is False
+        assert pbc.spring_elastic_stiffness == 1.0
+        assert pbc.spring_damping_stiffness == 0.1
+        assert pbc.friction_coefficient == 0.0
+        assert pbc.scale is None
+
+    def test_pybullet_soft_body_custom(self):
+        """Test PyBulletSoftBodyConfig custom values."""
+        from surg_rl.scene_definition import PyBulletSoftBodyConfig
+        pbc = PyBulletSoftBodyConfig(
+            use_mass_spring=True,
+            use_bending_springs=True,
+            spring_elastic_stiffness=5.0,
+            mass=2.0,
+            scale=1.5,
+        )
+        assert pbc.use_bending_springs is True
+        assert pbc.spring_elastic_stiffness == 5.0
+        assert pbc.mass == 2.0
+        assert pbc.scale == 1.5
+
+    def test_soft_body_physics_pybullet_nested(self):
+        """Test SoftBodyPhysics with nested pybullet config."""
+        from surg_rl.scene_definition import PyBulletSoftBodyConfig
+        sbp = SoftBodyPhysics(
+            pybullet=PyBulletSoftBodyConfig(spring_elastic_stiffness=10.0)
+        )
+        assert sbp.pybullet.spring_elastic_stiffness == 10.0
+        assert sbp.pybullet.use_mass_spring is True
+
 
 class TestRobotConfig:
     """Tests for RobotConfig model."""

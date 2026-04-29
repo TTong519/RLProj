@@ -27,6 +27,7 @@ from .schema import (
     TextureAsset,
     # Physics
     PhysicsMaterial,
+    PyBulletSoftBodyConfig,
     SoftBodyPhysics,
     RigidBodyPhysics,
     PhysicsConfig,
@@ -108,6 +109,7 @@ __all__ = [
     "TextureAsset",
     # Physics
     "PhysicsMaterial",
+    "PyBulletSoftBodyConfig",
     "SoftBodyPhysics",
     "RigidBodyPhysics",
     "PhysicsConfig",
