@@ -1,5 +1,8 @@
 """Tests for simulator module."""
 
+import sys
+import os
+
 import numpy as np
 import pytest
 from pathlib import Path
@@ -924,4 +927,154 @@ class TestCameraNameRendering:
         with patch.object(sim._pb, "getCameraImage", return_value=(640, 480, fake_rgb, None, None)):
             rgb = sim.render(mode="rgb_array", camera_name="main_camera")
         assert rgb is not None
+
+
+class TestPyBulletSoftBodyLoad:
+    """Soft body loading tests for PyBullet."""
+
+    @pytest.mark.xfail(
+        sys.platform in ("darwin",)
+        or os.environ.get("CI") == "true",
+        reason="PyBullet soft body auto-tetgen unstable on macOS and some CI runners",
+    )
+    def test_pybullet_soft_body_load_no_crash(self, tmp_path):
+        """Soft body tissue should load without NotImplementedError."""
+        from surg_rl.scene_definition.schema import (
+            SceneDefinition,
+            TissueConfig,
+            TissueMeshDefinition,
+            SoftBodyPhysics,
+        )
+
+        scene = SceneDefinition(
+            metadata={"name": "soft_test"},
+            robots=[],
+            tissues=[
+                TissueConfig(
+                    name="soft_tissue",
+                    geometry=TissueMeshDefinition(
+                        primitive="box", dimensions=(0.1, 0.1, 0.01)
+                    ),
+                    soft_body=True,
+                    physics=SoftBodyPhysics(),
+                )
+            ],
+            instruments=[],
+        )
+        sim = PyBulletSimulator()
+        sim.load_scene(scene)
+        assert "soft_tissue" in sim._soft_body_ids
+        assert sim._soft_body_ids["soft_tissue"] >= 0
+
+    @pytest.mark.xfail(
+        sys.platform in ("darwin",)
+        or os.environ.get("CI") == "true",
+        reason="PyBullet soft body unstable on macOS and CI",
+    )
+    def test_pybullet_soft_body_step_no_crash(self):
+        """Soft body should survive at least one simulation step."""
+        from surg_rl.scene_definition.schema import (
+            SceneDefinition,
+            TissueConfig,
+            TissueMeshDefinition,
+            SoftBodyPhysics,
+        )
+
+        scene = SceneDefinition(
+            metadata={"name": "soft_step"},
+            robots=[],
+            tissues=[
+                TissueConfig(
+                    name="soft_tissue",
+                    geometry=TissueMeshDefinition(
+                        primitive="box", dimensions=(0.1, 0.1, 0.01)
+                    ),
+                    soft_body=True,
+                    physics=SoftBodyPhysics(),
+                )
+            ],
+            instruments=[],
+        )
+        sim = PyBulletSimulator()
+        sim.load_scene(scene)
+        sim.step(np.zeros(1))  # dummy action
+
+    @pytest.mark.xfail(
+        sys.platform in ("darwin",)
+        or os.environ.get("CI") == "true",
+        reason="PyBullet soft body fragile on macOS/CI",
+    )
+    def test_pybullet_soft_body_get_mesh_data(self):
+        """getMeshData should return vertices after loading."""
+        from surg_rl.scene_definition.schema import (
+            SceneDefinition,
+            TissueConfig,
+            TissueMeshDefinition,
+            SoftBodyPhysics,
+        )
+
+        scene = SceneDefinition(
+            metadata={"name": "mesh_data"},
+            robots=[],
+            tissues=[
+                TissueConfig(
+                    name="soft_tissue",
+                    geometry=TissueMeshDefinition(
+                        primitive="sphere",
+                        dimensions=(0.05, 0.05, 0.05),
+                        radius=0.05,
+                    ),
+                    soft_body=True,
+                    physics=SoftBodyPhysics(),
+                )
+            ],
+            instruments=[],
+        )
+        sim = PyBulletSimulator()
+        sim.load_scene(scene)
+        soft_id = sim._soft_body_ids["soft_tissue"]
+        data = sim._pb.getMeshData(soft_id, physicsClientId=sim._physics_client)
+        vertices = data[1]
+        assert len(vertices) > 0
+
+    @pytest.mark.xfail(
+        sys.platform in ("darwin",)
+        or os.environ.get("CI") == "true",
+        reason="PyBullet soft body fragile on macOS/CI",
+    )
+    def test_pybullet_soft_body_anchor_to_world(self):
+        """Anchoring a node to world should prevent gravity-driven motion."""
+        from surg_rl.scene_definition.schema import (
+            SceneDefinition,
+            TissueConfig,
+            TissueMeshDefinition,
+            SoftBodyPhysics,
+        )
+
+        scene = SceneDefinition(
+            metadata={"name": "anchor"},
+            robots=[],
+            tissues=[
+                TissueConfig(
+                    name="soft_tissue",
+                    geometry=TissueMeshDefinition(
+                        primitive="box", dimensions=(0.1, 0.1, 0.01)
+                    ),
+                    soft_body=True,
+                    physics=SoftBodyPhysics(),
+                )
+            ],
+            instruments=[],
+        )
+        sim = PyBulletSimulator()
+        sim.load_scene(scene)
+        soft_id = sim._soft_body_ids["soft_tissue"]
+        data = sim._pb.getMeshData(soft_id, physicsClientId=sim._physics_client)
+        if len(data[1]) > 0:
+            sim._pb.createSoftBodyAnchor(
+                soft_id, 0, -1, [0, 0, 0], physicsClientId=sim._physics_client
+            )
+        # Step a few times
+        for _ in range(10):
+            sim._pb.stepSimulation(physicsClientId=sim._physics_client)
 

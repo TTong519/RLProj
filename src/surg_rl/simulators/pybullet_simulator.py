@@ -52,6 +52,7 @@ class PyBulletSimulator(BaseSimulator):
 
         self._physics_client = None
         self._body_ids: dict[str, int] = {}
+        self._soft_body_ids: dict[str, int] = {}
         self._joint_ids: dict[str, dict[str, int]] = {}
         self._control_map: list[dict[str, Any]] = []
         self._initial_positions: dict[str, list] = {}  # Store initial positions
@@ -93,11 +94,26 @@ class PyBulletSimulator(BaseSimulator):
                 self._physics_client = self._pb.connect(self._pb.DIRECT)
         else:
             # Clear previous bodies if reloading
-            self._pb.resetSimulation(physicsClientId=self._physics_client)
+            has_soft_body = any(
+                getattr(t, "soft_body", False)
+                for t in scene_definition.tissues
+            )
+            if has_soft_body:
+                try:
+                    self._pb.resetSimulation(
+                        self._pb.RESET_USE_DEFORMABLE_WORLD,
+                        physicsClientId=self._physics_client,
+                    )
+                except (AttributeError, TypeError):
+                    # Fallback for older PyBullet without RESET_USE_DEFORMABLE_WORLD
+                    self._pb.resetSimulation(physicsClientId=self._physics_client)
+            else:
+                self._pb.resetSimulation(physicsClientId=self._physics_client)
             self._body_ids.clear()
             self._joint_ids.clear()
             self._initial_positions.clear()
             self._initial_orientations.clear()
+            self._soft_body_ids.clear()
 
         # Configure physics
         physics = getattr(scene_definition, "physics", None)
@@ -303,10 +319,8 @@ class PyBulletSimulator(BaseSimulator):
     def _load_tissue(self, tissue: Any) -> None:
         """Load a tissue into the simulation."""
         if getattr(tissue, "soft_body", False):
-            raise NotImplementedError(
-                "Soft body support in PyBullet is not yet implemented. "
-                "Use MuJoCo backend for deformable tissues."
-            )
+            self._load_soft_body_tissue(tissue)
+            return
         # Get geometry
         primitive = tissue.geometry.primitive if tissue.geometry is not None else None
         if primitive == "box":
@@ -402,6 +416,88 @@ class PyBulletSimulator(BaseSimulator):
         # Store initial position for reset
         self._initial_positions[tissue.name] = list(position)
         self._initial_orientations[tissue.name] = list(orientation)
+
+    def _load_soft_body_tissue(self, tissue: Any) -> None:
+        """Load a deformable tissue via pybullet.loadSoftBody."""
+        # 1. Generate .obj mesh
+        if tissue.geometry is not None:
+            dims = tissue.geometry.dimensions or (0.1, 0.1, 0.01)
+            radius = tissue.geometry.radius
+            primitive = tissue.geometry.primitive
+        else:
+            dims = (0.1, 0.1, 0.01)
+            radius = None
+            primitive = None
+
+        mesh_path, _ = self.scene_builder.get_mesh_or_primitive(
+            mesh_path=getattr(tissue.geometry, "mesh_path", None) if tissue.geometry is not None else None,
+            primitive=primitive,
+            dimensions=dims if isinstance(dims, tuple) else tuple(dims),
+            name=tissue.name,
+            radius=radius,
+        )
+
+        # 2. Map PyBulletSoftBodyConfig to loadSoftBody kwargs
+        physics = getattr(tissue, "physics", None)
+        pbc = getattr(physics, "pybullet", None) if physics is not None else None
+        if pbc is None:
+            kwargs: dict[str, Any] = {
+                "useMassSpring": 1,
+                "springElasticStiffness": 1.0,
+                "springDampingStiffness": 0.1,
+                "physicsClientId": self._physics_client,
+            }
+        else:
+            kwargs = {
+                "fileName": str(mesh_path),
+                "basePosition": [
+                    tissue.pose.position.x,
+                    tissue.pose.position.y,
+                    tissue.pose.position.z,
+                ],
+                "baseOrientation": [
+                    tissue.pose.orientation.x,
+                    tissue.pose.orientation.y,
+                    tissue.pose.orientation.z,
+                    tissue.pose.orientation.w,
+                ],
+                "useMassSpring": 1 if pbc.use_mass_spring else 0,
+                "useNeoHookean": 1 if pbc.use_neo_hookean else 0,
+                "useBendingSprings": 1 if pbc.use_bending_springs else 0,
+                "useSelfCollision": 1 if pbc.use_self_collision else 0,
+                "springElasticStiffness": pbc.spring_elastic_stiffness,
+                "springDampingStiffness": pbc.spring_damping_stiffness,
+                "springBendingStiffness": pbc.spring_bending_stiffness,
+                "NeoHookeanMu": pbc.neo_hookean_mu,
+                "NeoHookeanLambda": pbc.neo_hookean_lambda,
+                "NeoHookeanDamping": pbc.neo_hookean_damping,
+                "repulsionStiffness": pbc.repulsion_stiffness,
+                "frictionCoeff": pbc.friction_coefficient,
+                "springDampingAllDirections": 1 if pbc.spring_damping_all_directions else 0,
+                "physicsClientId": self._physics_client,
+            }
+            if pbc.mass is not None:
+                kwargs["mass"] = pbc.mass
+            if pbc.scale is not None:
+                kwargs["scale"] = pbc.scale
+            if pbc.collision_margin is not None:
+                kwargs["collisionMargin"] = pbc.collision_margin
+            if pbc.sim_mesh_path is not None:
+                kwargs["simFileName"] = pbc.sim_mesh_path
+
+            if "mass" not in kwargs:
+                density = getattr(physics, "density", 1000.0)
+                # Approximate volume heuristic: scale by dims product (m³)
+                volume = 1.0
+                if hasattr(dims, "__iter__") and len(list(dims)) == 3:
+                    volume = float(dims[0] * dims[1] * dims[2])
+                kwargs["mass"] = density * volume
+
+        soft_id = self._pb.loadSoftBody(
+            fileName=str(mesh_path),
+            **{k: v for k, v in kwargs.items() if k != "fileName"},
+        )
+        self._soft_body_ids[tissue.name] = soft_id
 
     def _load_instrument(self, instrument: Any) -> None:
         """Load an instrument into the simulation."""
@@ -522,6 +618,23 @@ class PyBulletSimulator(BaseSimulator):
 
         if seed is not None:
             np.random.seed(seed)
+
+        if self._soft_body_ids:
+            # Soft bodies don't support per-body reset; reload scene entirely
+            try:
+                self._pb.resetSimulation(
+                    self._pb.RESET_USE_DEFORMABLE_WORLD,
+                    physicsClientId=self._physics_client,
+                )
+            except (AttributeError, TypeError):
+                self._pb.resetSimulation(physicsClientId=self._physics_client)
+            self._body_ids.clear()
+            self._joint_ids.clear()
+            self._initial_positions.clear()
+            self._initial_orientations.clear()
+            self._soft_body_ids.clear()
+            self.load_scene(self._scene)
+            return self._get_observation()
 
         # Reset all bodies to their initial positions
         for name, body_id in self._body_ids.items():
@@ -790,7 +903,19 @@ class PyBulletSimulator(BaseSimulator):
         self, body_name: str
     ) -> tuple[np.ndarray, np.ndarray] | None:
         """Get pose of a named body in the simulation."""
-        if not self._loaded or body_name not in self._body_ids:
+        if not self._loaded:
+            return None
+        if body_name in self._soft_body_ids:
+            data = self._pb.getMeshData(
+                self._soft_body_ids[body_name],
+                physicsClientId=self._physics_client,
+            )
+            vertices = np.array(data[1])  # list of (x,y,z) tuples
+            if len(vertices) == 0:
+                return None
+            centroid = vertices.mean(axis=0)
+            return centroid, np.array([0.0, 0.0, 0.0, 1.0])
+        if body_name not in self._body_ids:
             return None
         body_id = self._body_ids[body_name]
         pos, orn = self._pb.getBasePositionAndOrientation(
