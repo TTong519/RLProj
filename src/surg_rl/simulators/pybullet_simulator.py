@@ -9,6 +9,8 @@ from surg_rl.utils.logging import get_logger
 
 from .base_simulator import BaseSimulator, Observation, State, StepResult
 from .scene_builder import SceneBuilder
+from surg_rl.utils.mesh_generation import generate_box_tet_mesh, generate_cylinder_tet_mesh, generate_sphere_tet_mesh
+from surg_rl.utils.vtk_io import write_vtk_unstructured_grid
 
 logger = get_logger(__name__)
 
@@ -92,6 +94,19 @@ class PyBulletSimulator(BaseSimulator):
                 self._physics_client = self._pb.connect(self._pb.GUI)
             else:
                 self._physics_client = self._pb.connect(self._pb.DIRECT)
+            # Fresh connection — must enable deformable world before any load
+            has_soft_body = any(
+                getattr(t, "soft_body", False)
+                for t in scene_definition.tissues
+            )
+            if has_soft_body:
+                try:
+                    self._pb.resetSimulation(
+                        self._pb.RESET_USE_DEFORMABLE_WORLD,
+                        physicsClientId=self._physics_client,
+                    )
+                except (AttributeError, TypeError):
+                    self._pb.resetSimulation(physicsClientId=self._physics_client)
         else:
             # Clear previous bodies if reloading
             has_soft_body = any(
@@ -416,26 +431,57 @@ class PyBulletSimulator(BaseSimulator):
         # Store initial position for reset
         self._initial_positions[tissue.name] = list(position)
         self._initial_orientations[tissue.name] = list(orientation)
+    def _get_vtk_mesh_path(self, tissue: Any) -> Path:
+        """Generate or return cached .vtk tetrahedral mesh for a soft body tissue."""
+        from surg_rl.utils.vtk_io import write_vtk_unstructured_grid
+        from surg_rl.utils.mesh_generation import (
+            generate_box_tet_mesh,
+            generate_cylinder_tet_mesh,
+            generate_sphere_tet_mesh,
+        )
+
+        dims = getattr(tissue.geometry, "dimensions", None) or (0.1, 0.1, 0.01)
+        radius = getattr(tissue.geometry, "radius", None)
+        primitive = getattr(tissue.geometry, "primitive", None)
+
+        if primitive == "sphere":
+            r = radius or min(dims) / 2
+            mesh_path = self.scene_builder.temp_dir / f"{tissue.name}_sphere_tet.vtk"
+            if not mesh_path.exists():
+                verts, tets = generate_sphere_tet_mesh(r, subdivisions=2)
+                write_vtk_unstructured_grid(mesh_path, verts, tets)
+        elif primitive == "cylinder":
+            r = radius or min(dims[0], dims[1]) / 2 if len(dims) >= 2 else 0.05
+            h = dims[2] if len(dims) >= 3 else 0.1
+            mesh_path = self.scene_builder.temp_dir / f"{tissue.name}_cylinder_tet.vtk"
+            if not mesh_path.exists():
+                verts, tets = generate_cylinder_tet_mesh(r, h, theta_segments=16, height_segments=4)
+                write_vtk_unstructured_grid(mesh_path, verts, tets)
+        else:  # Default to box
+            mesh_path = self.scene_builder.temp_dir / f"{tissue.name}_box_tet.vtk"
+            if not mesh_path.exists():
+                verts, tets = generate_box_tet_mesh(tuple(dims), resolution=4)
+                write_vtk_unstructured_grid(mesh_path, verts, tets)
+        return mesh_path
 
     def _load_soft_body_tissue(self, tissue: Any) -> None:
-        """Load a deformable tissue via pybullet.loadSoftBody."""
-        # 1. Generate .obj mesh
-        if tissue.geometry is not None:
-            dims = tissue.geometry.dimensions or (0.1, 0.1, 0.01)
-            radius = tissue.geometry.radius
-            primitive = tissue.geometry.primitive
-        else:
-            dims = (0.1, 0.1, 0.01)
-            radius = None
-            primitive = None
+        """Load a deformable tissue via pybullet.loadSoftBody.
 
-        mesh_path, _ = self.scene_builder.get_mesh_or_primitive(
-            mesh_path=getattr(tissue.geometry, "mesh_path", None) if tissue.geometry is not None else None,
-            primitive=primitive,
-            dimensions=dims if isinstance(dims, tuple) else tuple(dims),
-            name=tissue.name,
-            radius=radius,
-        )
+        Prefers a volumetric .vtk mesh (A2) but falls back to the triangulated
+        .obj surface mesh (A1) if generation fails.
+        """
+        # 1. Mesh generation
+        try:
+            mesh_path = self._get_vtk_mesh_path(tissue)
+        except Exception:
+            dims = getattr(tissue.geometry, "dimensions", (0.1, 0.1, 0.01))
+            mesh_path, _ = self.scene_builder.get_mesh_or_primitive(
+                mesh_path=getattr(tissue.geometry, "mesh_path", None) if tissue.geometry is not None else None,
+                primitive=getattr(tissue.geometry, "primitive", None) if tissue.geometry is not None else None,
+                dimensions=dims if isinstance(dims, tuple) else tuple(dims),
+                name=tissue.name,
+                radius=getattr(tissue.geometry, "radius", None),
+            )
 
         # 2. Map PyBulletSoftBodyConfig to loadSoftBody kwargs
         physics = getattr(tissue, "physics", None)
@@ -487,8 +533,8 @@ class PyBulletSimulator(BaseSimulator):
 
             if "mass" not in kwargs:
                 density = getattr(physics, "density", 1000.0)
-                # Approximate volume heuristic: scale by dims product (m³)
                 volume = 1.0
+                dims = getattr(tissue.geometry, "dimensions", (0.1, 0.1, 0.01))
                 if hasattr(dims, "__iter__") and len(list(dims)) == 3:
                     volume = float(dims[0] * dims[1] * dims[2])
                 kwargs["mass"] = density * volume
@@ -498,7 +544,6 @@ class PyBulletSimulator(BaseSimulator):
             **{k: v for k, v in kwargs.items() if k != "fileName"},
         )
         self._soft_body_ids[tissue.name] = soft_id
-
     def _load_instrument(self, instrument: Any) -> None:
         """Load an instrument into the simulation."""
         # Use primitive for instruments
