@@ -75,16 +75,19 @@ Generated from static analysis, sub-agent audits, doctest/test coverage review, 
 
 ## 🟠 HIGH
 
-### H1. PyBullet soft body support absent → see `docs/SOFTBODY_PLAN.md` ✅ FIXED (Phase A1)
-- **Files**: `src/surg_rl/simulators/pybullet_simulator.py`
-- **Fix**: Phase A1 implemented:
-  - Added `PyBulletSoftBodyConfig` nested model to `SoftBodyPhysics` in schema (P1).
-  - Fixed primitive `.obj` triangulation in `scene_builder.py` — box, cylinder, sphere now output pure triangles (P2).
-  - `pybullet_simulator.py` now generates `.obj` via `scene_builder.get_mesh_or_primitive()`, maps `PyBulletSoftBodyConfig` fields to `loadSoftBody` kwargs, and stores the returned ID in `_soft_body_ids`.
-  - `load_scene` calls `resetSimulation(RESET_USE_DEFORMABLE_WORLD)` when any tissue has `soft_body=True`.
-  - `reset` reloads the full scene when soft bodies exist (safe: avoids broken `removeBody()` on soft bodies).
-  - `get_body_pose` computes centroid from `getMeshData` for soft bodies.
-  - 3 XPASS on macOS (surprisingly stable), 1 xfail on CI. Manual harness passes for box and sphere.
+### H1. PyBullet soft body support absent → see `docs/SOFTBODY_PLAN.md` ✅ FIXED (Phases A1+A2)
+- **Files**: `src/surg_rl/simulators/pybullet_simulator.py`, `src/surg_rl/utils/mesh_generation.py`, `src/surg_rl/utils/vtk_io.py`
+- **Fix**:
+  - **P1** (Schema): Added `PyBulletSoftBodyConfig` nested model with 20 fields and tests.
+  - **P2** (Triangulation): Fixed `scene_builder.py` primitive `.obj` generators to output pure triangles.
+  - **P3** (Harness): Manual harness `tests/manual/test_pybullet_soft_body.py` passes for box and sphere.
+  - **A1** (Surface `.obj`): Soft body loads via `loadSoftBody` using triangulated `.obj` fallback.
+  - **A2** (Procedural `.vtk`): Pure-numpy tetrahedral mesh generators for box/sphere/cylinder with correct 5-decomposition / icosahedron subdivision / prism splitting. VTK I/O validates pure cell type 10.
+  - `pybullet_simulator.py` prefers `.vtk` for volumetric soft bodies, falls back to `.obj` on failure.
+  - `load_scene` calls `resetSimulation(RESET_USE_DEFORMABLE_WORLD)` both on fresh connect and reload.
+  - `reset` safely reloads scene when soft bodies present (avoids broken `removeBody()`).
+  - `get_body_pose` returns centroid from `getMeshData` for soft bodies.
+  - 3 XPASS on macOS, 1 xfail on CI. Manual harness: box and sphere both pass with tetrahedral `.vtk`.
 
 ### H2. MuJoCo scene builder loads URDF as `<mesh>` ✅ FIXED (minimal)
 - **Files**: `src/surg_rl/simulators/scene_builder.py`

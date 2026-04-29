@@ -1,8 +1,24 @@
 # PyBullet Soft Body Implementation Roadmap
 
-**Status:** Planned  
-**Owner:** Future agent / maintainer  
-**Last Updated:** 2026-04-28  
+**Status:** P1–P3 ✅, A1 ✅, A2 ✅ (complete). Phase B deferred.
+**Owner:** Future agent / maintainer
+**Last Updated:** 2026-04-29
+
+## Completion Summary
+
+| Phase | Status | Key Files |
+|---|---|---|
+| **P1** — Schema (PyBulletSoftBodyConfig) | ✅ Done | `src/surg_rl/scene_definition/schema.py` |
+| **P2** — Fix `.obj` triangulation | ✅ Done | `src/surg_rl/simulators/scene_builder.py` |
+| **P3** — Manual test harness | ✅ Done | `tests/manual/test_pybullet_soft_body.py` |
+| **A1** — Surface `.obj` pass-through | ✅ Done | `src/surg_rl/simulators/pybullet_simulator.py` |
+| **A2** — Procedural tetrahedral `.vtk` | ✅ Done | `src/surg_rl/utils/mesh_generation.py`, `vtk_io.py` |
+| **B**  — External mesher | ⏸️ Deferred | Pending user request |
+
+**Current Test Results (macOS ARM):**
+- Manual harness: box + sphere soft bodies load and step successfully
+- pytest: 541 passed, 2 skipped, 1 xfailed, 3 xpassed
+- A2 `.vtk` meshes are stable on macOS (deterministic, no auto-tetgen segfaults)  
 **Depends On:** `TissueConfig.soft_body` flag (schema ✅), primitive `.obj` generation (scene_builder ✅), MuJoCo `flexcomp` backend (simulator ✅)
 
 ---
