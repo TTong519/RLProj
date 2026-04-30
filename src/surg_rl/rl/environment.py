@@ -149,6 +149,17 @@ class SurgicalEnv(gym.Env):
             config=action_cfg
         )
 
+        # Validate action type is supported at load time (ACT-05)
+        if self._action_builder.config.action_type in (
+            ActionType.ENDEFFECTOR_POSE,
+            ActionType.ENDEFFECTOR_DELTA,
+        ):
+            raise NotImplementedError(
+                f"Action type {self._action_builder.config.action_type.value!r} is not yet supported. "
+                "Supported types: JOINT_POSITIONS, JOINT_VELOCITIES, JOINT_TORQUES, "
+                "GRIPPER, DISCRETE."
+            )
+
         # Define spaces
         if self.config.observation_config and self.config.observation_config.flatten:
             self.observation_space = self._obs_builder.get_flat_observation_space()
@@ -234,24 +245,48 @@ class SurgicalEnv(gym.Env):
     def _default_action_config(self) -> ActionConfig:
         """Create default action config based on scene and simulator.
 
+        Detects gripper availability from simulator control map or scene
+        definition and adjusts ``num_joints`` / ``include_gripper`` accordingly.
+
         Returns:
             ActionConfig object.
         """
+        # Default fallback values
         num_joints = 7  # Default 7-DOF
         include_gripper = False
-        if self._simulator is not None:
-            try:
-                sim_controls = self._simulator.get_num_controls()
-            except Exception:
-                sim_controls = 0
-            if isinstance(sim_controls, int) and sim_controls > 0:
-                num_joints = sim_controls
-                include_gripper = False
-        elif self._scene and self._scene.robots:
-            # Fallback to scene definition joint count
+
+        # 1. Introspect loaded simulator control map (most accurate)
+        if (
+            self._simulator is not None
+            and hasattr(self._simulator, "_control_map")
+            and isinstance(self._simulator._control_map, list)
+        ):
+            control_map = self._simulator._control_map
+            if control_map:
+                gripper_count = sum(
+                    1 for m in control_map if m.get("is_gripper")
+                )
+                total = len(control_map)
+                include_gripper = gripper_count > 0
+                num_joints = total - gripper_count
+                return ActionConfig(
+                    action_type=ActionType.JOINT_POSITIONS,
+                    num_joints=num_joints,
+                    include_gripper=include_gripper,
+                    scaling=ActionScaling.NORMALIZE,
+                )
+
+        # 2. Fallback to scene definition
+        if self._scene and self._scene.robots:
             first_robot = self._scene.robots[0]
+            # Detect gripper from end_effectors
+            if hasattr(first_robot, "end_effectors") and first_robot.end_effectors:
+                include_gripper = True
             if hasattr(first_robot, "joints") and first_robot.joints:
                 num_joints = len(first_robot.joints)
+            elif include_gripper:
+                # Primitive scene with no explicit joints: assume 1 DOF arm + gripper
+                num_joints = 1
 
         return ActionConfig(
             action_type=ActionType.JOINT_POSITIONS,

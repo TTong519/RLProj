@@ -193,3 +193,108 @@ class TestSurgicalEnvTorque:
         assert isinstance(obs, dict)
         assert isinstance(reward, float)
         env.close()
+
+
+class TestGripper:
+    """ACT-04: Gripper actuation works end-to-end in both backends."""
+
+    def test_action_space_includes_gripper_when_configured(self):
+        """Explicit include_gripper=True yields action size = num_joints + 1."""
+        from surg_rl.rl.action import ActionConfig, ActionType
+
+        config = SurgicalEnvConfig(
+            scene_path="scenes/simple_suturing.json",
+            action_config=ActionConfig(
+                action_type=ActionType.JOINT_POSITIONS,
+                num_joints=1,
+                include_gripper=True,
+            ),
+        )
+        env = SurgicalEnv(config)
+        assert env.action_space.shape[0] == 2
+        env.close()
+
+    def test_step_with_gripper_action_mujoco(self):
+        """Step succeeds with gripper-including action on MuJoCo."""
+        from surg_rl.rl.action import ActionConfig, ActionType
+
+        config = SurgicalEnvConfig(
+            scene_path="scenes/simple_suturing.json",
+            simulator_type="mujoco",
+            action_config=ActionConfig(
+                action_type=ActionType.JOINT_POSITIONS,
+                num_joints=1,
+                include_gripper=True,
+            ),
+            max_episode_steps=2,
+        )
+        env = SurgicalEnv(config)
+        env.reset()
+        action = np.zeros(2, dtype=np.float32)  # 1 joint + 1 gripper
+        obs, reward, terminated, truncated, info = env.step(action)
+        assert isinstance(obs, dict)
+        env.close()
+
+    def test_step_with_gripper_action_pybullet(self):
+        """Step succeeds with gripper-including action on PyBullet."""
+        from surg_rl.rl.action import ActionConfig, ActionType
+
+        config = SurgicalEnvConfig(
+            scene_path="scenes/simple_suturing.json",
+            simulator_type="pybullet",
+            action_config=ActionConfig(
+                action_type=ActionType.JOINT_POSITIONS,
+                num_joints=1,
+                include_gripper=True,
+            ),
+            max_episode_steps=2,
+        )
+        env = SurgicalEnv(config)
+        env.reset()
+        action = np.zeros(2, dtype=np.float32)  # 1 joint + 1 gripper
+        obs, reward, terminated, truncated, info = env.step(action)
+        assert isinstance(obs, dict)
+        env.close()
+
+    def test_default_action_config_detects_gripper_from_scene(self):
+        """When no action_config is provided, gripper is auto-detected from scene."""
+        config = SurgicalEnvConfig(
+            scene_path="scenes/simple_suturing.json",
+            simulator_type="mujoco",
+        )
+        env = SurgicalEnv(config)
+        # simple_suturing has end_effectors, so include_gripper should be True
+        assert env._action_builder.config.include_gripper is True
+        env.close()
+
+
+class TestActionTypeValidation:
+    """ACT-05: Invalid or unimplemented ActionType values are rejected at scene load time."""
+
+    def test_unimplemented_endeffector_pose_raises_on_init(self):
+        from surg_rl.rl.action import ActionConfig, ActionType
+
+        config = SurgicalEnvConfig(
+            scene_path="scenes/minimal_scene.json",
+            action_config=ActionConfig(
+                action_type=ActionType.ENDEFFECTOR_POSE,
+                num_joints=6,
+            ),
+        )
+        with pytest.raises(NotImplementedError, match="not yet supported"):
+            SurgicalEnv(config)
+
+    def test_unimplemented_endeffector_delta_raises_on_init(self):
+        from surg_rl.rl.action import ActionConfig, ActionType
+
+        config = SurgicalEnvConfig(
+            scene_path="scenes/minimal_scene.json",
+            action_config=ActionConfig(
+                action_type=ActionType.ENDEFFECTOR_DELTA,
+                num_joints=6,
+            ),
+        )
+        with pytest.raises(NotImplementedError, match="not yet supported"):
+            SurgicalEnv(config)
+
+
