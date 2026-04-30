@@ -6,15 +6,13 @@ checkpoint management, and evaluation utilities.
 """
 
 import json
-import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
-
-import numpy as np
+from typing import Any
 
 import gymnasium as gym
+import numpy as np
 
 from surg_rl.utils.logging import get_logger
 
@@ -24,6 +22,7 @@ logger = get_logger(__name__)
 # ============================================================================
 # Training Configuration
 # ============================================================================
+
 
 @dataclass
 class AlgorithmConfig:
@@ -65,9 +64,9 @@ class AlgorithmConfig:
     tau: float = 0.005
     train_freq: int = 1
     gradient_steps: int = 1
-    policy_kwargs: Optional[Dict[str, Any]] = None
+    policy_kwargs: dict[str, Any] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         result = {}
         for k, v in self.__dict__.items():
@@ -106,7 +105,7 @@ class TrainingConfig:
     seed: int = 42
     device: str = "auto"
     log_dir: str = "logs/training"
-    tensorboard_log: Optional[str] = None
+    tensorboard_log: str | None = None
     save_freq: int = 50_000
     eval_freq: int = 10_000
     n_eval_episodes: int = 10
@@ -117,7 +116,7 @@ class TrainingConfig:
     use_adaptive_difficulty: bool = False
     enable_tensorboard: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         result = {}
         for k, v in self.__dict__.items():
@@ -127,7 +126,7 @@ class TrainingConfig:
                 result[k] = v
         return result
 
-    def save(self, path: Union[str, Path]) -> None:
+    def save(self, path: str | Path) -> None:
         """Save configuration to JSON file.
 
         Args:
@@ -139,7 +138,7 @@ class TrainingConfig:
             json.dump(self.to_dict(), f, indent=2, default=str)
 
     @classmethod
-    def load(cls, path: Union[str, Path]) -> "TrainingConfig":
+    def load(cls, path: str | Path) -> "TrainingConfig":
         """Load configuration from JSON file.
 
         Args:
@@ -159,6 +158,7 @@ class TrainingConfig:
 # ============================================================================
 # Training Manager
 # ============================================================================
+
 
 class TrainingManager:
     """Manager for RL training runs.
@@ -185,7 +185,7 @@ class TrainingManager:
         "A2C": "stable_baselines3.A2C",
     }
 
-    def __init__(self, config: Optional[TrainingConfig] = None):
+    def __init__(self, config: TrainingConfig | None = None):
         """Initialize the training manager.
 
         Args:
@@ -209,29 +209,34 @@ class TrainingManager:
             ValueError: If algorithm name is not recognized.
         """
         try:
-            import stable_baselines3
-        except ImportError:
+            import importlib
+            import importlib.util
+
+            if importlib.util.find_spec("stable_baselines3") is None:
+                raise ImportError(
+                    "stable-baselines3 is required for training. "
+                    "Install it with: pip install stable-baselines3"
+                )
+        except ImportError as exc:
             raise ImportError(
                 "stable-baselines3 is required for training. "
                 "Install it with: pip install stable-baselines3"
-            )
+            ) from exc
 
         algo_name = self.config.algorithm.name.upper()
         try:
-            import importlib
             module_name, class_name = self.ALGORITHM_MAP[algo_name].rsplit(".", 1)
             module = importlib.import_module(module_name)
             return getattr(module, class_name)
-        except KeyError:
+        except KeyError as exc:
             raise ValueError(
-                f"Unknown algorithm: {algo_name}. "
-                f"Supported: {list(self.ALGORITHM_MAP.keys())}"
-            )
-        except ImportError:
+                f"Unknown algorithm: {algo_name}. " f"Supported: {list(self.ALGORITHM_MAP.keys())}"
+            ) from exc
+        except ImportError as exc:
             raise ImportError(
                 f"Algorithm {algo_name} import failed. "
                 "Ensure stable-baselines3 is installed: pip install stable-baselines3"
-            )
+            ) from exc
 
     def _create_environment(self):
         """Create the training environment.
@@ -283,9 +288,7 @@ class TrainingManager:
 
         # Select policy type based on observation space
         policy_type = "MlpPolicy"
-        if hasattr(env, "observation_space") and isinstance(
-            env.observation_space, gym.spaces.Dict
-        ):
+        if hasattr(env, "observation_space") and isinstance(env.observation_space, gym.spaces.Dict):
             policy_type = "MultiInputPolicy"
 
         # Create model with common parameters
@@ -301,39 +304,41 @@ class TrainingManager:
         }
 
         if self.config.enable_tensorboard:
-            common_kwargs["tensorboard_log"] = (
-                self.config.tensorboard_log or self.config.log_dir
-            )
+            common_kwargs["tensorboard_log"] = self.config.tensorboard_log or self.config.log_dir
 
         # Algorithm-specific parameters
         if algo_config.name.upper() in ("PPO", "A2C"):
-            common_kwargs.update({
-                "n_steps": algo_config.n_steps,
-                "batch_size": algo_config.batch_size,
-                "n_epochs": algo_config.n_epochs,
-                "gae_lambda": algo_config.gae_lambda,
-                "clip_range": algo_config.clip_range,
-                "ent_coef": algo_config.ent_coef,
-                "vf_coef": algo_config.vf_coef,
-                "max_grad_norm": algo_config.max_grad_norm,
-            })
+            common_kwargs.update(
+                {
+                    "n_steps": algo_config.n_steps,
+                    "batch_size": algo_config.batch_size,
+                    "n_epochs": algo_config.n_epochs,
+                    "gae_lambda": algo_config.gae_lambda,
+                    "clip_range": algo_config.clip_range,
+                    "ent_coef": algo_config.ent_coef,
+                    "vf_coef": algo_config.vf_coef,
+                    "max_grad_norm": algo_config.max_grad_norm,
+                }
+            )
         elif algo_config.name.upper() in ("SAC", "TD3", "DDPG"):
-            common_kwargs.update({
-                "buffer_size": algo_config.buffer_size,
-                "learning_starts": algo_config.learning_starts,
-                "batch_size": algo_config.batch_size,
-                "tau": algo_config.tau,
-                "train_freq": algo_config.train_freq,
-                "gradient_steps": algo_config.gradient_steps,
-            })
+            common_kwargs.update(
+                {
+                    "buffer_size": algo_config.buffer_size,
+                    "learning_starts": algo_config.learning_starts,
+                    "batch_size": algo_config.batch_size,
+                    "tau": algo_config.tau,
+                    "train_freq": algo_config.train_freq,
+                    "gradient_steps": algo_config.gradient_steps,
+                }
+            )
 
         model = algo_class(**common_kwargs)
         return model
 
     def train(
         self,
-        callback: Optional[Any] = None,
-        log_dir: Optional[str] = None,
+        callback: Any | None = None,
+        log_dir: str | None = None,
         reset_num_timesteps: bool = True,
     ):
         """Run the training loop.
@@ -361,7 +366,6 @@ class TrainingManager:
         self._model = self._create_model(self._env)
 
         # Setup TensorBoard logging
-        tb_log = self.config.tensorboard_log or log_dir
 
         # Import checkpoint callback
         from .callbacks import CheckpointCallback, TrainingProgressCallback
@@ -439,10 +443,10 @@ class TrainingManager:
 
     def evaluate(
         self,
-        model_path: Optional[str] = None,
+        model_path: str | None = None,
         n_episodes: int = 10,
         render: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Evaluate a trained model.
 
         Args:
@@ -472,11 +476,15 @@ class TrainingManager:
 
         is_vec_env = hasattr(eval_env, "num_envs")
 
-        for episode in range(n_episodes):
+        for _episode in range(n_episodes):
             reset_result = eval_env.reset()
             if is_vec_env:
-                obs = reset_result
-                info = {}
+                # VecEnv reset() may return just obs, or (obs, info)
+                if isinstance(reset_result, tuple):
+                    obs, info = reset_result
+                else:
+                    obs = reset_result
+                    info = {}
             else:
                 obs, info = reset_result
 
@@ -488,6 +496,7 @@ class TrainingManager:
                 action, _ = model.predict(obs, deterministic=True)
                 step_result = eval_env.step(action)
                 if is_vec_env:
+                    # VecEnv step() returns (obs, reward, done, info) where info is list[dict]
                     obs, reward, done_flag, info = step_result
                     terminated = done_flag
                     truncated = False
@@ -505,9 +514,13 @@ class TrainingManager:
 
             episode_rewards.append(total_reward)
             episode_lengths.append(steps)
-            episode_successes.append(
-                info.get("task_success", False) if isinstance(info, dict) else False
-            )
+            # info may be a list of dicts for VecEnv; extract success from first env or dict
+            if isinstance(info, list) and len(info) > 0 and isinstance(info[0], dict):
+                episode_successes.append(info[0].get("task_success", False))
+            elif isinstance(info, dict):
+                episode_successes.append(info.get("task_success", False))
+            else:
+                episode_successes.append(False)
 
         eval_env.close()
 
@@ -541,7 +554,7 @@ class TrainingManager:
         algo_class = self._get_algorithm_class()
         self._model = algo_class.load(path)
 
-    def save_model(self, path: Optional[str] = None) -> str:
+    def save_model(self, path: str | None = None) -> str:
         """Save the current model.
 
         Args:

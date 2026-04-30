@@ -1,24 +1,21 @@
 """Tests for RL TrainingManager using mocked SB3."""
 
-import pytest
+from unittest.mock import MagicMock, patch
+
 import numpy as np
-from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
+import pytest
 
 from surg_rl.rl.training import (
-    TrainingManager,
-    TrainingConfig,
     AlgorithmConfig,
+    TrainingConfig,
+    TrainingManager,
 )
-from surg_rl.rl.environment import SurgicalEnvConfig, make_env
-from surg_rl.rl.action import ActionConfig, ActionType
-from surg_rl.rl.observation import ObservationConfig, ObservationType
 
 
 class TestAlgorithmSelection:
     def test_get_algorithm_class_import_error(self):
         """Missing stable-baselines3 raises ImportError."""
-        with patch.dict('sys.modules', {'stable_baselines3': None}):
+        with patch.dict("sys.modules", {"stable_baselines3": None}):
             manager = TrainingManager()
             with pytest.raises(ImportError, match="stable-baselines3"):
                 manager._get_algorithm_class()
@@ -33,9 +30,9 @@ class TestAlgorithmSelection:
     def test_get_algorithm_class_ppo(self):
         """PPO algorithm class returned."""
         mock_ppo = MagicMock()
-        with patch.dict('sys.modules', {'stable_baselines3': MagicMock(PPO=mock_ppo)}):
+        with patch.dict("sys.modules", {"stable_baselines3": MagicMock(PPO=mock_ppo)}):
             config = TrainingConfig(algorithm=AlgorithmConfig(name="PPO"))
-            manager = TrainingManager(config)
+            TrainingManager(config)
             # We can't fully import; test via name check
             assert config.algorithm.name.upper() == "PPO"
 
@@ -66,6 +63,7 @@ class TestEnvironmentCreation:
         manager = TrainingManager(config)
         env = manager._create_environment()
         from gymnasium import Env
+
         assert isinstance(env, Env)
 
     def test_create_environment_vec_env(self):
@@ -86,8 +84,9 @@ class TestModelCreation:
         mock_algo = MagicMock()
         env = MagicMock()
         env.observation_space = MagicMock()
-        type(env.observation_space).__name__ = 'Dict'
+        type(env.observation_space).__name__ = "Dict"
         from gymnasium import spaces
+
         env.observation_space = spaces.Dict({"a": spaces.Box(0, 1, (1,))})
         env.action_space = spaces.Box(-1, 1, (1,))
         config = TrainingConfig(algorithm=AlgorithmConfig(name="PPO"))
@@ -102,6 +101,7 @@ class TestModelCreation:
         mock_algo = MagicMock()
         env = MagicMock()
         from gymnasium import spaces
+
         env.observation_space = spaces.Box(0, 1, (1,))
         env.action_space = spaces.Box(-1, 1, (1,))
         config = TrainingConfig(algorithm=AlgorithmConfig(name="PPO"))
@@ -124,9 +124,11 @@ class TestTrainingLoop:
         manager = TrainingManager(config)
         mock_model = MagicMock()
         mock_env = MagicMock()
-        with patch.object(manager, "_create_environment", return_value=mock_env):
-            with patch.object(manager, "_create_model", return_value=mock_model):
-                manager.train()
+        with (
+            patch.object(manager, "_create_environment", return_value=mock_env),
+            patch.object(manager, "_create_model", return_value=mock_model),
+        ):
+            manager.train()
         mock_model.learn.assert_called_once()
         mock_model.save.assert_called_once()
 
@@ -179,6 +181,51 @@ class TestEvaluation:
             manager._model = mock_model
             results = manager.evaluate(n_episodes=1, render=False)
         assert "mean_reward" in results
+
+    def test_evaluate_vec_env_with_tuple_reset(self):
+        """VecEnv returning (obs, info) tuple from reset must be handled."""
+        config = TrainingConfig(scene_path="scenes/minimal_scene.json")
+        manager = TrainingManager(config)
+        mock_model = MagicMock()
+        mock_env = MagicMock()
+        mock_env.num_envs = 1
+        obs = np.zeros((1, 4))
+        # Tuple reset observed with some VecEnv wrappers
+        mock_env.reset.return_value = (obs, {"task_success": True})
+        mock_env.step.return_value = (
+            obs,
+            np.array([1.0]),
+            np.array([True]),
+            [{"task_success": True}],
+        )
+        mock_model.predict.return_value = (np.zeros((1, 1)), None)
+        with patch.object(manager, "_create_environment", return_value=mock_env):
+            manager._model = mock_model
+            results = manager.evaluate(n_episodes=1, render=False)
+        assert results["success_rate"] == 1.0
+
+    def test_evaluate_subproc_vec_env(self):
+        """SubprocVecEnv with list-of-dicts info must compute success_rate correctly."""
+        config = TrainingConfig(scene_path="scenes/minimal_scene.json")
+        manager = TrainingManager(config)
+        mock_model = MagicMock()
+        mock_env = MagicMock()
+        mock_env.num_envs = 2
+        obs = np.zeros((2, 4))
+        mock_env.reset.return_value = obs
+        # info is a list of dicts
+        mock_env.step.return_value = (
+            obs,
+            np.array([1.0, 0.5]),
+            np.array([True, True]),
+            [{"task_success": True}, {"task_success": False}],
+        )
+        mock_model.predict.return_value = (np.zeros((2, 1)), None)
+        with patch.object(manager, "_create_environment", return_value=mock_env):
+            manager._model = mock_model
+            results = manager.evaluate(n_episodes=1, render=False)
+        # success should be taken from first env's info
+        assert results["success_rate"] == 1.0
 
     def test_evaluate_without_model_raises(self):
         """evaluate without model or path raises ValueError."""
