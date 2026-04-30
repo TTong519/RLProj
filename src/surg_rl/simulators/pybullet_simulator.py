@@ -66,6 +66,8 @@ class PyBulletSimulator(BaseSimulator):
 
         self._action_mode: str = "position"
         self._torque_control_joints: dict[tuple[int, int], bool] = {}  # (body_id, joint_idx) -> enabled
+        self._endeffector_target_pos: np.ndarray | None = None
+        self._endeffector_target_quat: np.ndarray | None = None
 
     def _check_pybullet(self) -> None:
         """Check if PyBullet is available."""
@@ -985,6 +987,21 @@ class PyBulletSimulator(BaseSimulator):
         )
         return np.array(pos), np.array(orn)
 
+    def set_end_effector_target(
+        self, position: np.ndarray, orientation: np.ndarray | None = None
+    ) -> None:
+        """Set the target end-effector pose for IK control.
+
+        Args:
+            position: Target position [x, y, z].
+            orientation: Target orientation quaternion [x, y, z, w] or None.
+        """
+        self._endeffector_target_pos = np.asarray(position, dtype=np.float64)
+        if orientation is not None:
+            self._endeffector_target_quat = np.asarray(orientation, dtype=np.float64)
+        else:
+            self._endeffector_target_quat = None
+
     def get_body_pose(self, body_name: str) -> tuple[np.ndarray, np.ndarray] | None:
         """Get pose of a named body in the simulation."""
         if not self._loaded:
@@ -1139,6 +1156,46 @@ class PyBulletSimulator(BaseSimulator):
             total += len(joints)
         return total
 
+    def _compute_ik(
+        self, robot_name: str, target_pos: np.ndarray, target_quat: np.ndarray | None = None
+    ) -> np.ndarray:
+        """Compute inverse kinematics for a robot.
+
+        Args:
+            robot_name: Name of the robot.
+            target_pos: Target end-effector position [x, y, z].
+            target_quat: Target end-effector orientation quaternion [x, y, z, w].
+
+        Returns:
+            Flat array of joint angles. Falls back to current joint state on error.
+        """
+        if not self._loaded or robot_name not in self._body_ids:
+            return np.array([], dtype=np.float32)
+        body_id = self._body_ids[robot_name]
+        if not hasattr(self._pb, "calculateInverseKinematics"):
+            return self.get_robot_state(robot_name) or np.array([], dtype=np.float32)
+        num_joints = self._pb.getNumJoints(body_id, physicsClientId=self._physics_client)
+        ee_link_idx = max(0, num_joints - 1)
+        try:
+            if target_quat is not None:
+                ik_solution = self._pb.calculateInverseKinematics(
+                    body_id,
+                    ee_link_idx,
+                    target_pos.tolist(),
+                    targetOrientation=target_quat.tolist(),
+                    physicsClientId=self._physics_client,
+                )
+            else:
+                ik_solution = self._pb.calculateInverseKinematics(
+                    body_id,
+                    ee_link_idx,
+                    target_pos.tolist(),
+                    physicsClientId=self._physics_client,
+                )
+            return np.array(ik_solution, dtype=np.float32)
+        except Exception:
+            return self.get_robot_state(robot_name) or np.array([], dtype=np.float32)
+
     def _apply_action(self, action: np.ndarray) -> None:
         """Apply action to the simulation.
 
@@ -1148,7 +1205,10 @@ class PyBulletSimulator(BaseSimulator):
         if action is None or len(action) == 0:
             return
 
-        # Use mapping if available
+        if self._action_mode in ("endeffector_pose", "endeffector_delta"):
+            self._apply_action_ik(action)
+            return
+
         if self._control_map:
             for mapping in self._control_map:
                 idx = mapping["ctrl_index"]
@@ -1202,7 +1262,6 @@ class PyBulletSimulator(BaseSimulator):
                     )
             return
 
-        # Fallback sequential
         idx = 0
         for robot_name, joint_dict in self._joint_ids.items():
             if robot_name not in self._body_ids:
@@ -1231,6 +1290,79 @@ class PyBulletSimulator(BaseSimulator):
                         physicsClientId=self._physics_client,
                     )
                 idx += 1
+
+    def _apply_action_ik(self, action: np.ndarray) -> None:
+        """Apply action using inverse kinematics for end-effector control.
+
+        Args:
+            action: Action vector where first 3 are [x,y,z] position (or delta),
+                    next 3 are Euler angles (or delta), and optional last value
+                    is gripper target.
+        """
+        if not self._scene or not self._scene.robots:
+            return
+        robot = self._scene.robots[0]
+        robot_name = robot.name
+        if robot_name not in self._body_ids:
+            return
+
+        body_id = self._body_ids[robot_name]
+        current_pos, current_orn = self._pb.getBasePositionAndOrientation(
+            body_id, physicsClientId=self._physics_client
+        )
+        current_pos = np.array(current_pos)
+        current_orn = np.array(current_orn)
+
+        if len(action) < 6:
+            return
+
+        pos_input = np.array(action[:3], dtype=np.float64)
+        euler_input = np.array(action[3:6], dtype=np.float64)
+
+        if self._action_mode == "endeffector_delta":
+            target_pos = current_pos + pos_input
+            current_euler = np.array(
+                self._pb.getEulerFromQuaternion(current_orn.tolist()), dtype=np.float64
+            )
+            target_euler = current_euler + euler_input
+            target_quat = np.array(
+                self._pb.getQuaternionFromEuler(target_euler.tolist()), dtype=np.float64
+            )
+        else:
+            target_pos = pos_input
+            target_quat = np.array(
+                self._pb.getQuaternionFromEuler(euler_input.tolist()), dtype=np.float64
+            )
+
+        ik_angles = self._compute_ik(robot_name, target_pos, target_quat)
+
+        joint_dict = self._joint_ids.get(robot_name, {})
+        joint_items = sorted(joint_dict.items(), key=lambda item: item[1])
+        for i, (joint_name, joint_idx) in enumerate(joint_items):
+            if i >= len(ik_angles):
+                break
+            if joint_name == "gripper":
+                continue
+            self._pb.setJointMotorControl2(
+                body_id,
+                joint_idx,
+                self._pb.POSITION_CONTROL,
+                targetPosition=float(ik_angles[i]),
+                force=100.0,
+                physicsClientId=self._physics_client,
+            )
+
+        if len(action) > 6 and "gripper" in joint_dict:
+            gripper_target = float(action[6])
+            joint_idx = joint_dict["gripper"]
+            self._pb.setJointMotorControl2(
+                body_id,
+                joint_idx,
+                self._pb.POSITION_CONTROL,
+                targetPosition=gripper_target,
+                force=100.0,
+                physicsClientId=self._physics_client,
+            )
 
     def _get_observation(self) -> Observation:
         """Get current observation."""
