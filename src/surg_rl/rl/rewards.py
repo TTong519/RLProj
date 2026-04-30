@@ -8,9 +8,10 @@ collision penalties, and composite reward functions.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
+from pydantic import BaseModel, field_validator
 
 
 class RewardType(str, Enum):
@@ -30,8 +31,7 @@ class RewardType(str, Enum):
     CUSTOM = "custom"
 
 
-@dataclass
-class RewardConfig:
+class RewardConfig(BaseModel):
     """Configuration for reward computation.
 
     Attributes:
@@ -50,17 +50,24 @@ class RewardConfig:
     """
 
     success_reward: float = 100.0
-    failure_penalty: float = -50.0
+    failure_penalty: float = 50.0
     distance_weight: float = 1.0
     orientation_weight: float = 0.5
     action_penalty_weight: float = 0.01
     time_penalty_weight: float = 0.001
-    collision_penalty: float = -10.0
-    tissue_damage_penalty: float = -5.0
+    collision_penalty: float = 10.0
+    tissue_damage_penalty: float = 5.0
     distance_threshold: float = 0.01  # 1cm
     angle_threshold: float = 0.1  # ~6 degrees
     shape: str = "exponential"
     scale: float = 1.0
+
+    @field_validator("failure_penalty", "collision_penalty", "tissue_damage_penalty")
+    @classmethod
+    def _validate_penalties(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError("Penalty values must be non-negative")
+        return v
 
 
 @dataclass
@@ -74,8 +81,8 @@ class RewardResult:
     """
 
     total: float
-    components: Dict[str, float] = field(default_factory=dict)
-    info: Dict[str, Any] = field(default_factory=dict)
+    components: dict[str, float] = field(default_factory=dict)
+    info: dict[str, Any] = field(default_factory=dict)
 
     def __add__(self, other: "RewardResult") -> "RewardResult":
         """Add two reward results."""
@@ -107,9 +114,9 @@ class BaseRewardFunction(ABC):
     @abstractmethod
     def compute(
         self,
-        observation: Dict[str, np.ndarray],
+        observation: dict[str, np.ndarray],
         action: np.ndarray,
-        info: Dict[str, Any],
+        info: dict[str, Any],
     ) -> RewardResult:
         """Compute the reward for the current step.
 
@@ -164,13 +171,13 @@ class DistanceReward(BaseRewardFunction):
         self.scale = scale
         self.sigma = sigma
         self.threshold = threshold
-        self._prev_distance: Optional[float] = None
+        self._prev_distance: float | None = None
 
     def compute(
         self,
-        observation: Dict[str, np.ndarray],
+        observation: dict[str, np.ndarray],
         action: np.ndarray,
-        info: Dict[str, Any],
+        info: dict[str, Any],
     ) -> RewardResult:
         """Compute distance-based reward."""
         end_pos = observation.get("endeffector_pos")
@@ -254,9 +261,9 @@ class OrientationReward(BaseRewardFunction):
 
     def compute(
         self,
-        observation: Dict[str, np.ndarray],
+        observation: dict[str, np.ndarray],
         action: np.ndarray,
-        info: Dict[str, Any],
+        info: dict[str, Any],
     ) -> RewardResult:
         """Compute orientation-based reward."""
         angle_obs = observation.get("angle_to_target")
@@ -309,9 +316,9 @@ class ActionPenalty(BaseRewardFunction):
 
     def compute(
         self,
-        observation: Dict[str, np.ndarray],
+        observation: dict[str, np.ndarray],
         action: np.ndarray,
-        info: Dict[str, Any],
+        info: dict[str, Any],
     ) -> RewardResult:
         """Compute action penalty."""
         if self.penalty_type == "l1":
@@ -348,9 +355,9 @@ class TimePenalty(BaseRewardFunction):
 
     def compute(
         self,
-        observation: Dict[str, np.ndarray],
+        observation: dict[str, np.ndarray],
         action: np.ndarray,
-        info: Dict[str, Any],
+        info: dict[str, Any],
     ) -> RewardResult:
         """Compute time penalty."""
         self._step += 1
@@ -394,9 +401,9 @@ class SuccessReward(BaseRewardFunction):
 
     def compute(
         self,
-        observation: Dict[str, np.ndarray],
+        observation: dict[str, np.ndarray],
         action: np.ndarray,
-        info: Dict[str, Any],
+        info: dict[str, Any],
     ) -> RewardResult:
         """Compute success/failure reward."""
         # Check if terminated
@@ -452,10 +459,10 @@ class CollisionPenalty(BaseRewardFunction):
         self.tissue_weight = tissue_weight
 
     def compute(
-  self,
-    observation: Dict[str, np.ndarray],
-      action: np.ndarray,
-        info: Dict[str, Any],
+        self,
+        observation: dict[str, np.ndarray],
+        action: np.ndarray,
+        info: dict[str, Any],
     ) -> RewardResult:
         """Compute collision penalty."""
         collision = observation.get("collision_detected", False) or info.get("collision", False)
@@ -464,20 +471,20 @@ class CollisionPenalty(BaseRewardFunction):
 
         penalty = 0.0
         if collision:
-         penalty -= self.weight
+            penalty -= self.weight
         if tissue_damage > 0:
-         penalty -= tissue_damage * self.tissue_weight
+            penalty -= tissue_damage * self.tissue_weight
         penalty -= collision_force * 0.1  # Force-proportional penalty
 
         return RewardResult(
- total=penalty,
+            total=penalty,
             components={
-    "collision_penalty": -self.weight if collision else 0.0,
+                "collision_penalty": -self.weight if collision else 0.0,
                 "tissue_damage_penalty": -tissue_damage * self.tissue_weight,
             },
-   info={
+            info={
                 "collision": collision,
-           "tissue_damage": tissue_damage,
+                "tissue_damage": tissue_damage,
             },
         )
 
@@ -520,13 +527,13 @@ class SuturingReward(BaseRewardFunction):
 
     def compute(
         self,
-        observation: Dict[str, np.ndarray],
+        observation: dict[str, np.ndarray],
         action: np.ndarray,
-        info: Dict[str, Any],
+        info: dict[str, Any],
     ) -> RewardResult:
         """Compute suturing task reward."""
         reward = 0.0
-        components: Dict[str, float] = {}
+        components: dict[str, float] = {}
 
         # Needle positioning reward
         needle_pos = observation.get("needle_pos")
@@ -542,7 +549,9 @@ class SuturingReward(BaseRewardFunction):
         # Thread tension penalty
         thread_tension = observation.get("thread_tension")
         if thread_tension is not None:
-            tension = float(thread_tension.item() if thread_tension.size == 1 else thread_tension[0])
+            tension = float(
+                thread_tension.item() if thread_tension.size == 1 else thread_tension[0]
+            )
             tension_penalty = -max(0.0, tension - self.tension_threshold)
             reward += tension_penalty
             components["thread_tension"] = tension_penalty
@@ -606,13 +615,13 @@ class DissectionReward(BaseRewardFunction):
 
     def compute(
         self,
-        observation: Dict[str, np.ndarray],
+        observation: dict[str, np.ndarray],
         action: np.ndarray,
-        info: Dict[str, Any],
+        info: dict[str, Any],
     ) -> RewardResult:
         """Compute dissection task reward."""
         reward = 0.0
-        components: Dict[str, float] = {}
+        components: dict[str, float] = {}
 
         # Incision progress reward
         progress = observation.get("incision_progress")
@@ -686,13 +695,13 @@ class NeedlePassingReward(BaseRewardFunction):
 
     def compute(
         self,
-        observation: Dict[str, np.ndarray],
+        observation: dict[str, np.ndarray],
         action: np.ndarray,
-        info: Dict[str, Any],
+        info: dict[str, Any],
     ) -> RewardResult:
         """Compute needle passing task reward."""
         reward = 0.0
-        components: Dict[str, float] = {}
+        components: dict[str, float] = {}
 
         # Proximity reward
         needle_pos = observation.get("needle_pos")
@@ -748,14 +757,14 @@ class CompositeReward(BaseRewardFunction):
 
     def __init__(
         self,
-        components: Optional[List[Tuple[BaseRewardFunction, float]]] = None,
+        components: list[tuple[BaseRewardFunction, float]] | None = None,
     ):
         """Initialize composite reward.
 
         Args:
             components: List of (reward_function, weight) tuples.
         """
-        self.components: List[Tuple[BaseRewardFunction, float]] = components or []
+        self.components: list[tuple[BaseRewardFunction, float]] = components or []
 
     def add(self, reward_fn: BaseRewardFunction, weight: float = 1.0) -> None:
         """Add a reward component.
@@ -768,14 +777,14 @@ class CompositeReward(BaseRewardFunction):
 
     def compute(
         self,
-        observation: Dict[str, np.ndarray],
+        observation: dict[str, np.ndarray],
         action: np.ndarray,
-        info: Dict[str, Any],
+        info: dict[str, Any],
     ) -> RewardResult:
         """Compute composite reward."""
         total_reward = 0.0
-        all_components: Dict[str, float] = {}
-        all_info: Dict[str, Any] = {}
+        all_components: dict[str, float] = {}
+        all_info: dict[str, Any] = {}
 
         for reward_fn, weight in self.components:
             result = reward_fn.compute(observation, action, info)
@@ -800,9 +809,10 @@ class CompositeReward(BaseRewardFunction):
 # Factory Function
 # ============================================================================
 
+
 def create_default_reward(
-    config: Optional[RewardConfig] = None,
-    task_name: Optional[str] = None,
+    config: RewardConfig | None = None,
+    task_name: str | None = None,
 ) -> CompositeReward:
     """Create a default composite reward function for surgical tasks.
 
@@ -815,29 +825,43 @@ def create_default_reward(
     """
     config = config or RewardConfig()
 
-    reward = CompositeReward([
-        (DistanceReward(
-            weight=config.distance_weight,
-            shape=config.shape,
-            threshold=config.distance_threshold,
-        ), 1.0),
-        (OrientationReward(
-            weight=config.orientation_weight,
-            threshold=config.angle_threshold,
-        ), 1.0),
-        (ActionPenalty(weight=config.action_penalty_weight), 1.0),
-        (TimePenalty(weight=config.time_penalty_weight), 1.0),
-        (SuccessReward(
-            success_reward=config.success_reward,
-            failure_penalty=config.failure_penalty,
-            distance_threshold=config.distance_threshold,
-            angle_threshold=config.angle_threshold,
-        ), 1.0),
-        (CollisionPenalty(
-            weight=abs(config.collision_penalty),
-            tissue_weight=abs(config.tissue_damage_penalty),
-        ), 1.0),
-    ])
+    reward = CompositeReward(
+        [
+            (
+                DistanceReward(
+                    weight=config.distance_weight,
+                    shape=config.shape,
+                    threshold=config.distance_threshold,
+                ),
+                1.0,
+            ),
+            (
+                OrientationReward(
+                    weight=config.orientation_weight,
+                    threshold=config.angle_threshold,
+                ),
+                1.0,
+            ),
+            (ActionPenalty(weight=config.action_penalty_weight), 1.0),
+            (TimePenalty(weight=config.time_penalty_weight), 1.0),
+            (
+                SuccessReward(
+                    success_reward=config.success_reward,
+                    failure_penalty=config.failure_penalty,
+                    distance_threshold=config.distance_threshold,
+                    angle_threshold=config.angle_threshold,
+                ),
+                1.0,
+            ),
+            (
+                CollisionPenalty(
+                    weight=config.collision_penalty,
+                    tissue_weight=config.tissue_damage_penalty,
+                ),
+                1.0,
+            ),
+        ]
+    )
 
     # Add task-specific rewards based on task name
     task_lower = (task_name or "").lower()

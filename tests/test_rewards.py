@@ -6,13 +6,14 @@ as well as the updated create_default_reward factory.
 
 import numpy as np
 import pytest
+from pydantic import ValidationError
 
 from surg_rl.rl.rewards import (
     ActionPenalty,
     CollisionPenalty,
     CompositeReward,
-    DistanceReward,
     DissectionReward,
+    DistanceReward,
     NeedlePassingReward,
     OrientationReward,
     RewardConfig,
@@ -309,9 +310,12 @@ class TestCreateDefaultReward:
         result = composite.compute(obs, action, info)
         collision_component = [v for k, v in result.components.items() if "collision" in k]
         assert collision_component
-        assert all(v <= 0 for v in collision_component), f"Collision penalty must be negative, got {collision_component}"
-        assert result.total <= 0, f"Total reward on collision should be non-positive, got {result.total}"
-
+        assert all(
+            v <= 0 for v in collision_component
+        ), f"Collision penalty must be negative, got {collision_component}"
+        assert (
+            result.total <= 0
+        ), f"Total reward on collision should be non-positive, got {result.total}"
 
 
 # ============================================================================
@@ -321,7 +325,7 @@ class TestCreateDefaultReward:
 
 class TestDistanceRewardBranches:
     def test_distance_from_info_dict(self):
-        config = RewardConfig()
+        RewardConfig()
         reward_fn = DistanceReward(weight=1.0, shape="linear", scale=1.0)
         obs = {"distance_to_target": None}
         action = np.zeros(3)
@@ -417,6 +421,14 @@ class TestCreateDefaultRewardBranches:
         assert len(reward.components) > 5
 
 
+class TestRewardConfigValidation:
+    """Regression tests for RewardConfig Pydantic model."""
+
+    def test_reward_config_rejects_negative_penalty(self):
+        """RewardConfig must reject negative penalty values."""
+        with pytest.raises(ValidationError):
+            RewardConfig(collision_penalty=-10.0)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-
