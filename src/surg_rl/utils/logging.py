@@ -1,9 +1,9 @@
 """Logging configuration."""
 
 import logging
+import re
 import sys
 from pathlib import Path
-from typing import Optional
 
 from rich.console import Console
 from rich.logging import RichHandler
@@ -11,9 +11,44 @@ from rich.logging import RichHandler
 from surg_rl.utils.config import get_settings
 
 
+class SensitiveDataFilter(logging.Filter):
+    """Masks API keys in log records."""
+
+    # Pattern matches OpenAI sk-... and Anthropic sk-ant-... keys
+    _PATTERN = re.compile(
+        r"(sk-[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9-]{20,})"
+    )
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Mask sensitive data in the log record.
+
+        Always returns True so the record is not dropped.
+        """
+        if isinstance(record.msg, str):
+            record.msg = self._mask(record.msg)
+        if record.args:
+            record.args = tuple(
+                self._mask(arg) if isinstance(arg, str) else arg
+                for arg in record.args
+            )
+        return True
+
+    @classmethod
+    def _mask(cls, text: str) -> str:
+        """Replace API keys with **** + last 4 characters."""
+
+        def replacer(match: re.Match) -> str:
+            key = match.group(1)
+            if len(key) <= 4:
+                return "****"
+            return f"****{key[-4:]}"
+
+        return cls._PATTERN.sub(replacer, text)
+
+
 def setup_logging(
-    level: Optional[str] = None,
-    log_file: Optional[Path] = None,
+    level: str | None = None,
+    log_file: Path | None = None,
     rich_output: bool = True,
 ) -> logging.Logger:
     """Set up logging with optional rich formatting.
@@ -68,6 +103,7 @@ def setup_logging(
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     handler.setFormatter(formatter)
+    handler.addFilter(SensitiveDataFilter())
     logger.addHandler(handler)
 
     # File handler (optional)
@@ -77,6 +113,7 @@ def setup_logging(
         file_handler = logging.FileHandler(file_path)
         file_handler.setLevel(level_value)
         file_handler.setFormatter(formatter)
+        file_handler.addFilter(SensitiveDataFilter())
         logger.addHandler(file_handler)
 
     return logger
