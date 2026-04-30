@@ -1,11 +1,8 @@
 """Mocked CLI integration tests using typer.testing.CliRunner."""
 
 import json
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
-from pathlib import Path
 
-import pytest
 from typer.testing import CliRunner
 
 from surg_rl.cli import app
@@ -18,14 +15,14 @@ class TestCLIGenerateMocked:
 
     def test_generate_text_mocked_llm(self, tmp_path):
         """Monkeypatch TextParser.parse to return a SceneDefinition."""
-        from surg_rl.scene_definition.schema import SceneDefinition, Metadata
+        from surg_rl.scene_definition.schema import Metadata, SceneDefinition
 
         scene = SceneDefinition(metadata=Metadata(name="mocked"))
 
-        with patch("surg_rl.cli.TextParser") as MockParserClass:
+        with patch("surg_rl.cli.TextParser") as mock_parser_class:
             mock_parser = MagicMock()
             mock_parser.parse = AsyncMock(return_value=scene)
-            MockParserClass.return_value = mock_parser
+            mock_parser_class.return_value = mock_parser
 
             out_file = tmp_path / "out.json"
             result = runner.invoke(
@@ -46,9 +43,6 @@ class TestCLITrainMocked:
         """Monkeypatch TrainingManager.train to succeed without SB3."""
         from surg_rl.rl import training as training_module
 
-        original_train = training_module.TrainingManager.train
-        original_evaluate = training_module.TrainingManager.evaluate
-
         def mock_train(self):
             return {"status": "success"}
 
@@ -67,25 +61,33 @@ class TestCLITrainMocked:
         monkeypatch.setattr(training_module.TrainingManager, "evaluate", mock_evaluate)
 
         scene_path = tmp_path / "minimal_scene.json"
-        scene_path.write_text(json.dumps({
-            "metadata": {"name": "minimal", "description": "test", "version": "1.0.0"},
-            "physics": {"gravity": [0.0, 0.0, -9.81], "timestep": 0.002},
-            "environment": {"name": "env", "lights": [], "cameras": []},
-            "robots": [],
-            "tissues": [],
-            "instruments": [],
-            "task": None,
-            "simulator": "mujoco",
-        }))
+        scene_path.write_text(
+            json.dumps(
+                {
+                    "metadata": {"name": "minimal", "description": "test", "version": "1.0.0"},
+                    "physics": {"gravity": [0.0, 0.0, -9.81], "timestep": 0.002},
+                    "environment": {"name": "env", "lights": [], "cameras": []},
+                    "robots": [],
+                    "tissues": [],
+                    "instruments": [],
+                    "task": None,
+                    "simulator": "mujoco",
+                }
+            )
+        )
 
         result = runner.invoke(
             app,
             [
                 "train",
-                "--scene", str(scene_path),
-                "--algorithm", "PPO",
-                "--timesteps", "1",
-                "--log-dir", str(tmp_path / "logs"),
+                "--scene",
+                str(scene_path),
+                "--algorithm",
+                "PPO",
+                "--timesteps",
+                "1",
+                "--log-dir",
+                str(tmp_path / "logs"),
             ],
         )
 
@@ -114,16 +116,20 @@ class TestCLIEvaluateMocked:
         monkeypatch.setattr(training_module.TrainingManager, "evaluate", mock_evaluate)
 
         scene_path = tmp_path / "minimal_scene.json"
-        scene_path.write_text(json.dumps({
-            "metadata": {"name": "minimal", "description": "test", "version": "1.0.0"},
-            "physics": {"gravity": [0.0, 0.0, -9.81], "timestep": 0.002},
-            "environment": {"name": "env", "lights": [], "cameras": []},
-            "robots": [],
-            "tissues": [],
-            "instruments": [],
-            "task": None,
-            "simulator": "mujoco",
-        }))
+        scene_path.write_text(
+            json.dumps(
+                {
+                    "metadata": {"name": "minimal", "description": "test", "version": "1.0.0"},
+                    "physics": {"gravity": [0.0, 0.0, -9.81], "timestep": 0.002},
+                    "environment": {"name": "env", "lights": [], "cameras": []},
+                    "robots": [],
+                    "tissues": [],
+                    "instruments": [],
+                    "task": None,
+                    "simulator": "mujoco",
+                }
+            )
+        )
 
         model_path = tmp_path / "fake_model.zip"
         model_path.write_text("dummy")
@@ -132,9 +138,12 @@ class TestCLIEvaluateMocked:
             app,
             [
                 "evaluate",
-                "--scene", str(scene_path),
-                "--model", str(model_path),
-                "--episodes", "2",
+                "--scene",
+                str(scene_path),
+                "--model",
+                str(model_path),
+                "--episodes",
+                "2",
             ],
         )
 

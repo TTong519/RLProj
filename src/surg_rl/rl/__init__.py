@@ -141,7 +141,6 @@ __all__ = [
     "RGB_IMAGE_SPEC",
     "DEPTH_IMAGE_SPEC",
     "SEGMENTATION_SPEC",
-
     # Action
     "ActionBuilder",
     "ActionConfig",
@@ -155,7 +154,6 @@ __all__ = [
     "ENDEFFECTOR_POSE_SPEC",
     "ENDEFFECTOR_DELTA_SPEC",
     "GRIPPER_SPEC",
-
     # Reward
     "ActionPenalty",
     "BaseRewardFunction",
@@ -172,18 +170,15 @@ __all__ = [
     "SuturingReward",
     "TimePenalty",
     "create_default_reward",
-
     # Environment
     "SurgicalEnv",
     "SurgicalEnvConfig",
     "make_env",
     "make_vec_env",
-
     # Training
     "AlgorithmConfig",
     "TrainingConfig",
     "TrainingManager",
-
     # Callbacks
     "CheckpointCallback",
     "CurriculumCallback",

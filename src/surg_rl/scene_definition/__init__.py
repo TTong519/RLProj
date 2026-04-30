@@ -5,86 +5,85 @@ training scenes, including robots, tissues, instruments, environments,
 physics, and task definitions.
 """
 
-from .schema import (
-    # Enums
-    SimulatorType,
-    RobotType,
-    TissueType,
-    InstrumentType,
-    JointType,
-    CameraType,
-    LightType,
-    # Base models
-    Position,
-    Orientation,
-    EulerAngles,
-    Pose,
-    RgbColor,
-    BoundingBox,
-    # Assets
-    AssetReference,
-    MeshAsset,
-    TextureAsset,
-    # Physics
-    PhysicsMaterial,
-    PyBulletSoftBodyConfig,
-    SoftBodyPhysics,
-    RigidBodyPhysics,
-    PhysicsConfig,
-    # Robot
-    JointLimits,
-    JointConfig,
-    EndEffectorConfig,
-    RobotLink,
-    RobotConfig,
-    # Tissue
-    TissueMeshDefinition,
-    TissueAttachment,
-    TissueConfig,
-    # Instrument
-    InstrumentPhysics,
-    CuttingProperties,
-    GraspingProperties,
-    NeedleDriverProperties,
-    InstrumentConfig,
-    # Environment
-    CameraConfig,
-    LightConfig,
-    GroundPlaneConfig,
-    SurgicalTableConfig,
-    EnvironmentConfig,
-    # Task
-    TaskObjective,
-    ConstraintConfig,
-    RewardShaping,
-    TaskConfig,
-    # Domain randomization
-    PhysicsRandomization,
-    VisualRandomization,
-    DynamicsRandomization,
-    DomainRandomizationConfig,
-    # Scene
-    Metadata,
-    SceneDefinition,
-)
-
 from .loader import (
-    # Exceptions
-    SceneLoaderError,
-    SceneFileNotFoundError,
-    SceneValidationError,
-    SceneParseError,
     AssetLoadError,
+    AssetManager,
     # Classes
     SceneCache,
-    AssetManager,
+    SceneFileNotFoundError,
     SceneLoader,
+    # Exceptions
+    SceneLoaderError,
+    SceneParseError,
+    SceneValidationError,
     # Functions
     get_loader,
-    reset_loader,
     load_scene,
+    reset_loader,
     save_scene,
     validate_scene,
+)
+from .schema import (
+    # Assets
+    AssetReference,
+    BoundingBox,
+    # Environment
+    CameraConfig,
+    CameraType,
+    ConstraintConfig,
+    CuttingProperties,
+    DomainRandomizationConfig,
+    DynamicsRandomization,
+    EndEffectorConfig,
+    EnvironmentConfig,
+    EulerAngles,
+    GraspingProperties,
+    GroundPlaneConfig,
+    InstrumentConfig,
+    # Instrument
+    InstrumentPhysics,
+    InstrumentType,
+    JointConfig,
+    # Robot
+    JointLimits,
+    JointType,
+    LightConfig,
+    LightType,
+    MeshAsset,
+    # Scene
+    Metadata,
+    NeedleDriverProperties,
+    Orientation,
+    PhysicsConfig,
+    # Physics
+    PhysicsMaterial,
+    # Domain randomization
+    PhysicsRandomization,
+    Pose,
+    # Base models
+    Position,
+    PyBulletSoftBodyConfig,
+    RewardShaping,
+    RgbColor,
+    RigidBodyPhysics,
+    RobotConfig,
+    RobotLink,
+    RobotType,
+    SceneDefinition,
+    # Enums
+    SimulatorType,
+    SoftBodyPhysics,
+    SurgicalTableConfig,
+    TaskConfig,
+    # Task
+    TaskObjective,
+    TextureAsset,
+    TissueAttachment,
+    TissueConfig,
+    # Tissue
+    TissueMeshDefinition,
+    TissueType,
+    VisualRandomization,
 )
 
 __all__ = [

@@ -1,34 +1,33 @@
 """Tests for scene loader module."""
 
 import json
-import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+
+import pytest
 
 from surg_rl.scene_definition import (
-    SceneDefinition,
-    Metadata,
-    SimulatorType,
-    SceneLoader,
-    SceneCache,
-    AssetManager,
-    SceneLoaderError,
-    SceneFileNotFoundError,
-    SceneValidationError,
-    SceneParseError,
     AssetLoadError,
+    AssetManager,
+    Metadata,
+    SceneCache,
+    SceneDefinition,
+    SceneFileNotFoundError,
+    SceneLoader,
+    SceneLoaderError,
+    SceneParseError,
+    SceneValidationError,
+    SimulatorType,
     get_loader,
-    reset_loader,
     load_scene,
+    reset_loader,
     save_scene,
 )
-
-
 
 
 def _convert_tuples_for_yaml(obj):
     """Convert tuples and enums to lists/strings for YAML serialization."""
     from enum import Enum
+
     if isinstance(obj, tuple):
         return list(obj)
     elif isinstance(obj, Enum):
@@ -38,6 +37,7 @@ def _convert_tuples_for_yaml(obj):
     elif isinstance(obj, list):
         return [_convert_tuples_for_yaml(item) for item in obj]
     return obj
+
 
 class TestSceneCache:
     """Tests for SceneCache class."""
@@ -252,6 +252,7 @@ class TestSceneLoader:
     def test_load_yaml_scene(self, tmp_path: Path):
         """Test loading YAML scene file."""
         import yaml
+
         loader = SceneLoader()
 
         # Create test scene
@@ -327,6 +328,7 @@ class TestSceneLoader:
     def test_load_from_string_yaml(self):
         """Test loading scene from YAML string."""
         import yaml
+
         loader = SceneLoader()
 
         scene = SceneDefinition(metadata=Metadata(name="Test"))
@@ -395,7 +397,7 @@ class TestSceneLoader:
         scene_file.write_text(scene.model_dump_json())
 
         # Load without caching
-        loaded = loader.load(scene_file, use_cache=False)
+        loader.load(scene_file, use_cache=False)
         assert scene_file not in loader.cache
 
     def test_list_scenes(self, tmp_path: Path):
@@ -507,9 +509,7 @@ class TestExceptionClasses:
         """Test SceneValidationError."""
         error = SceneValidationError(
             "Validation failed",
-            validation_errors=[
-                {"location": "robots.0.name", "message": "Required"}
-            ],
+            validation_errors=[{"location": "robots.0.name", "message": "Required"}],
         )
         assert isinstance(error, SceneLoaderError)
         assert len(error.validation_errors) == 1
@@ -536,7 +536,6 @@ class TestExistingScenes:
 
     def test_load_simple_suturing(self):
         """Test loading the simple_suturing.json scene."""
-        import yaml
         from pathlib import Path
 
         scenes_dir = Path(__file__).parent.parent / "scenes"
@@ -577,11 +576,11 @@ class TestLoaderEdgeCases:
     def test_load_validate_false_no_asset_crash(self, tmp_path):
         """validate=False with validate_assets=True should not crash."""
         from surg_rl.scene_definition.loader import SceneLoader
-        from surg_rl.scene_definition.schema import SceneDefinition, Metadata
+        from surg_rl.scene_definition.schema import SceneDefinition
+
         loader = SceneLoader(validate_assets=True)
         data = {"metadata": {"name": "test"}, "simulator": "mujoco"}
         path = tmp_path / "test.json"
-        import json
         path.write_text(json.dumps(data))
         scene = loader.load(str(path), validate=False)
         assert isinstance(scene, SceneDefinition)
@@ -589,7 +588,8 @@ class TestLoaderEdgeCases:
     def test_save_yaml_enum_conversion(self, tmp_path):
         """YAML save should convert enums to strings."""
         from surg_rl.scene_definition.loader import SceneLoader
-        from surg_rl.scene_definition.schema import SceneDefinition, Metadata, SimulatorType
+        from surg_rl.scene_definition.schema import Metadata, SceneDefinition, SimulatorType
+
         loader = SceneLoader()
         scene = SceneDefinition(metadata=Metadata(name="yaml_enum"), simulator=SimulatorType.MUJOCO)
         path = tmp_path / "scene.yaml"
@@ -600,6 +600,7 @@ class TestLoaderEdgeCases:
 
     def test_list_scenes_empty_directory(self, tmp_path):
         from surg_rl.scene_definition.loader import SceneLoader
+
         loader = SceneLoader()
         scenes = loader.list_scenes(str(tmp_path))
         assert scenes == []
@@ -609,17 +610,18 @@ class TestValidateScene:
     def test_validate_scene_with_invalid_type(self):
         """validate_scene should catch type errors gracefully."""
         from surg_rl.scene_definition.loader import validate_scene
-        with pytest.raises(Exception):
+
+        with pytest.raises((TypeError, ValueError)):
             validate_scene({"metadata": {"name": "bad"}, "simulator": 123})  # invalid type
 
 
 class TestCacheBehavior:
     def test_cache_hit_returns_copy(self, tmp_path):
         from surg_rl.scene_definition.loader import SceneLoader
+
         loader = SceneLoader()
         data = {"metadata": {"name": "cache_test"}, "simulator": "mujoco"}
         path = tmp_path / "cache.json"
-        import json
         path.write_text(json.dumps(data))
         s1 = loader.load(str(path), use_cache=True)
         s2 = loader.load(str(path), use_cache=True)

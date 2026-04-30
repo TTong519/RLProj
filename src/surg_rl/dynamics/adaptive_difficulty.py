@@ -4,10 +4,12 @@ This module provides adaptive difficulty adjustment based on agent
 performance, allowing dynamic difficulty scaling during training.
 """
 
+import contextlib
 import copy
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
+
 import numpy as np
 
 from .base_controller import (
@@ -19,6 +21,7 @@ from .base_controller import (
 
 class AdaptationStrategy(Enum):
     """Strategy for difficulty adaptation."""
+
     LINEAR = "linear"
     EXPONENTIAL = "exponential"
     PROPORTIONAL = "proportional"
@@ -27,6 +30,7 @@ class AdaptationStrategy(Enum):
 
 class AdaptationDirection(Enum):
     """Direction of difficulty adaptation."""
+
     INCREASE = "increase"
     DECREASE = "decrease"
     MAINTAIN = "maintain"
@@ -35,7 +39,7 @@ class AdaptationDirection(Enum):
 @dataclass
 class DifficultyConfig:
     """Configuration for adaptive difficulty.
-    
+
     Attributes:
         enabled: Whether adaptive difficulty is enabled.
         initial_difficulty: Starting difficulty (0.0 to 1.0).
@@ -49,6 +53,7 @@ class DifficultyConfig:
         reward_threshold_high: High reward threshold.
         reward_threshold_low: Low reward threshold.
     """
+
     enabled: bool = True
     initial_difficulty: float = 0.3
     min_difficulty: float = 0.1
@@ -65,26 +70,27 @@ class DifficultyConfig:
 @dataclass
 class DifficultyState:
     """Current state of difficulty adaptation.
-    
+
     Attributes:
         difficulty: Current difficulty level.
         direction: Last adaptation direction.
         performance_history: Recent performance metrics.
         adaptation_count: Number of adaptations.
     """
+
     difficulty: float
     direction: AdaptationDirection = AdaptationDirection.MAINTAIN
-    performance_history: List[Dict[str, float]] = field(default_factory=list)
+    performance_history: list[dict[str, float]] = field(default_factory=list)
     adaptation_count: int = 0
 
 
 class AdaptiveDifficultyController(BaseController):
     """Adaptive difficulty controller for dynamic difficulty scaling.
-    
+
     This controller adjusts task difficulty based on agent performance,
     increasing difficulty when the agent performs well and decreasing
     when the agent struggles.
-    
+
     Example:
         >>> config = DifficultyConfig(
         ...     initial_difficulty=0.3,
@@ -102,26 +108,26 @@ class AdaptiveDifficultyController(BaseController):
 
     def __init__(
         self,
-        config: Optional[ControllerConfig] = None,
-        difficulty_config: Optional[DifficultyConfig] = None,
+        config: ControllerConfig | None = None,
+        difficulty_config: DifficultyConfig | None = None,
     ):
         """Initialize the adaptive difficulty controller.
-        
+
         Args:
             config: Base controller configuration.
             difficulty_config: Difficulty adaptation configuration.
         """
         super().__init__(config)
         self.difficulty_config = difficulty_config or DifficultyConfig()
-        
+
         # Initialize difficulty state
         self._difficulty = self.difficulty_config.initial_difficulty
         self._direction = AdaptationDirection.MAINTAIN
-        self._performance_history: List[Dict[str, float]] = []
+        self._performance_history: list[dict[str, float]] = []
         self._adaptation_count = 0
-        
+
         # Track per-difficulty performance for analysis
-        self._difficulty_history: List[float] = []
+        self._difficulty_history: list[float] = []
 
     @property
     def difficulty(self) -> float:
@@ -135,16 +141,16 @@ class AdaptiveDifficultyController(BaseController):
 
     def sample_parameters(self) -> ParameterSnapshot:
         """Sample parameters based on current difficulty.
-        
+
         Returns:
             Parameter snapshot scaled by difficulty.
         """
         # Base parameters at difficulty 1.0
         base_params = self._get_base_parameters()
-        
+
         # Scale parameters by difficulty
         scaled_params = self._scale_by_difficulty(base_params, self._difficulty)
-        
+
         return ParameterSnapshot(
             physics=scaled_params.get("physics", {}),
             visual=scaled_params.get("visual", {}),
@@ -153,20 +159,20 @@ class AdaptiveDifficultyController(BaseController):
             step=self._step,
         )
 
-    def _get_base_parameters(self) -> Dict[str, Dict[str, float]]:
+    def _get_base_parameters(self) -> dict[str, dict[str, float]]:
         """Get base parameters at maximum difficulty.
-        
+
         Returns:
             Dictionary of parameter categories and values.
         """
         return {
             "physics": {
                 "mass_ratio": 0.2,  # +/- 20% variation at max difficulty
-                "friction": 0.3,   # Friction variation
+                "friction": 0.3,  # Friction variation
                 "gravity_variation": 1.0,  # Gravity variation
             },
             "dynamics": {
-                "action_noise": 0.1,      # Max action noise
+                "action_noise": 0.1,  # Max action noise
                 "observation_noise": 0.05,  # Max observation noise
             },
             "visual": {
@@ -176,31 +182,31 @@ class AdaptiveDifficultyController(BaseController):
 
     def _scale_by_difficulty(
         self,
-        base_params: Dict[str, Dict[str, float]],
+        base_params: dict[str, dict[str, float]],
         difficulty: float,
-    ) -> Dict[str, Dict[str, float]]:
+    ) -> dict[str, dict[str, float]]:
         """Scale base parameters by difficulty level.
-        
+
         Args:
             base_params: Base parameter values.
             difficulty: Difficulty level (0.0 to 1.0).
-            
+
         Returns:
             Scaled parameters.
         """
         scaled = {}
-        
+
         # Scale factor: difficulty affects how much randomization
         # Lower difficulty = less randomization
         # Higher difficulty = more randomization
         scale = difficulty
-        
+
         for category, params in base_params.items():
             scaled[category] = {}
             for param_name, base_value in params.items():
                 # Scale parameter value by difficulty
                 scaled[category][param_name] = base_value * scale
-        
+
         return scaled
 
     def apply_parameters(
@@ -227,11 +233,18 @@ class AdaptiveDifficultyController(BaseController):
         gravity_var = snapshot.physics.get("gravity_variation")
         if gravity_var is not None and gravity_var != 0.0:
             try:
-                if hasattr(simulator, "_model") and simulator._model is not None and hasattr(simulator._model, "opt"):
-                    base_gravity = getattr(simulator._model.opt, "gravity", np.array([0.0, 0.0, -9.81]))
+                if (
+                    hasattr(simulator, "_model")
+                    and simulator._model is not None
+                    and hasattr(simulator._model, "opt")
+                ):
+                    base_gravity = getattr(
+                        simulator._model.opt, "gravity", np.array([0.0, 0.0, -9.81])
+                    )
                     simulator._model.opt.gravity[:] = base_gravity * (1.0 + gravity_var)
                 elif hasattr(simulator, "_physics_client"):
                     import pybullet as p
+
                     base_gravity = np.array([0.0, 0.0, -9.81])
                     p.setGravity(
                         base_gravity[0] * (1.0 + gravity_var),
@@ -254,10 +267,8 @@ class AdaptiveDifficultyController(BaseController):
                 body_names.extend(t.name for t in getattr(scene, "tissues", []))
                 body_names.extend(i.name for i in getattr(scene, "instruments", []))
             for name in body_names:
-                try:
+                with contextlib.suppress(Exception):
                     simulator.set_body_property(name, "mass", mass_ratio)
-                except Exception:
-                    pass
 
         # Apply friction (same body discovery pattern)
         if "friction" in snapshot.physics and hasattr(simulator, "set_body_property"):
@@ -271,17 +282,15 @@ class AdaptiveDifficultyController(BaseController):
                 body_names.extend(t.name for t in getattr(scene, "tissues", []))
                 body_names.extend(i.name for i in getattr(scene, "instruments", []))
             for name in body_names:
-                try:
+                with contextlib.suppress(Exception):
                     simulator.set_body_property(name, "friction", friction)
-                except Exception:
-                    pass
 
         return True
 
     def get_randomized_action(
         self,
         action: np.ndarray,
-        noise_scale: Optional[float] = None,
+        noise_scale: float | None = None,
     ) -> np.ndarray:
         """Apply adaptive action noise.
 
@@ -308,7 +317,7 @@ class AdaptiveDifficultyController(BaseController):
     def get_randomized_observation(
         self,
         observation: np.ndarray,
-        noise_scale: Optional[float] = None,
+        noise_scale: float | None = None,
     ) -> np.ndarray:
         """Apply adaptive observation noise.
 
@@ -335,49 +344,43 @@ class AdaptiveDifficultyController(BaseController):
     def update_curriculum(
         self,
         episode: int,
-        metrics: Dict[str, float],
-    ) -> Dict[str, Any]:
+        metrics: dict[str, float],
+    ) -> dict[str, Any]:
         """Update difficulty based on episode results.
-        
+
         Args:
             episode: Episode number.
             metrics: Episode metrics.
-            
+
         Returns:
             Dictionary with adaptation information.
         """
         # Store performance
         self._performance_history.append(metrics)
         self._difficulty_history.append(self._difficulty)
-        
+
         # Trim history
         if len(self._performance_history) > self.difficulty_config.performance_window:
             self._performance_history = self._performance_history[
-                -self.difficulty_config.performance_window:
+                -self.difficulty_config.performance_window :
             ]
-        
+
         # Determine adaptation
         direction, delta = self._compute_adaptation()
-        
+
         # Apply adaptation
         old_difficulty = self._difficulty
-        
+
         if direction == AdaptationDirection.INCREASE:
-            self._difficulty = min(
-                self.difficulty_config.max_difficulty,
-                self._difficulty + delta
-            )
+            self._difficulty = min(self.difficulty_config.max_difficulty, self._difficulty + delta)
         elif direction == AdaptationDirection.DECREASE:
-            self._difficulty = max(
-                self.difficulty_config.min_difficulty,
-                self._difficulty - delta
-            )
-        
+            self._difficulty = max(self.difficulty_config.min_difficulty, self._difficulty - delta)
+
         # Track adaptation
         if self._difficulty != old_difficulty:
             self._adaptation_count += 1
             self._direction = direction
-        
+
         return {
             "episode": episode,
             "old_difficulty": old_difficulty,
@@ -387,21 +390,21 @@ class AdaptiveDifficultyController(BaseController):
             "adaptation_count": self._adaptation_count,
         }
 
-    def _compute_adaptation(self) -> Tuple[AdaptationDirection, float]:
+    def _compute_adaptation(self) -> tuple[AdaptationDirection, float]:
         """Compute adaptation direction and magnitude.
-        
+
         Returns:
             Tuple of (direction, delta).
         """
         if not self._performance_history:
             return AdaptationDirection.MAINTAIN, 0.0
-        
+
         # Calculate performance metrics
-        recent = self._performance_history[-self.difficulty_config.performance_window:]
-        
+        recent = self._performance_history[-self.difficulty_config.performance_window :]
+
         success_rate = sum(m.get("success", 0) for m in recent) / len(recent)
         avg_reward = sum(m.get("reward", 0) for m in recent) / len(recent)
-        
+
         # Determine direction
         if success_rate >= self.difficulty_config.success_threshold_high:
             direction = AdaptationDirection.INCREASE
@@ -413,10 +416,10 @@ class AdaptiveDifficultyController(BaseController):
             direction = AdaptationDirection.DECREASE
         else:
             direction = AdaptationDirection.MAINTAIN
-        
+
         # Compute delta based on strategy
         rate = self.difficulty_config.adaptation_rate
-        
+
         if self.difficulty_config.adaptation_strategy == AdaptationStrategy.LINEAR:
             delta = rate
         elif self.difficulty_config.adaptation_strategy == AdaptationStrategy.EXPONENTIAL:
@@ -426,29 +429,33 @@ class AdaptiveDifficultyController(BaseController):
         elif self.difficulty_config.adaptation_strategy == AdaptationStrategy.PROPORTIONAL:
             # Proportional to performance difference from threshold
             if direction == AdaptationDirection.INCREASE:
-                delta = max(0.0, rate * (success_rate - self.difficulty_config.success_threshold_high))
+                delta = max(
+                    0.0, rate * (success_rate - self.difficulty_config.success_threshold_high)
+                )
             else:
-                delta = max(0.0, rate * (self.difficulty_config.success_threshold_low - success_rate))
+                delta = max(
+                    0.0, rate * (self.difficulty_config.success_threshold_low - success_rate)
+                )
         else:  # THRESHOLD
             # Fixed step if threshold crossed
             delta = rate
-        
+
         return direction, delta
 
     def set_difficulty(self, difficulty: float) -> None:
         """Manually set the difficulty level.
-        
+
         Args:
             difficulty: Difficulty level (0.0 to 1.0).
         """
         self._difficulty = max(
             self.difficulty_config.min_difficulty,
-            min(self.difficulty_config.max_difficulty, difficulty)
+            min(self.difficulty_config.max_difficulty, difficulty),
         )
 
     def get_difficulty_state(self) -> DifficultyState:
         """Get current difficulty state.
-        
+
         Returns:
             Current difficulty state.
         """
@@ -466,12 +473,12 @@ class AdaptiveDifficultyController(BaseController):
         max_value: float,
     ) -> float:
         """Get difficulty-scaled parameter value.
-        
+
         Args:
             param_name: Parameter name.
             min_value: Minimum value (at difficulty 0).
             max_value: Maximum value (at difficulty 1).
-            
+
         Returns:
             Difficulty-scaled parameter value.
         """

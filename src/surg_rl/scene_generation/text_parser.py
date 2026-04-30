@@ -9,13 +9,13 @@ import asyncio
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any
+
+from pydantic import ValidationError
 
 from surg_rl.scene_definition import SceneDefinition
 from surg_rl.utils.config import get_settings
 from surg_rl.utils.logging import get_logger
-
-from pydantic import ValidationError
 
 from .base_parser import BaseParser, ParserError, ParseValidationError
 from .prompts.text_prompts import (
@@ -48,13 +48,13 @@ class TextParser(BaseParser):
 
     def __init__(
         self,
-        provider: Optional[str] = None,
-        model: Optional[str] = None,
-        api_key: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-        ollama_base_url: Optional[str] = None,
-        ollama_timeout: Optional[int] = None,
+        provider: str | None = None,
+        model: str | None = None,
+        api_key: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        ollama_base_url: str | None = None,
+        ollama_timeout: int | None = None,
     ):
         """Initialize the text parser.
 
@@ -111,7 +111,7 @@ class TextParser(BaseParser):
                 except ImportError:
                     raise ImportError(
                         "OpenAI package not installed. Install with: pip install openai"
-                    )
+                    ) from None
             elif self.provider == "anthropic":
                 try:
                     import anthropic
@@ -120,7 +120,7 @@ class TextParser(BaseParser):
                 except ImportError:
                     raise ImportError(
                         "Anthropic package not installed. Install with: pip install anthropic"
-                    )
+                    ) from None
             elif self.provider == "ollama":
                 # Ollama uses HTTP requests, no special client needed
                 self._client = self._create_ollama_client()
@@ -281,7 +281,7 @@ class TextParser(BaseParser):
 
     async def parse(
         self,
-        input_data: Union[str, Path],
+        input_data: str | Path,
         **kwargs: Any,
     ) -> SceneDefinition:
         """Parse text description into scene definition.
@@ -323,7 +323,7 @@ class TextParser(BaseParser):
             logger.info(f"Successfully parsed scene: {scene.metadata.name}")
             return scene
         except ValidationError as e:
-            details: Dict[str, Any] = {
+            details: dict[str, Any] = {
                 "raw_response": scene_data,
                 "errors": [
                     {"loc": list(err.get("loc", [])), "msg": err.get("msg", "")}
@@ -342,8 +342,8 @@ class TextParser(BaseParser):
 
     async def parse_with_context(
         self,
-        input_data: Union[str, Path, bytes],
-        context: Optional[SceneDefinition] = None,
+        input_data: str | Path | bytes,
+        context: SceneDefinition | None = None,
         **kwargs: Any,
     ) -> SceneDefinition:
         """Parse text with optional existing scene context.
@@ -379,14 +379,14 @@ class TextParser(BaseParser):
             raise ParseValidationError(
                 f"Modified scene validation failed: {e}",
                 details={"raw_response": scene_data, "error": str(e)},
-            )
+            ) from e
 
     async def _generate_scene_async(
         self,
         description: str,
-        temperature: Optional[float] = None,
-        schema_example: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        temperature: float | None = None,
+        schema_example: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Call LLM to generate scene from description.
 
         Args:
@@ -410,8 +410,8 @@ class TextParser(BaseParser):
         self,
         current_scene: str,
         instructions: str,
-        temperature: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        temperature: float | None = None,
+    ) -> dict[str, Any]:
         """Call LLM to modify existing scene.
 
         Args:
@@ -442,7 +442,7 @@ class TextParser(BaseParser):
     async def _call_llm_async(
         self,
         prompt: str,
-        temperature: Optional[float] = None,
+        temperature: float | None = None,
     ) -> str:
         """Make async API call to LLM provider.
 
@@ -497,9 +497,9 @@ class TextParser(BaseParser):
             raise ParserError(
                 f"LLM API call failed: {e}",
                 details={"provider": self.provider, "model": self.model, "error": str(e)},
-            )
+            ) from e
 
-    def _parse_json_response(self, response: str) -> Dict[str, Any]:
+    def _parse_json_response(self, response: str) -> dict[str, Any]:
         """Extract and parse JSON from LLM response.
 
         Args:
@@ -544,7 +544,7 @@ class TextParser(BaseParser):
 
     def parse_sync(
         self,
-        input_data: Union[str, Path],
+        input_data: str | Path,
         **kwargs: Any,
     ) -> SceneDefinition:
         """Synchronous wrapper for parse.
@@ -570,8 +570,8 @@ class TextParser(BaseParser):
 
     def parse_with_context_sync(
         self,
-        input_data: Union[str, Path, bytes],
-        context: Optional[SceneDefinition] = None,
+        input_data: str | Path | bytes,
+        context: SceneDefinition | None = None,
         **kwargs: Any,
     ) -> SceneDefinition:
         """Synchronous wrapper for parse_with_context.

@@ -1,10 +1,10 @@
 """Tests for backend-agnostic task success termination (Phase 2)."""
+
 from typing import Any
 
 import numpy as np
-import pytest
 
-from surg_rl.rl.task_termination import check_task_success, _parse_distance_criteria
+from surg_rl.rl.task_termination import _parse_distance_criteria, check_task_success
 from surg_rl.scene_definition.schema import SceneDefinition
 from surg_rl.simulators.base_simulator import Observation
 
@@ -12,9 +12,7 @@ from surg_rl.simulators.base_simulator import Observation
 def _make_obs(ee_pos: Any = None, ee_quat: Any = None) -> Observation:
     obs = Observation()
     obs.end_effector_pos = np.array(ee_pos, dtype=np.float32) if ee_pos is not None else None
-    obs.end_effector_quat = (
-        np.array(ee_quat, dtype=np.float32) if ee_quat is not None else None
-    )
+    obs.end_effector_quat = np.array(ee_quat, dtype=np.float32) if ee_quat is not None else None
     return obs
 
 
@@ -132,8 +130,9 @@ class TestCheckTaskSuccess:
 class TestEnvironmentTaskTermination:
     def test_import_and_call_exists(self) -> None:
         """Ensure check_task_success is imported and called inside step()."""
-        from surg_rl.rl.environment import SurgicalEnv, SurgicalEnvConfig
         import inspect
+
+        from surg_rl.rl.environment import SurgicalEnv, SurgicalEnvConfig
 
         scene = _minimal_scene_with_task(threshold=0.1)
         env = SurgicalEnv(

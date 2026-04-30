@@ -1,31 +1,30 @@
 """Tests for simulator module."""
 
-import sys
 import os
-
-import numpy as np
-import pytest
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from surg_rl.simulators import (
-    BaseSimulator,
-    Observation,
-    State,
-    StepResult,
-    SimulationStatus,
-    MuJoCoSimulator,
-    PyBulletSimulator,
-    SceneBuilder,
-    AssetMissingError,
-)
+import numpy as np
+import pytest
+
 from surg_rl.scene_definition import (
-    SceneDefinition,
     Metadata,
+    SceneDefinition,
     SimulatorType,
     TissueConfig,
     TissueMeshDefinition,
     TissueType,
+)
+from surg_rl.simulators import (
+    AssetMissingError,
+    BaseSimulator,
+    MuJoCoSimulator,
+    Observation,
+    PyBulletSimulator,
+    SceneBuilder,
+    State,
+    StepResult,
 )
 
 
@@ -47,6 +46,7 @@ class TestObservation:
     def test_observation_to_dict(self):
         """Test observation to dict conversion."""
         import numpy as np
+
         obs = Observation(
             rgb_image=np.zeros((100, 100, 3)),
             robot_state=np.array([0.0, 0.0, 0.0]),
@@ -466,7 +466,7 @@ class TestMuJoCoJointControl:
         sim = MuJoCoSimulator()
         sim.load_scene(scene)
 
-        initial_qpos = sim._data.qpos.copy()
+        sim._data.qpos.copy()
         action = np.array([0.1], dtype=np.float32)
         result = sim.step(action)
 
@@ -538,6 +538,7 @@ class TestPyBulletJointControl:
         assert "robot" in states
         assert states["robot"]["positions"][0] == pytest.approx(0.5)
         assert states["robot"]["velocities"][0] == pytest.approx(0.1)
+
 
 class TestSoftBodyMJCF:
     """Tests for soft body MJCF generation."""
@@ -634,20 +635,30 @@ class TestBaseSimulatorDel:
         from unittest.mock import MagicMock
 
         class BrokenSimulator(BaseSimulator):
+            def _apply_action(self, action: np.ndarray) -> None:
+                pass
+
             def load_scene(self, scene):
                 pass
+
             def reset(self, seed=None):
                 return MagicMock()
+
             def step(self, action):
                 return MagicMock()
+
             def render(self, mode="rgb_array"):
                 return None
+
             def close(self):
                 raise RuntimeError("cleanup failed")
+
             def get_state(self):
                 return State()
+
             def set_state(self, state):
                 pass
+
             def get_joint_states(self):
                 return {}
 
@@ -661,7 +672,7 @@ class TestMuJoCoReset:
 
     def test_reset_does_not_poison_global_rng(self):
         """reset() must not call np.random.seed() globally."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import MagicMock, patch
 
         sim = MuJoCoSimulator()
         sim._loaded = True
@@ -699,7 +710,8 @@ class TestPyBulletBugs:
     def test_pybullet_primitive_robot_quaternion_order(self):
         """Bug 1: createMultiBody primitive fallback must pass [x, y, z, w]."""
         import unittest.mock as mock
-        from surg_rl.scene_definition import RobotConfig, RobotType, Pose, Orientation, Position
+
+        from surg_rl.scene_definition import Orientation, Pose, Position, RobotConfig, RobotType
 
         sim = PyBulletSimulator()
         sim._physics_client = 0
@@ -762,7 +774,8 @@ class TestPyBulletBugs:
     def test_pybullet_load_scene_without_physics(self):
         """Bug 3: load_scene() must not raise when physics is None."""
         import unittest.mock as mock
-        from surg_rl.scene_definition import SceneDefinition, Metadata
+
+        from surg_rl.scene_definition import Metadata, SceneDefinition
 
         sim = PyBulletSimulator()
         sim._pb = mock.MagicMock()
@@ -780,9 +793,7 @@ class TestPyBulletBugs:
         sim.load_scene(scene)
 
         # Default gravity should be set
-        sim._pb.setGravity.assert_called_with(
-            0, 0, -9.81, physicsClientId=0
-        )
+        sim._pb.setGravity.assert_called_with(0, 0, -9.81, physicsClientId=0)
 
 
 class TestMuJoCoRenderAndState:
@@ -815,6 +826,7 @@ class TestMuJoCoRenderAndState:
         sim.load_scene(suturing_scene)
         sim.reset()
         from surg_rl.simulators.base_simulator import State
+
         new_state = State(time=0.0, qpos=np.zeros(sim._model.nq), qvel=np.zeros(sim._model.nv))
         sim.set_state(new_state)
         retrieved = sim.get_state()
@@ -844,9 +856,12 @@ class TestMuJoCoRenderAndState:
 class TestPyBulletLoadAndState:
     def test_load_tissue_sphere(self, minimal_scene):
         from surg_rl.scene_definition.schema import TissueConfig, TissueMeshDefinition
+
         tissue = TissueConfig(
             name="sphere_tissue",
-            geometry=TissueMeshDefinition(primitive="sphere", dimensions=(0.05, 0.05, 0.05), radius=0.05),
+            geometry=TissueMeshDefinition(
+                primitive="sphere", dimensions=(0.05, 0.05, 0.05), radius=0.05
+            ),
         )
         minimal_scene.tissues.append(tissue)
         sim = PyBulletSimulator()
@@ -855,6 +870,7 @@ class TestPyBulletLoadAndState:
 
     def test_load_tissue_cylinder(self, minimal_scene):
         from surg_rl.scene_definition.schema import TissueConfig, TissueMeshDefinition
+
         tissue = TissueConfig(
             name="cyl_tissue",
             geometry=TissueMeshDefinition(primitive="cylinder", dimensions=(0.05, 0.05, 0.1)),
@@ -866,6 +882,7 @@ class TestPyBulletLoadAndState:
 
     def test_load_instrument_no_pose(self, minimal_scene):
         from surg_rl.scene_definition.schema import InstrumentConfig
+
         instrument = InstrumentConfig(name="loose_inst")
         minimal_scene.instruments.append(instrument)
         sim = PyBulletSimulator()
@@ -895,6 +912,7 @@ class TestPyBulletLoadAndState:
         sim.load_scene(suturing_scene)
         sim.reset()
         from surg_rl.simulators.base_simulator import State
+
         new_state = State(time=0.0, qpos=np.zeros(10), qvel=np.zeros(10))
         sim.set_state(new_state)
         retrieved = sim.get_state()
@@ -933,17 +951,16 @@ class TestPyBulletSoftBodyLoad:
     """Soft body loading tests for PyBullet."""
 
     @pytest.mark.xfail(
-        sys.platform in ("darwin",)
-        or os.environ.get("CI") == "true",
+        sys.platform in ("darwin",) or os.environ.get("CI") == "true",
         reason="PyBullet soft body auto-tetgen unstable on macOS and some CI runners",
     )
     def test_pybullet_soft_body_load_no_crash(self, tmp_path):
         """Soft body tissue should load without NotImplementedError."""
         from surg_rl.scene_definition.schema import (
             SceneDefinition,
+            SoftBodyPhysics,
             TissueConfig,
             TissueMeshDefinition,
-            SoftBodyPhysics,
         )
 
         scene = SceneDefinition(
@@ -952,9 +969,7 @@ class TestPyBulletSoftBodyLoad:
             tissues=[
                 TissueConfig(
                     name="soft_tissue",
-                    geometry=TissueMeshDefinition(
-                        primitive="box", dimensions=(0.1, 0.1, 0.01)
-                    ),
+                    geometry=TissueMeshDefinition(primitive="box", dimensions=(0.1, 0.1, 0.01)),
                     soft_body=True,
                     physics=SoftBodyPhysics(),
                 )
@@ -967,17 +982,16 @@ class TestPyBulletSoftBodyLoad:
         assert sim._soft_body_ids["soft_tissue"] >= 0
 
     @pytest.mark.xfail(
-        sys.platform in ("darwin",)
-        or os.environ.get("CI") == "true",
+        sys.platform in ("darwin",) or os.environ.get("CI") == "true",
         reason="PyBullet soft body unstable on macOS and CI",
     )
     def test_pybullet_soft_body_step_no_crash(self):
         """Soft body should survive at least one simulation step."""
         from surg_rl.scene_definition.schema import (
             SceneDefinition,
+            SoftBodyPhysics,
             TissueConfig,
             TissueMeshDefinition,
-            SoftBodyPhysics,
         )
 
         scene = SceneDefinition(
@@ -986,9 +1000,7 @@ class TestPyBulletSoftBodyLoad:
             tissues=[
                 TissueConfig(
                     name="soft_tissue",
-                    geometry=TissueMeshDefinition(
-                        primitive="box", dimensions=(0.1, 0.1, 0.01)
-                    ),
+                    geometry=TissueMeshDefinition(primitive="box", dimensions=(0.1, 0.1, 0.01)),
                     soft_body=True,
                     physics=SoftBodyPhysics(),
                 )
@@ -1000,17 +1012,16 @@ class TestPyBulletSoftBodyLoad:
         sim.step(np.zeros(1))  # dummy action
 
     @pytest.mark.xfail(
-        sys.platform in ("darwin",)
-        or os.environ.get("CI") == "true",
+        sys.platform in ("darwin",) or os.environ.get("CI") == "true",
         reason="PyBullet soft body fragile on macOS/CI",
     )
     def test_pybullet_soft_body_get_mesh_data(self):
         """getMeshData should return vertices after loading."""
         from surg_rl.scene_definition.schema import (
             SceneDefinition,
+            SoftBodyPhysics,
             TissueConfig,
             TissueMeshDefinition,
-            SoftBodyPhysics,
         )
 
         scene = SceneDefinition(
@@ -1038,17 +1049,16 @@ class TestPyBulletSoftBodyLoad:
         assert len(vertices) > 0
 
     @pytest.mark.xfail(
-        sys.platform in ("darwin",)
-        or os.environ.get("CI") == "true",
+        sys.platform in ("darwin",) or os.environ.get("CI") == "true",
         reason="PyBullet soft body fragile on macOS/CI",
     )
     def test_pybullet_soft_body_anchor_to_world(self):
         """Anchoring a node to world should prevent gravity-driven motion."""
         from surg_rl.scene_definition.schema import (
             SceneDefinition,
+            SoftBodyPhysics,
             TissueConfig,
             TissueMeshDefinition,
-            SoftBodyPhysics,
         )
 
         scene = SceneDefinition(
@@ -1057,9 +1067,7 @@ class TestPyBulletSoftBodyLoad:
             tissues=[
                 TissueConfig(
                     name="soft_tissue",
-                    geometry=TissueMeshDefinition(
-                        primitive="box", dimensions=(0.1, 0.1, 0.01)
-                    ),
+                    geometry=TissueMeshDefinition(primitive="box", dimensions=(0.1, 0.1, 0.01)),
                     soft_body=True,
                     physics=SoftBodyPhysics(),
                 )
@@ -1077,4 +1085,3 @@ class TestPyBulletSoftBodyLoad:
         # Step a few times
         for _ in range(10):
             sim._pb.stepSimulation(physicsClientId=sim._physics_client)
-

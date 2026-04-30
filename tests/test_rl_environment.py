@@ -1,8 +1,7 @@
 """Tests for SurgicalEnv environment wrapper."""
 
-import pytest
 import numpy as np
-from unittest.mock import MagicMock, patch
+import pytest
 
 from surg_rl.rl.environment import (
     SurgicalEnv,
@@ -10,9 +9,7 @@ from surg_rl.rl.environment import (
     make_env,
     make_vec_env,
 )
-from surg_rl.rl.observation import ObservationConfig, ObservationType
-from surg_rl.rl.action import ActionConfig, ActionType
-from surg_rl.rl.rewards import RewardConfig
+from surg_rl.rl.observation import ObservationType
 
 
 class TestSurgicalEnvDefaults:
@@ -93,7 +90,7 @@ class TestSurgicalEnvLifecycle:
         )
         env = SurgicalEnv(config)
         env.reset()
-        rgb = env.render()
+        env.render()
         # rgb may be None if renderer unavailable
         env.close()
 
@@ -115,6 +112,7 @@ class TestSurgicalEnvInfo:
         env = SurgicalEnv(config)
         env.reset()
         from surg_rl.simulators.base_simulator import Observation
+
         sim_obs = Observation(end_effector_pos=np.array([0.1, 0.0, 0.5]))
         env._target_pos = np.array([0.3, 0.0, 0.5])
         info = env._build_info(sim_obs)
@@ -148,4 +146,50 @@ class TestMakeEnvFactory:
     def test_make_vec_env_returns_env(self):
         env = make_vec_env("scenes/minimal_scene.json", n_envs=1)
         assert env is not None
+        env.close()
+
+
+class TestSurgicalEnvTorque:
+    def test_step_with_joint_torques_mujoco(self):
+        """SurgicalEnv step succeeds with JOINT_TORQUES on MuJoCo."""
+        from surg_rl.rl.action import ActionConfig, ActionType
+
+        config = SurgicalEnvConfig(
+            scene_path="scenes/minimal_scene.json",
+            simulator_type="mujoco",
+            action_config=ActionConfig(
+                action_type=ActionType.JOINT_TORQUES,
+                num_joints=1,
+                include_gripper=False,
+            ),
+            max_episode_steps=2,
+        )
+        env = SurgicalEnv(config)
+        env.reset()
+        action = env.action_space.sample()
+        obs, reward, terminated, truncated, info = env.step(action)
+        assert isinstance(obs, dict)
+        assert isinstance(reward, float)
+        env.close()
+
+    def test_step_with_joint_torques_pybullet(self):
+        """SurgicalEnv step succeeds with JOINT_TORQUES on PyBullet."""
+        from surg_rl.rl.action import ActionConfig, ActionType
+
+        config = SurgicalEnvConfig(
+            scene_path="scenes/minimal_scene.json",
+            simulator_type="pybullet",
+            action_config=ActionConfig(
+                action_type=ActionType.JOINT_TORQUES,
+                num_joints=1,
+                include_gripper=False,
+            ),
+            max_episode_steps=2,
+        )
+        env = SurgicalEnv(config)
+        env.reset()
+        action = env.action_space.sample()
+        obs, reward, terminated, truncated, info = env.step(action)
+        assert isinstance(obs, dict)
+        assert isinstance(reward, float)
         env.close()

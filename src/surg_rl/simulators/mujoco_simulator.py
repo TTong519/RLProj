@@ -1,13 +1,14 @@
 """MuJoCo simulator backend implementation."""
 
+import contextlib
 import os
-import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 
 from surg_rl.utils.logging import get_logger
+
 from .base_simulator import BaseSimulator, Observation, State, StepResult
 from .scene_builder import SceneBuilder
 
@@ -28,7 +29,7 @@ class MuJoCoSimulator(BaseSimulator):
         frame_skip: int = 1,
         render_width: int = 640,
         render_height: int = 480,
-        assets_dir: Optional[Union[str, Path]] = None,
+        assets_dir: str | Path | None = None,
     ):
         """Initialize MuJoCo simulator.
 
@@ -52,46 +53,64 @@ class MuJoCoSimulator(BaseSimulator):
         self._data = None
         self._viewer = None
         self._renderer = None
-        self._mjcf_path: Optional[Path] = None
-        self._renderer_available: Optional[bool] = None
-        self._control_map: List[Dict[str, Any]] = []
-        self._last_depth: Optional[np.ndarray] = None
+        self._mjcf_path: Path | None = None
+        self._renderer_available: bool | None = None
+        self._control_map: list[dict[str, Any]] = []
+        self._last_depth: np.ndarray | None = None
+        self._action_mode: str = "position"
 
     def _check_mujoco(self) -> None:
         """Check if MuJoCo is available."""
         try:
             import mujoco
+
             self._mujoco = mujoco
-        except ImportError:
+        except ImportError as exc:
             raise ImportError(
                 "MuJoCo is not installed. Install it with: pip install mujoco"
-            )
+            ) from exc
 
     def _check_renderer_available(self) -> bool:
         """Check if rendering is available (requires display or EGL)."""
         if self._renderer_available is not None:
             return self._renderer_available
-        
+
         # Check if we have a display
-        if os.environ.get('DISPLAY') or os.environ.get('PYOPENGL_PLATFORM'):
+        if os.environ.get("DISPLAY") or os.environ.get("PYOPENGL_PLATFORM"):
             self._renderer_available = True
             return True
-        
+
         # On macOS, check if we have a display connection
         import platform
-        if platform.system() == 'Darwin':
+
+        if platform.system() == "Darwin":
             # macOS uses CGL, not EGL; just try initialising Renderer
             self._renderer_available = True
             return self._renderer_available
-        
+
         # For Linux, try EGL for headless GPU rendering
         try:
-            from OpenGL import EGL
             self._renderer_available = True
         except Exception:
             self._renderer_available = False
-        
+
         return self._renderer_available
+
+    def set_action_mode(self, mode: str) -> None:
+        """Set the action mode for the simulation.
+
+        In MuJoCo, ``ctrl`` values are actuator commands whose interpretation
+        depends on the actuator type. For the default ``motor`` actuators, ``ctrl``
+        is the scaled force/torque (``gear`` multiplies ctrl into the joint).
+        Setting mode to "torque" here is mainly informational; the write path
+        remains the same. Future work: generate MuJoCo actuators of type
+        ``motor`` with gear=1 for true torque control, or ``position`` actuators
+        for position control.
+
+        Args:
+            mode: Action mode (e.g. 'position', 'torque').
+        """
+        self._action_mode = mode
 
     def load_scene(self, scene_definition: Any) -> None:
         """Load a scene definition into MuJoCo.
@@ -108,7 +127,7 @@ class MuJoCoSimulator(BaseSimulator):
         self._scene = scene_definition
 
         # Use scene's timestep if specified
-        if hasattr(scene_definition, 'physics') and scene_definition.physics:
+        if hasattr(scene_definition, "physics") and scene_definition.physics:
             self.timestep = scene_definition.physics.timestep
 
         # Build MJCF from scene
@@ -121,11 +140,11 @@ class MuJoCoSimulator(BaseSimulator):
             self._loaded = True
             self._build_control_map()
             logger.info(f"Loaded scene: {scene_definition.metadata.name}")
-        except Exception as e:
-            logger.error(f"Failed to load MuJoCo model: {e}")
-            raise RuntimeError(f"Failed to load MuJoCo model: {e}")
+        except Exception as exc:
+            logger.error(f"Failed to load MuJoCo model: {exc}")
+            raise RuntimeError(f"Failed to load MuJoCo model: {exc}") from exc
 
-    def reset(self, seed: Optional[int] = None) -> Observation:
+    def reset(self, seed: int | None = None) -> Observation:
         """Reset the simulation to initial state.
 
         Args:
@@ -196,10 +215,10 @@ class MuJoCoSimulator(BaseSimulator):
     def render(
         self,
         mode: str = "rgb_array",
-        width: Optional[int] = None,
-        height: Optional[int] = None,
-        camera_name: Optional[str] = None,
-    ) -> Optional[np.ndarray]:
+        width: int | None = None,
+        height: int | None = None,
+        camera_name: str | None = None,
+    ) -> np.ndarray | None:
         """Render the current simulation state.
 
         Args:
@@ -239,10 +258,8 @@ class MuJoCoSimulator(BaseSimulator):
                 )
             elif self._renderer.width != width or self._renderer.height != height:
                 # Recreate renderer with new dimensions
-                try:
+                with contextlib.suppress(Exception):
                     self._renderer.close()
-                except Exception:
-                    pass
                 self._renderer = self._mujoco.Renderer(
                     self._model,
                     height=height,
@@ -280,9 +297,9 @@ class MuJoCoSimulator(BaseSimulator):
     def get_camera_image(
         self,
         camera_name: str,
-        width: Optional[int] = None,
-        height: Optional[int] = None,
-    ) -> Optional[np.ndarray]:
+        width: int | None = None,
+        height: int | None = None,
+    ) -> np.ndarray | None:
         """Render an RGB image from a named scene camera.
 
         Resolves the camera definition from `self._scene.environment.cameras`
@@ -293,19 +310,15 @@ class MuJoCoSimulator(BaseSimulator):
         width = width or self.render_width
         height = height or self.render_height
         try:
-            cam_id = self._mujoco.mj_name2id(
-                self._model, self._mujoco.mjOBJ_CAMERA, camera_name
-            )
+            cam_id = self._mujoco.mj_name2id(self._model, self._mujoco.mjOBJ_CAMERA, camera_name)
         except Exception:
             logger.warning(f"Camera '{camera_name}' not found in MuJoCo model.")
             return None
         if self._renderer is None:
             self._renderer = self._mujoco.Renderer(self._model, height=height, width=width)
         elif self._renderer.width != width or self._renderer.height != height:
-            try:
+            with contextlib.suppress(Exception):
                 self._renderer.close()
-            except Exception:
-                pass
             self._renderer = self._mujoco.Renderer(self._model, height=height, width=width)
         self._mujoco.mj_forward(self._model, self._data)
         self._renderer.update_scene(self._data, camera=cam_id)
@@ -321,8 +334,8 @@ class MuJoCoSimulator(BaseSimulator):
             return State()
 
         # Collect body positions/orientations
-        body_positions: Dict[str, np.ndarray] = {}
-        body_orientations: Dict[str, np.ndarray] = {}
+        body_positions: dict[str, np.ndarray] = {}
+        body_orientations: dict[str, np.ndarray] = {}
         if self._scene:
             for robot in self._scene.robots:
                 pose = self.get_body_pose(robot.name)
@@ -344,19 +357,19 @@ class MuJoCoSimulator(BaseSimulator):
             time=self._simulation_time,
             qpos=self._data.qpos.copy() if self._data.qpos is not None else None,
             qvel=self._data.qvel.copy() if self._data.qvel is not None else None,
-            mocap_pos=self._data.mocap_pos.copy() if hasattr(self._data, 'mocap_pos') else None,
-            mocap_quat=self._data.mocap_quat.copy() if hasattr(self._data, 'mocap_quat') else None,
+            mocap_pos=self._data.mocap_pos.copy() if hasattr(self._data, "mocap_pos") else None,
+            mocap_quat=self._data.mocap_quat.copy() if hasattr(self._data, "mocap_quat") else None,
             body_positions=body_positions,
             body_orientations=body_orientations,
         )
 
-    def get_joint_states(self) -> Dict[str, Dict[str, np.ndarray]]:
+    def get_joint_states(self) -> dict[str, dict[str, np.ndarray]]:
         """Get joint positions and velocities for all robots.
 
         Returns:
             Dictionary mapping robot name to {'positions': array, 'velocities': array}.
         """
-        result: Dict[str, Dict[str, np.ndarray]] = {}
+        result: dict[str, dict[str, np.ndarray]] = {}
         if not self._loaded or self._scene is None:
             return result
 
@@ -412,9 +425,9 @@ class MuJoCoSimulator(BaseSimulator):
             self._data.qpos[:] = state.qpos
         if state.qvel is not None:
             self._data.qvel[:] = state.qvel
-        if state.mocap_pos is not None and hasattr(self._data, 'mocap_pos'):
+        if state.mocap_pos is not None and hasattr(self._data, "mocap_pos"):
             self._data.mocap_pos[:] = state.mocap_pos
-        if state.mocap_quat is not None and hasattr(self._data, 'mocap_quat'):
+        if state.mocap_quat is not None and hasattr(self._data, "mocap_quat"):
             self._data.mocap_quat[:] = state.mocap_quat
 
         self._mujoco.mj_forward(self._model, self._data)
@@ -461,10 +474,8 @@ class MuJoCoSimulator(BaseSimulator):
             self._viewer = None
 
         if self._renderer is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._renderer.close()
-            except Exception:
-                pass
             self._renderer = None
 
         self._model = None
@@ -567,7 +578,7 @@ class MuJoCoSimulator(BaseSimulator):
             return
 
         # Fallback: apply sequentially
-        if hasattr(self._data, 'ctrl') and len(self._data.ctrl) > 0:
+        if hasattr(self._data, "ctrl") and len(self._data.ctrl) > 0:
             n_controls = min(len(action), len(self._data.ctrl))
             self._data.ctrl[:n_controls] = action[:n_controls]
 
@@ -581,10 +592,8 @@ class MuJoCoSimulator(BaseSimulator):
 
         # Only render if renderer is available
         if self._check_renderer_available():
-            try:
+            with contextlib.suppress(Exception):
                 obs.rgb_image = self.render("rgb_array")
-            except Exception:
-                pass
             try:
                 depth = self.render("depth_array")
                 if depth is not None:
@@ -605,15 +614,15 @@ class MuJoCoSimulator(BaseSimulator):
             obs.robot_state = self._data.qpos.copy()
 
         # Get end effector position (simplified)
-        if hasattr(self._data, 'xpos') and len(self._data.xpos) > 0:
+        if hasattr(self._data, "xpos") and len(self._data.xpos) > 0:
             obs.end_effector_pos = self._data.xpos[-1].copy()
 
         # Collision detection: count MuJoCo contacts with non-zero force
-        if hasattr(self._data, 'ncon') and self._data.ncon > 0:
+        if hasattr(self._data, "ncon") and self._data.ncon > 0:
             for c in range(self._data.ncon):
                 con = self._data.contact[c]
                 # Distances <= 0 indicate penetration (active contact)
-                if hasattr(con, 'dist') and con.dist <= 0:
+                if hasattr(con, "dist") and con.dist <= 0:
                     obs.collision_detected = True
                     break
 
@@ -713,14 +722,14 @@ class MuJoCoSimulator(BaseSimulator):
             True if truncated.
         """
         # Check time limit
-        if self._scene and hasattr(self._scene, 'task') and self._scene.task:
+        if self._scene and hasattr(self._scene, "task") and self._scene.task:
             max_time = 120.0 if self._scene.task.time_limit is None else self._scene.task.time_limit
             if self._simulation_time >= max_time:
                 return True
 
         return False
 
-    def get_body_pose(self, body_name: str) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+    def get_body_pose(self, body_name: str) -> tuple[np.ndarray, np.ndarray] | None:
         """Get pose of a named body.
 
         Args:
@@ -742,9 +751,7 @@ class MuJoCoSimulator(BaseSimulator):
         except (ValueError, KeyError):
             return None
 
-    def get_end_effector_pose(
-        self, robot_name: str
-    ) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+    def get_end_effector_pose(self, robot_name: str) -> tuple[np.ndarray, np.ndarray] | None:
         """Get the current end effector position and orientation.
 
         Args:
@@ -769,7 +776,7 @@ class MuJoCoSimulator(BaseSimulator):
         body_name = ee.tool_name if ee.tool_name else f"{robot_name}_ee"
         return self.get_body_pose(body_name)
 
-    def get_tissue_deformation(self, tissue_name: str) -> Optional[np.ndarray]:
+    def get_tissue_deformation(self, tissue_name: str) -> np.ndarray | None:
         """Get vertex displacements for a soft body tissue.
 
         Args:
@@ -810,7 +817,7 @@ class MuJoCoSimulator(BaseSimulator):
         self,
         body_name: str,
         force: np.ndarray,
-        torque: Optional[np.ndarray] = None,
+        torque: np.ndarray | None = None,
     ) -> bool:
         """Apply external force to a body.
 
@@ -838,10 +845,10 @@ class MuJoCoSimulator(BaseSimulator):
 
     def start_viewer(self):
         """Start an interactive viewer for the simulation.
-        
+
         This method launches a passive viewer that can be used for
         real-time visualization. Must be called before the simulation loop.
-        
+
         Example:
             sim.load_scene(scene)
             sim.start_viewer()
@@ -849,17 +856,17 @@ class MuJoCoSimulator(BaseSimulator):
                 sim.step(action)
                 sim.render(mode='human')
             sim.close()
-        
+
         Returns:
             bool: True if viewer started successfully, False otherwise.
         """
         if not self._loaded:
             raise RuntimeError("Scene not loaded. Call load_scene() first.")
-        
+
         if not self._check_renderer_available():
             logger.warning("Cannot start viewer: no display available")
             return False
-        
+
         if self._viewer is None:
             try:
                 self._viewer = self._mujoco.viewer.launch_passive(self._model, self._data)

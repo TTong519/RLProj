@@ -1,21 +1,25 @@
 """Tests for scene generation module."""
 
 import asyncio
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+from surg_rl.scene_definition import Metadata, SceneDefinition, SimulatorType
 from surg_rl.scene_generation import (
     BaseParser,
+    SceneComposer,
     TextParser,
     VisionParser,
-    SceneComposer,
     get_template,
     list_templates,
 )
-from surg_rl.scene_generation.base_parser import ParserError, ParseValidationError
-from surg_rl.scene_generation.base_parser import ParseTimeoutError
-from surg_rl.scene_definition import SceneDefinition, Metadata, SimulatorType
+from surg_rl.scene_generation.base_parser import (
+    ParserError,
+    ParseTimeoutError,
+    ParseValidationError,
+)
 
 
 class TestTemplates:
@@ -95,10 +99,7 @@ class TestBaseParser:
     def test_validate_scene(self):
         """Test scene validation."""
         # validate_scene is now a static method
-        scene_data = {
-            "metadata": {"name": "Test"},
-            "simulator": "mujoco"
-        }
+        scene_data = {"metadata": {"name": "Test"}, "simulator": "mujoco"}
         scene = BaseParser.validate_scene(scene_data)
         assert isinstance(scene, SceneDefinition)
         assert scene.metadata.name == "Test"
@@ -210,6 +211,7 @@ class TestVisionParser:
         assert isinstance(result, str)
         # Verify it's base64
         import base64
+
         decoded = base64.b64decode(result)
         assert decoded == test_data
 
@@ -284,7 +286,7 @@ class TestSceneComposer:
         """Test merging scenes where one has no physics config."""
         composer = SceneComposer()
 
-        scene1 = SceneDefinition(
+        SceneDefinition(
             metadata=Metadata(name="Scene1"),
         )
         scene2 = SceneDefinition(
@@ -292,8 +294,7 @@ class TestSceneComposer:
             simulator=SimulatorType.PYBULLET,
         )
         # Force physics to None by using model_construct
-        from surg_rl.scene_definition import SceneDefinition as SD
-        scene1_none_physics = SD.model_construct(
+        scene1_none_physics = SceneDefinition.model_construct(
             metadata=Metadata(name="Scene1"),
             physics=None,
         )
@@ -306,12 +307,11 @@ class TestSceneComposer:
         """Test merging scenes where both have no physics config."""
         composer = SceneComposer()
 
-        from surg_rl.scene_definition import SceneDefinition as SD
-        scene1 = SD.model_construct(
+        scene1 = SceneDefinition.model_construct(
             metadata=Metadata(name="Scene1"),
             physics=None,
         )
-        scene2 = SD.model_construct(
+        scene2 = SceneDefinition.model_construct(
             metadata=Metadata(name="Scene2"),
             physics=None,
         )
@@ -323,8 +323,7 @@ class TestSceneComposer:
         """Test merging scenes where one has no environment config."""
         composer = SceneComposer()
 
-        from surg_rl.scene_definition import SceneDefinition as SD
-        scene1 = SD.model_construct(
+        scene1 = SceneDefinition.model_construct(
             metadata=Metadata(name="Scene1"),
             environment=None,
         )
@@ -380,11 +379,10 @@ class TestPromptTemplates:
     def test_text_prompts_import(self):
         """Test importing text prompts."""
         from surg_rl.scene_generation.prompts.text_prompts import (
-            SYSTEM_PROMPT,
             SCENE_GENERATION_PROMPT,
             SCENE_MODIFICATION_PROMPT,
+            SYSTEM_PROMPT,
             get_scene_generation_prompt,
-            get_scene_modification_prompt,
         )
 
         assert len(SYSTEM_PROMPT) > 0
@@ -400,7 +398,6 @@ class TestPromptTemplates:
             IMAGE_ANALYSIS_PROMPT,
             IMAGE_TO_SCENE_PROMPT,
             get_image_analysis_prompt,
-            get_image_to_scene_prompt,
             get_specialized_prompt,
         )
 
@@ -446,7 +443,7 @@ class TestVisionParserIntegration:
     @pytest.mark.skip(reason="Requires API key")
     async def test_real_parse(self):
         """Test real VLM parsing."""
-        parser = VisionParser()
+        VisionParser()
         # Would need actual image
         # scene = await parser.parse("path/to/image.jpg")
         pass
@@ -494,27 +491,28 @@ class TestOllamaIntegration:
         assert parser.ollama_base_url == "http://192.168.1.100:11434"
         assert parser.ollama_timeout == 180
 
-    @patch('httpx.Client')
+    @patch("httpx.Client")
     def test_ollama_client_creation(self, mock_httpx):
         """Test Ollama client is created correctly."""
         parser = TextParser(provider="ollama")
         client = parser._get_client()
         assert client is not None
-        assert hasattr(client, 'generate')
+        assert hasattr(client, "generate")
 
-    @patch('httpx.AsyncClient')
+    @patch("httpx.AsyncClient")
     def test_ollama_async_client_creation(self, mock_async_client):
         """Test async Ollama client is created correctly."""
         parser = TextParser(provider="ollama")
         client = parser._get_async_client()
         assert client is not None
-        assert hasattr(client, 'generate')
+        assert hasattr(client, "generate")
 
     def test_config_ollama_defaults(self):
         """Test configuration has default Ollama settings."""
         from surg_rl.utils.config import get_settings
+
         settings = get_settings()
-        
+
         assert settings.ollama_base_url == "http://localhost:11434"
         assert settings.ollama_model == "llama3.2"
         assert settings.ollama_vision_model == "llava"
@@ -523,6 +521,7 @@ class TestOllamaIntegration:
     def test_config_allows_ollama_provider(self):
         """Test configuration allows 'ollama' as a provider."""
         from surg_rl.utils.config import Settings
+
         settings = Settings(llm_provider="ollama")
         assert settings.llm_provider == "ollama"
 
@@ -530,6 +529,7 @@ class TestOllamaIntegration:
 def test_parse_sync_inside_event_loop_raises():
     """parse_sync must raise RuntimeError when called inside a running event loop."""
     import asyncio
+
     from surg_rl.scene_generation.text_parser import TextParser
     from surg_rl.scene_generation.vision_parser import VisionParser
 
@@ -548,7 +548,7 @@ def test_parse_sync_inside_event_loop_raises():
 def test_sequential_composition_preserves_input_order():
     """Sequential composition with inputs must process in given order."""
     import asyncio
-    from unittest.mock import MagicMock
+
     from surg_rl.scene_generation.scene_composer import SceneComposer
 
     composer = SceneComposer()
@@ -583,8 +583,9 @@ class TestTextParserMocked:
 
     def test_parse_with_context_mocked(self):
         """parse_with_context feeds context scene into prompt."""
+        from surg_rl.scene_definition import Metadata, SceneDefinition
         from surg_rl.scene_generation.text_parser import TextParser
-        from surg_rl.scene_definition import SceneDefinition, Metadata
+
         parser = TextParser()
         context = SceneDefinition(metadata=Metadata(name="base"))
         parser._call_llm_async = AsyncMock(return_value='{"metadata": {"name": "modified"}}')
@@ -593,8 +594,9 @@ class TestTextParserMocked:
 
     def test_parse_with_context_sync(self):
         """parse_with_context_sync returns valid dict."""
+        from surg_rl.scene_definition import Metadata, SceneDefinition
         from surg_rl.scene_generation.text_parser import TextParser
-        from surg_rl.scene_definition import SceneDefinition, Metadata
+
         parser = TextParser()
         context = SceneDefinition(metadata=Metadata(name="base"))
         parser._call_llm_async = AsyncMock(return_value='{"metadata": {"name": "sync_mod"}}')
@@ -604,7 +606,8 @@ class TestTextParserMocked:
     @pytest.mark.asyncio
     async def test_parse_bytes_rejected(self):
         """parse with bytes input raises ParserError."""
-        from surg_rl.scene_generation.text_parser import TextParser, ParserError
+        from surg_rl.scene_generation.text_parser import ParserError, TextParser
+
         parser = TextParser()
         with pytest.raises(ParserError):
             await parser.parse(b"some bytes")
@@ -616,6 +619,7 @@ class TestVisionParserMocked:
     def test_generate_scene_from_image_mocked(self):
         """_generate_scene_from_image parses VLM response."""
         from surg_rl.scene_generation.vision_parser import VisionParser
+
         parser = VisionParser()
         parser._call_vlm_async = AsyncMock(return_value='{"metadata": {"name": "vision_scene"}}')
         result = asyncio.run(parser._generate_scene_from_image(b"fake_image"))
@@ -627,16 +631,18 @@ class TestSceneComposerMerge:
 
     def test_merge_scenes_empty_list(self):
         """Empty scenes list returns a new SceneDefinition."""
-        from surg_rl.scene_generation.scene_composer import SceneComposer
         from surg_rl.scene_definition import SceneDefinition
+        from surg_rl.scene_generation.scene_composer import SceneComposer
+
         composer = SceneComposer()
         result = composer._merge_scenes([])
         assert isinstance(result, SceneDefinition)
 
     def test_merge_scenes_single_scene_with_base(self):
         """Single scene with base_scene merges correctly."""
+        from surg_rl.scene_definition import Metadata, SceneDefinition
         from surg_rl.scene_generation.scene_composer import SceneComposer
-        from surg_rl.scene_definition import SceneDefinition, Metadata
+
         composer = SceneComposer()
         base = SceneDefinition(metadata=Metadata(name="base"))
         scene = SceneDefinition(metadata=Metadata(name="child"))
@@ -646,16 +652,20 @@ class TestSceneComposerMerge:
 
     def test_compose_parallel_all_fail(self):
         """Parallel composition where all tasks fail raises ParserError."""
-        from surg_rl.scene_generation.scene_composer import SceneComposer, ParserError
+        from surg_rl.scene_generation.scene_composer import ParserError, SceneComposer
+
         composer = SceneComposer()
         composer.text_parser.parse = AsyncMock(side_effect=Exception("fail"))
         with pytest.raises(ParserError):
-            asyncio.run(composer._compose_parallel(text_inputs=["text"], image_inputs=None, base_scene=None))
+            asyncio.run(
+                composer._compose_parallel(text_inputs=["text"], image_inputs=None, base_scene=None)
+            )
 
     def test_merge_two_scenes_metadata_override(self):
         """Second scene metadata overrides first."""
+        from surg_rl.scene_definition import Metadata, SceneDefinition
         from surg_rl.scene_generation.scene_composer import SceneComposer
-        from surg_rl.scene_definition import SceneDefinition, Metadata
+
         composer = SceneComposer()
         a = SceneDefinition(metadata=Metadata(name="a"))
         b = SceneDefinition(metadata=Metadata(name="b"))
@@ -664,8 +674,9 @@ class TestSceneComposerMerge:
 
     def test_merge_two_scenes_combines_robots(self):
         """Merging combines robots from both scenes."""
+        from surg_rl.scene_definition import Metadata, RobotConfig, SceneDefinition
         from surg_rl.scene_generation.scene_composer import SceneComposer
-        from surg_rl.scene_definition import SceneDefinition, Metadata, RobotConfig
+
         composer = SceneComposer()
         a = SceneDefinition(metadata=Metadata(name="a"))
         a.robots.append(RobotConfig(name="r1", urdf_path="robot1.urdf"))
@@ -677,8 +688,9 @@ class TestSceneComposerMerge:
 
     def test_merge_duplicate_name_same_type_raises(self):
         """Two robots with the same name raises ValueError."""
+        from surg_rl.scene_definition import Metadata, RobotConfig, SceneDefinition
         from surg_rl.scene_generation.scene_composer import SceneComposer
-        from surg_rl.scene_definition import SceneDefinition, Metadata, RobotConfig
+
         composer = SceneComposer()
         a = SceneDefinition(
             metadata=Metadata(name="a"),
@@ -693,10 +705,15 @@ class TestSceneComposerMerge:
 
     def test_merge_duplicate_name_different_type_ok(self):
         """A robot and a tissue with the same name does NOT raise."""
-        from surg_rl.scene_generation.scene_composer import SceneComposer
         from surg_rl.scene_definition import (
-            SceneDefinition, Metadata, RobotConfig, TissueConfig, TissueMeshDefinition,
+            Metadata,
+            RobotConfig,
+            SceneDefinition,
+            TissueConfig,
+            TissueMeshDefinition,
         )
+        from surg_rl.scene_generation.scene_composer import SceneComposer
+
         composer = SceneComposer()
         a = SceneDefinition(
             metadata=Metadata(name="a"),
@@ -704,7 +721,12 @@ class TestSceneComposerMerge:
         )
         b = SceneDefinition(
             metadata=Metadata(name="b"),
-            tissues=[TissueConfig(name="arm", geometry=TissueMeshDefinition(primitive="box", dimensions=(1.0, 1.0, 1.0)))],
+            tissues=[
+                TissueConfig(
+                    name="arm",
+                    geometry=TissueMeshDefinition(primitive="box", dimensions=(1.0, 1.0, 1.0)),
+                )
+            ],
         )
         result = composer._merge_two_scenes(a, b)
         assert len(result.robots) == 1
@@ -712,10 +734,13 @@ class TestSceneComposerMerge:
 
     def test_merge_domain_randomization_preserves_scene1_defaults(self):
         """scene1 has explicit physics.enabled=True; scene2 has default DR; merged keeps it."""
-        from surg_rl.scene_generation.scene_composer import SceneComposer
         from surg_rl.scene_definition import (
-            SceneDefinition, Metadata, DomainRandomizationConfig,
+            DomainRandomizationConfig,
+            Metadata,
+            SceneDefinition,
         )
+        from surg_rl.scene_generation.scene_composer import SceneComposer
+
         composer = SceneComposer()
         dr1 = DomainRandomizationConfig(physics={"enabled": True})
         a = SceneDefinition(metadata=Metadata(name="a"), domain_randomization=dr1)
@@ -725,13 +750,15 @@ class TestSceneComposerMerge:
 
     def test_merge_environment_not_clobbered_by_defaults(self):
         """scene1 has fog_enabled=True and background_color set; scene2 has no explicit env."""
+        from surg_rl.scene_definition import EnvironmentConfig, Metadata, RgbColor, SceneDefinition
         from surg_rl.scene_generation.scene_composer import SceneComposer
-        from surg_rl.scene_definition import SceneDefinition, Metadata, EnvironmentConfig, RgbColor
+
         composer = SceneComposer()
-        env1 = EnvironmentConfig(fog_enabled=True, background_color=RgbColor(r=0.2, g=0.3, b=0.4, a=1.0))
+        env1 = EnvironmentConfig(
+            fog_enabled=True, background_color=RgbColor(r=0.2, g=0.3, b=0.4, a=1.0)
+        )
         a = SceneDefinition(metadata=Metadata(name="a"), environment=env1)
         b = SceneDefinition(metadata=Metadata(name="b"))
         result = composer._merge_two_scenes(a, b)
         assert result.environment.fog_enabled is True
         assert result.environment.background_color.r == pytest.approx(0.2)
-

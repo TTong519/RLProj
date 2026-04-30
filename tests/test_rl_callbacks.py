@@ -1,18 +1,18 @@
 """Tests for RL callbacks."""
 
-import pytest
-import numpy as np
 from unittest.mock import MagicMock, patch
 
+import numpy as np
+
+from surg_rl.dynamics.base_controller import ParameterSnapshot
+from surg_rl.dynamics.curriculum import CurriculumStage
 from surg_rl.rl.callbacks import (
-    TrainingProgressCallback,
     CheckpointCallback,
     CurriculumCallback,
     EvaluationCallback,
     TensorBoardCallback,
+    TrainingProgressCallback,
 )
-from surg_rl.dynamics.curriculum import CurriculumStage
-from surg_rl.dynamics.base_controller import ParameterSnapshot
 
 
 class TestTrainingProgressCallback:
@@ -67,9 +67,7 @@ class TestCurriculumCallback:
         controller = MagicMock()
         callback = CurriculumCallback(controller=controller, verbose=0)
         callback.init_callback(MagicMock())
-        callback.locals = {
-            "infos": [{"episode": {"r": 5.0, "l": 10}, "success": True}]
-        }
+        callback.locals = {"infos": [{"episode": {"r": 5.0, "l": 10}, "success": True}]}
         callback.on_step()
         controller.episode_end.assert_called_once()
 

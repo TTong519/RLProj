@@ -4,12 +4,10 @@ Produces (vertices, tetrahedra) tuples suitable for :func:`write_vtk_unstructure
 All generators output pure tetrahedra (VTK cell type 10) with no duplicate vertices.
 """
 
-from typing import Tuple
-
 import numpy as np
 
 
-def _dedup_vertices(vertices: np.ndarray, tol: float = 1e-6) -> Tuple[np.ndarray, np.ndarray]:
+def _dedup_vertices(vertices: np.ndarray, tol: float = 1e-6) -> tuple[np.ndarray, np.ndarray]:
     """Remove duplicate vertices (within *tol*) and return remap indices.
 
     Args:
@@ -45,8 +43,8 @@ def _dedup_vertices(vertices: np.ndarray, tol: float = 1e-6) -> Tuple[np.ndarray
 
 
 def generate_box_tet_mesh(
-    dims: Tuple[float, float, float], resolution: int = 8
-) -> Tuple[np.ndarray, np.ndarray]:
+    dims: tuple[float, float, float], resolution: int = 8
+) -> tuple[np.ndarray, np.ndarray]:
     """Generate a tetrahedral mesh of a rectangular box.
 
     Uses a regular Cartesian grid + standard 5-decomposition per cube cell.
@@ -67,9 +65,7 @@ def generate_box_tet_mesh(
     z = np.linspace(-dz / 2, dz / 2, nz + 1)
 
     # Build vertex array: all grid points
-    vertices = np.array(
-        [[xi, yi, zi] for zi in z for yi in y for xi in x], dtype=float
-    )
+    vertices = np.array([[xi, yi, zi] for zi in z for yi in y for xi in x], dtype=float)
     npx = nx + 1
     npy = ny + 1
 
@@ -94,20 +90,26 @@ def generate_box_tet_mesh(
     for k in range(nz):
         for j in range(ny):
             for i in range(nx):
-                base = np.array([_idx(i, j, k), _idx(i + 1, j, k),
-                                 _idx(i + 1, j + 1, k), _idx(i, j + 1, k),
-                                 _idx(i, j, k + 1), _idx(i + 1, j, k + 1),
-                                 _idx(i + 1, j + 1, k + 1), _idx(i, j + 1, k + 1)],
-                                dtype=int)
+                base = np.array(
+                    [
+                        _idx(i, j, k),
+                        _idx(i + 1, j, k),
+                        _idx(i + 1, j + 1, k),
+                        _idx(i, j + 1, k),
+                        _idx(i, j, k + 1),
+                        _idx(i + 1, j, k + 1),
+                        _idx(i + 1, j + 1, k + 1),
+                        _idx(i, j + 1, k + 1),
+                    ],
+                    dtype=int,
+                )
                 for ct in cube_tets:
                     tets.append(base[ct])
 
     return vertices, np.array(tets, dtype=int)
 
 
-def generate_sphere_tet_mesh(
-    radius: float, subdivisions: int = 2
-) -> Tuple[np.ndarray, np.ndarray]:
+def generate_sphere_tet_mesh(radius: float, subdivisions: int = 2) -> tuple[np.ndarray, np.ndarray]:
     """Generate a tetrahedral mesh of a sphere.
 
     Starts from an icosahedron, repeatedly subdivides each surface triangle,
@@ -127,10 +129,18 @@ def generate_sphere_tet_mesh(
     # Icosahedron vertices (12) — normals already point outward
     raw_vertices = np.array(
         [
-            [-1.0, phi, 0.0], [1.0, phi, 0.0], [-1.0, -phi, 0.0],
-            [1.0, -phi, 0.0], [0.0, -1.0, phi], [0.0, 1.0, phi],
-            [0.0, -1.0, -phi], [0.0, 1.0, -phi], [phi, 0.0, -1.0],
-            [phi, 0.0, 1.0], [-phi, 0.0, -1.0], [-phi, 0.0, 1.0],
+            [-1.0, phi, 0.0],
+            [1.0, phi, 0.0],
+            [-1.0, -phi, 0.0],
+            [1.0, -phi, 0.0],
+            [0.0, -1.0, phi],
+            [0.0, 1.0, phi],
+            [0.0, -1.0, -phi],
+            [0.0, 1.0, -phi],
+            [phi, 0.0, -1.0],
+            [phi, 0.0, 1.0],
+            [-phi, 0.0, -1.0],
+            [-phi, 0.0, 1.0],
         ],
         dtype=float,
     )
@@ -139,10 +149,26 @@ def generate_sphere_tet_mesh(
 
     # Icosahedron faces (20 triangles)
     faces = [
-        [0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11],
-        [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8],
-        [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9],
-        [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1],
+        [0, 11, 5],
+        [0, 5, 1],
+        [0, 1, 7],
+        [0, 7, 10],
+        [0, 10, 11],
+        [1, 5, 9],
+        [5, 11, 4],
+        [11, 10, 2],
+        [10, 7, 6],
+        [7, 1, 8],
+        [3, 9, 4],
+        [3, 4, 2],
+        [3, 2, 6],
+        [3, 6, 8],
+        [3, 8, 9],
+        [4, 9, 5],
+        [2, 4, 11],
+        [6, 2, 10],
+        [8, 6, 7],
+        [9, 8, 1],
     ]
 
     # Subdivide faces
@@ -169,9 +195,7 @@ def generate_sphere_tet_mesh(
     vertices = np.vstack([raw_vertices, center])
     centre_idx = len(raw_vertices)
 
-    tetrahedra = np.array(
-        [[centre_idx, a, b, c] for a, b, c in faces], dtype=int
-    )
+    tetrahedra = np.array([[centre_idx, a, b, c] for a, b, c in faces], dtype=int)
 
     # Deduplicate any coincident vertices introduced by floating-point noise
     vertices, remap = _dedup_vertices(vertices, tol=1e-6)
@@ -183,7 +207,7 @@ def generate_sphere_tet_mesh(
 def _normalized_midpoint(v1: np.ndarray, v2: np.ndarray) -> np.ndarray:
     """Midpoint of two vectors, projected onto the unit sphere."""
     m = (v1 + v2) / 2.0
-    norm = np.linalg.norm(m)
+    norm = float(np.linalg.norm(m))
     if norm == 0:
         return m
     return m / norm
@@ -194,7 +218,7 @@ def generate_cylinder_tet_mesh(
     height: float,
     theta_segments: int = 16,
     height_segments: int = 4,
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Generate a tetrahedral mesh of a right circular cylinder.
 
     Method:
@@ -219,12 +243,12 @@ def generate_cylinder_tet_mesh(
     thetas = np.linspace(0.0, 2.0 * np.pi, n_theta, endpoint=False)
 
     # Vertices: for each level, a centre + ring
-    vertices = []
+    vert_list = []
     for z in zs:
-        vertices.append([0.0, 0.0, z])  # centre
+        vert_list.append([0.0, 0.0, z])  # centre
         for t in thetas:
-            vertices.append([radius * np.cos(t), radius * np.sin(t), z])
-    vertices = np.array(vertices, dtype=float)
+            vert_list.append([radius * np.cos(t), radius * np.sin(t), z])
+    vertices = np.array(vert_list, dtype=float)
 
     verts_per_level = 1 + n_theta
 

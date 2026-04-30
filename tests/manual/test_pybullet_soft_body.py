@@ -9,16 +9,16 @@ Exit codes:
     1 - crash / failure
 """
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
 from surg_rl.scene_definition.schema import (
     SceneDefinition,
+    SoftBodyPhysics,
     TissueConfig,
     TissueMeshDefinition,
-    SoftBodyPhysics,
 )
 from surg_rl.simulators.pybullet_simulator import PyBulletSimulator
 
@@ -30,9 +30,7 @@ def test_load_box():
         tissues=[
             TissueConfig(
                 name="soft_box",
-                geometry=TissueMeshDefinition(
-                    primitive="box", dimensions=(0.1, 0.1, 0.01)
-                ),
+                geometry=TissueMeshDefinition(primitive="box", dimensions=(0.1, 0.1, 0.01)),
                 soft_body=True,
                 physics=SoftBodyPhysics(),
             )
@@ -42,9 +40,7 @@ def test_load_box():
     sim = PyBulletSimulator()
     sim.load_scene(scene)
     assert "soft_box" in sim._soft_body_ids
-    data = sim._pb.getMeshData(
-        sim._soft_body_ids["soft_box"], physicsClientId=sim._physics_client
-    )
+    data = sim._pb.getMeshData(sim._soft_body_ids["soft_box"], physicsClientId=sim._physics_client)
     assert len(data[1]) > 0, "Expected >0 vertices in mesh data"
     # Step a few frames
     for _ in range(10):

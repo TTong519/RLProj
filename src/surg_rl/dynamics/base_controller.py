@@ -5,16 +5,19 @@ environment parameters during training, supporting domain randomization,
 curriculum learning, and adaptive difficulty.
 """
 
+import contextlib
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 
 
 class ControllerState(Enum):
     """State of the environment controller."""
+
     IDLE = "idle"
     ACTIVE = "active"
     PAUSED = "paused"
@@ -31,8 +34,9 @@ class ControllerConfig:
         update_frequency: How often to update parameters (in steps).
         warmup_episodes: Number of episodes before starting modifications.
     """
+
     enabled: bool = True
-    seed: Optional[int] = None
+    seed: int | None = None
     update_frequency: int = 1
     warmup_episodes: int = 0
 
@@ -40,7 +44,7 @@ class ControllerConfig:
 @dataclass
 class ParameterBounds:
     """Bounds for a parameter that can be randomized.
-    
+
     Attributes:
         name: Parameter name.
         min_value: Minimum allowed value.
@@ -49,18 +53,19 @@ class ParameterBounds:
         distribution: Distribution type ('uniform', 'normal', 'log_uniform').
         distribution_params: Additional distribution parameters.
     """
+
     name: str
     min_value: float
     max_value: float
     default: float
     distribution: str = "uniform"
-    distribution_params: Dict[str, Any] = field(default_factory=dict)
+    distribution_params: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class ParameterSnapshot:
     """Snapshot of current parameter values.
-    
+
     Attributes:
         physics: Current physics parameters.
         visual: Current visual parameters.
@@ -68,21 +73,22 @@ class ParameterSnapshot:
         step: Current step number.
         episode: Current episode number.
     """
-    physics: Dict[str, float] = field(default_factory=dict)
-    visual: Dict[str, float] = field(default_factory=dict)
-    dynamics: Dict[str, float] = field(default_factory=dict)
+
+    physics: dict[str, float] = field(default_factory=dict)
+    visual: dict[str, float] = field(default_factory=dict)
+    dynamics: dict[str, float] = field(default_factory=dict)
     step: int = 0
     episode: int = 0
 
 
 class BaseController(ABC):
     """Abstract base class for dynamic environment controllers.
-    
+
     This class defines the interface for controllers that modify
     environment parameters during training. Implementations can
     provide domain randomization, curriculum learning, or adaptive
     difficulty adjustment.
-    
+
     The controller integrates with the simulator to:
     - Randomize physics parameters (mass, friction, damping)
     - Randomize visual parameters (colors, textures, lighting)
@@ -93,11 +99,11 @@ class BaseController(ABC):
 
     def __init__(
         self,
-        config: Optional[ControllerConfig] = None,
-        parameter_bounds: Optional[Dict[str, ParameterBounds]] = None,
+        config: ControllerConfig | None = None,
+        parameter_bounds: dict[str, ParameterBounds] | None = None,
     ):
         """Initialize the controller.
-        
+
         Args:
             config: Controller configuration.
             parameter_bounds: Bounds for controllable parameters.
@@ -109,8 +115,8 @@ class BaseController(ABC):
         self._episode = 0
         self._rng = np.random.default_rng(self.config.seed)
         self._current_params = ParameterSnapshot()
-        self._param_history: List[ParameterSnapshot] = []
-        self._callbacks: Dict[str, List[Callable]] = {
+        self._param_history: list[ParameterSnapshot] = []
+        self._callbacks: dict[str, list[Callable]] = {
             "on_episode_start": [],
             "on_episode_end": [],
             "on_step": [],
@@ -140,7 +146,7 @@ class BaseController(ABC):
     @abstractmethod
     def sample_parameters(self) -> ParameterSnapshot:
         """Sample new parameter values based on current state.
-        
+
         Returns:
             Snapshot of sampled parameters.
         """
@@ -153,11 +159,11 @@ class BaseController(ABC):
         simulator: Any,
     ) -> bool:
         """Apply parameter snapshot to the simulator.
-        
+
         Args:
             snapshot: Parameters to apply.
             simulator: Simulator instance to modify.
-            
+
         Returns:
             True if successful, False otherwise.
         """
@@ -167,14 +173,14 @@ class BaseController(ABC):
     def update_curriculum(
         self,
         episode: int,
-        metrics: Dict[str, float],
-    ) -> Dict[str, Any]:
+        metrics: dict[str, float],
+    ) -> dict[str, Any]:
         """Update curriculum state based on episode results.
-        
+
         Args:
             episode: Episode number.
             metrics: Episode metrics (reward, success, etc.).
-            
+
         Returns:
             Updated curriculum parameters.
         """
@@ -197,88 +203,88 @@ class BaseController(ABC):
         """Resume the controller from paused state."""
         self._state = ControllerState.ACTIVE
 
-    def reset(self, seed: Optional[int] = None) -> ParameterSnapshot:
+    def reset(self, seed: int | None = None) -> ParameterSnapshot:
         """Reset controller state for a new episode.
-        
+
         Args:
             seed: Optional new random seed.
-            
+
         Returns:
             New parameter snapshot for the episode.
         """
         if seed is not None:
             self._rng = np.random.default_rng(seed)
-        
+
         self._step = 0
         self._episode += 1
-        
+
         if self.config.enabled and self._episode > self.config.warmup_episodes:
             self._current_params = self.sample_parameters()
         else:
             self._current_params = ParameterSnapshot(episode=self._episode)
-        
+
         self._emit("on_reset")
         self._emit("on_episode_start")
-        
+
         return self._current_params
 
     def step_update(self, simulator: Any) -> ParameterSnapshot:
         """Update parameters after a simulation step.
-        
+
         Args:
             simulator: Simulator instance.
-            
+
         Returns:
             Current parameter snapshot.
         """
         self._step += 1
-        
+
         if self._state != ControllerState.ACTIVE:
             return self._current_params
-        
+
         if not self.config.enabled:
             return self._current_params
-        
+
         if self._episode <= self.config.warmup_episodes:
             return self._current_params
-        
+
         if self._step % self.config.update_frequency == 0:
             self._current_params = self.sample_parameters()
             self.apply_parameters(self._current_params, simulator)
-        
+
         self._emit("on_step")
         return self._current_params
 
     def episode_end(
         self,
-        metrics: Dict[str, float],
+        metrics: dict[str, float],
         simulator: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Handle episode end and update curriculum.
-        
+
         Args:
             metrics: Episode metrics (reward, success, steps, etc.).
             simulator: Simulator instance.
-            
+
         Returns:
             Curriculum update information.
         """
         self._emit("on_episode_end")
-        
+
         self._param_history.append(self._current_params)
-        
+
         curriculum_info = {}
         if self.config.enabled:
             curriculum_info = self.update_curriculum(self._episode, metrics)
-        
+
         return curriculum_info
 
     def _sample_value(self, bounds: ParameterBounds) -> float:
         """Sample a value from parameter bounds.
-        
+
         Args:
             bounds: Parameter bounds.
-            
+
         Returns:
             Sampled value.
         """
@@ -286,41 +292,35 @@ class BaseController(ABC):
             return self._rng.uniform(bounds.min_value, bounds.max_value)
         elif bounds.distribution == "normal":
             mean = bounds.distribution_params.get("mean", bounds.default)
-            std = bounds.distribution_params.get("std", 
-                (bounds.max_value - bounds.min_value) / 4)
+            std = bounds.distribution_params.get("std", (bounds.max_value - bounds.min_value) / 4)
             value = self._rng.normal(mean, std)
-            return np.clip(value, bounds.min_value, bounds.max_value)
+            return float(np.clip(value, bounds.min_value, bounds.max_value))
         elif bounds.distribution == "log_uniform":
             if bounds.min_value <= 0:
-                raise ValueError(
-                    f"log_uniform requires positive min_value, got {bounds.min_value}"
-                )
+                raise ValueError(f"log_uniform requires positive min_value, got {bounds.min_value}")
             log_min = np.log(bounds.min_value)
             log_max = np.log(bounds.max_value)
-            return np.exp(self._rng.uniform(log_min, log_max))
+            return float(np.exp(self._rng.uniform(log_min, log_max)))
         else:
             return self._rng.uniform(bounds.min_value, bounds.max_value)
 
     def _sample_dict(
         self,
-        param_dict: Dict[str, ParameterBounds],
-    ) -> Dict[str, float]:
+        param_dict: dict[str, ParameterBounds],
+    ) -> dict[str, float]:
         """Sample multiple parameters from a dictionary.
-        
+
         Args:
             param_dict: Dictionary of parameter bounds.
-            
+
         Returns:
             Dictionary of sampled values.
         """
-        return {
-            name: self._sample_value(bounds)
-            for name, bounds in param_dict.items()
-        }
+        return {name: self._sample_value(bounds) for name, bounds in param_dict.items()}
 
     def on(self, event: str, callback: Callable) -> None:
         """Register a callback for an event.
-        
+
         Args:
             event: Event name ('on_episode_start', 'on_episode_end', 'on_step', 'on_reset').
             callback: Callback function.
@@ -331,20 +331,18 @@ class BaseController(ABC):
 
     def off(self, event: str, callback: Callable) -> None:
         """Remove a callback for an event.
-        
+
         Args:
             event: Event name.
             callback: Callback function to remove.
         """
         if event in self._callbacks:
-            try:
+            with contextlib.suppress(ValueError):
                 self._callbacks[event].remove(callback)
-            except ValueError:
-                pass
 
     def _emit(self, event: str, *args, **kwargs) -> None:
         """Emit an event to all registered callbacks.
-        
+
         Args:
             event: Event name.
             *args: Positional arguments for callbacks.
@@ -355,14 +353,15 @@ class BaseController(ABC):
                 callback(*args, **kwargs)
             except Exception as e:
                 import warnings
-                warnings.warn(f"Callback error in {event}: {e}")
 
-    def get_history(self, last_n: int = 10) -> List[ParameterSnapshot]:
+                warnings.warn(f"Callback error in {event}: {e}", stacklevel=2)
+
+    def get_history(self, last_n: int = 10) -> list[ParameterSnapshot]:
         """Get recent parameter history.
-        
+
         Args:
             last_n: Number of recent snapshots to return.
-            
+
         Returns:
             List of parameter snapshots.
         """
@@ -374,7 +373,7 @@ class BaseController(ABC):
 
     def set_seed(self, seed: int) -> None:
         """Set random seed for reproducibility.
-        
+
         Args:
             seed: Random seed.
         """

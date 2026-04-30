@@ -1,8 +1,9 @@
 """Tests for surg_rl.utils.vtk_io pure-Python VTK I/O."""
 
+from pathlib import Path
+
 import numpy as np
 import pytest
-from pathlib import Path
 
 from surg_rl.utils.vtk_io import (
     read_vtk_unstructured_grid,

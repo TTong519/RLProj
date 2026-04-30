@@ -7,7 +7,6 @@ including proprioceptive, visual, force, and task-specific observations.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Union
 
 import gymnasium as gym
 import numpy as np
@@ -58,10 +57,10 @@ class ObservationSpec:
 
     name: str
     obs_type: ObservationType
-    shape: Tuple[int, ...]
+    shape: tuple[int, ...]
     dtype: type = np.float32
-    low: Optional[np.ndarray] = None
-    high: Optional[np.ndarray] = None
+    low: np.ndarray | None = None
+    high: np.ndarray | None = None
     normalize: bool = False
     noise_scale: float = 0.0
     description: str = ""
@@ -105,15 +104,17 @@ class ObservationConfig:
         flatten: Whether to flatten the observation into a single vector.
     """
 
-    observation_types: List[ObservationType] = field(default_factory=lambda: [
-        ObservationType.JOINT_POSITIONS,
-        ObservationType.JOINT_VELOCITIES,
-        ObservationType.ENDEFFECTOR_POS,
-        ObservationType.ENDEFFECTOR_QUAT,
-        ObservationType.TARGET_POS,
-        ObservationType.DISTANCE_TO_TARGET,
-    ])
-    image_size: Tuple[int, int] = (64, 64)
+    observation_types: list[ObservationType] = field(
+        default_factory=lambda: [
+            ObservationType.JOINT_POSITIONS,
+            ObservationType.JOINT_VELOCITIES,
+            ObservationType.ENDEFFECTOR_POS,
+            ObservationType.ENDEFFECTOR_QUAT,
+            ObservationType.TARGET_POS,
+            ObservationType.DISTANCE_TO_TARGET,
+        ]
+    )
+    image_size: tuple[int, int] = (64, 64)
     include_visual: bool = False
     include_force: bool = False
     include_tissue: bool = False
@@ -333,7 +334,7 @@ TOOL_POSITIONS_SPEC = ObservationSpec(
 # ============================================================================
 
 # Registry of default observation specs
-DEFAULT_SPECS: Dict[ObservationType, ObservationSpec] = {
+DEFAULT_SPECS: dict[ObservationType, ObservationSpec] = {
     ObservationType.JOINT_POSITIONS: JOINT_POSITIONS_SPEC,
     ObservationType.JOINT_VELOCITIES: JOINT_VELOCITIES_SPEC,
     ObservationType.ENDEFFECTOR_POS: ENDEFFECTOR_POS_SPEC,
@@ -377,10 +378,10 @@ class ObservationBuilder:
 
     def __init__(
         self,
-        config: Optional[ObservationConfig] = None,
-        custom_specs: Optional[Dict[str, ObservationSpec]] = None,
+        config: ObservationConfig | None = None,
+        custom_specs: dict[str, ObservationSpec] | None = None,
         num_joints: int = 7,
-        image_size: Tuple[int, int] = (64, 64),
+        image_size: tuple[int, int] = (64, 64),
     ):
         """Initialize the observation builder.
 
@@ -396,13 +397,12 @@ class ObservationBuilder:
         self.image_size = image_size
 
         # Build observation specs based on config
-        self._specs: Dict[str, ObservationSpec] = {}
+        self._specs: dict[str, ObservationSpec] = {}
         self._build_specs()
 
         # Pre-allocate fallback zero arrays to avoid repeated allocations
-        self._fallback_cache: Dict[str, np.ndarray] = {
-            name: np.zeros(spec.shape, dtype=spec.dtype)
-            for name, spec in self._specs.items()
+        self._fallback_cache: dict[str, np.ndarray] = {
+            name: np.zeros(spec.shape, dtype=spec.dtype) for name, spec in self._specs.items()
         }
         # Override quaternion fallbacks with identity (valid default quaternion)
         for quat_name in ("endeffector_quat", "target_quat"):
@@ -412,8 +412,8 @@ class ObservationBuilder:
                 )
 
         # Running statistics for normalization
-        self._running_mean: Optional[np.ndarray] = None
-        self._running_var: Optional[np.ndarray] = None
+        self._running_mean: np.ndarray | None = None
+        self._running_var: np.ndarray | None = None
         self._count: int = 0
 
         self._rng = np.random.default_rng(seed=0)
@@ -529,7 +529,7 @@ class ObservationBuilder:
         lows = []
         highs = []
 
-        for name, spec in self._specs.items():
+        for _name, spec in self._specs.items():
             size = int(np.prod(spec.shape))
             total_size += size
             if spec.low is not None and spec.high is not None:
@@ -547,9 +547,9 @@ class ObservationBuilder:
     def extract_observation(
         self,
         observation: Observation,
-        target_pos: Optional[np.ndarray] = None,
-        target_quat: Optional[np.ndarray] = None,
-    ) -> Dict[str, np.ndarray]:
+        target_pos: np.ndarray | None = None,
+        target_quat: np.ndarray | None = None,
+    ) -> dict[str, np.ndarray]:
         """Extract observation components from a simulator Observation.
 
         Args:
@@ -560,12 +560,10 @@ class ObservationBuilder:
         Returns:
             Dictionary of observation arrays.
         """
-        obs_dict: Dict[str, np.ndarray] = {}
+        obs_dict: dict[str, np.ndarray] = {}
 
         for name, spec in self._specs.items():
-            obs_array = self._extract_component(
-                spec, observation, target_pos, target_quat
-            )
+            obs_array = self._extract_component(spec, observation, target_pos, target_quat)
             if obs_array is not None:
                 # Apply noise if configured
                 if spec.noise_scale > 0:
@@ -583,9 +581,9 @@ class ObservationBuilder:
         self,
         spec: ObservationSpec,
         observation: Observation,
-        target_pos: Optional[np.ndarray] = None,
-        target_quat: Optional[np.ndarray] = None,
-    ) -> Optional[np.ndarray]:
+        target_pos: np.ndarray | None = None,
+        target_quat: np.ndarray | None = None,
+    ) -> np.ndarray | None:
         """Extract a single observation component.
 
         Args:
@@ -608,9 +606,7 @@ class ObservationBuilder:
 
         elif obs_type == ObservationType.JOINT_VELOCITIES:
             if observation.robot_state is not None:
-                velocities = observation.robot_state[
-                    self.num_joints : 2 * self.num_joints
-                ]
+                velocities = observation.robot_state[self.num_joints : 2 * self.num_joints]
                 if len(velocities) == self.num_joints:
                     return velocities.copy()
             return self._fallback_cache[spec.name]
@@ -632,9 +628,7 @@ class ObservationBuilder:
 
         elif obs_type == ObservationType.TISSUE_STATE:
             if observation.tissue_state is not None:
-                tissue_vals = np.concatenate(
-                    [v for v in observation.tissue_state.values()]
-                )
+                tissue_vals = np.concatenate(list(observation.tissue_state.values()))
                 return tissue_vals
             return self._fallback_cache[spec.name]
 
@@ -673,9 +667,7 @@ class ObservationBuilder:
 
         elif obs_type == ObservationType.ANGLE_TO_TARGET:
             if observation.end_effector_quat is not None and target_quat is not None:
-                angle = self._quaternion_angle(
-                    observation.end_effector_quat, target_quat
-                )
+                angle = self._quaternion_angle(observation.end_effector_quat, target_quat)
                 return np.array([angle])
             return self._fallback_cache[spec.name]
 
@@ -776,7 +768,7 @@ class ObservationBuilder:
             total += int(np.prod(spec.shape))
         return total
 
-    def flatten_observation(self, obs_dict: Dict[str, np.ndarray]) -> np.ndarray:
+    def flatten_observation(self, obs_dict: dict[str, np.ndarray]) -> np.ndarray:
         """Flatten a dictionary observation into a single vector.
 
         Args:
@@ -786,7 +778,7 @@ class ObservationBuilder:
             Flattened observation vector.
         """
         parts = []
-        for name, spec in self._specs.items():
+        for name, _spec in self._specs.items():
             if name in obs_dict:
                 parts.append(obs_dict[name].flatten().astype(np.float32))
         if parts:
@@ -796,8 +788,8 @@ class ObservationBuilder:
     def unflatten_observation(
         self,
         flat_obs: np.ndarray,
-        template: Dict[str, np.ndarray],
-    ) -> Dict[str, np.ndarray]:
+        template: dict[str, np.ndarray],
+    ) -> dict[str, np.ndarray]:
         """Rebuild a dict observation from a flat vector.
 
         Args:
@@ -807,7 +799,7 @@ class ObservationBuilder:
         Returns:
             Dictionary of observation arrays.
         """
-        obs_dict: Dict[str, np.ndarray] = {}
+        obs_dict: dict[str, np.ndarray] = {}
         offset = 0
         for name, spec in self._specs.items():
             if name not in template:

@@ -7,15 +7,15 @@ scene task definitions, without reaching into simulator internals.
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, Optional
+from typing import Any
 
 import numpy as np
 
-from surg_rl.scene_definition.schema import SceneDefinition, TaskConfig, TaskObjective
+from surg_rl.scene_definition.schema import SceneDefinition, TaskConfig
 from surg_rl.simulators.base_simulator import Observation
 
 
-def _parse_distance_criteria(text: str) -> Optional[float]:
+def _parse_distance_criteria(text: str) -> float | None:
     """Try to extract a distance threshold from a criteria string.
 
     Handles patterns like 'distance < 0.02', 'reach target within 0.05m'.
@@ -44,10 +44,10 @@ def _parse_distance_criteria(text: str) -> Optional[float]:
 def check_task_success(
     scene: SceneDefinition,
     observation: Observation,
-    target_pos: Optional[np.ndarray] = None,
-    target_quat: Optional[np.ndarray] = None,
-    info: Optional[Dict[str, Any]] = None,
-) -> tuple[bool, Dict[str, Any]]:
+    target_pos: np.ndarray | None = None,
+    target_quat: np.ndarray | None = None,
+    info: dict[str, Any] | None = None,
+) -> tuple[bool, dict[str, Any]]:
     """Check whether task success criteria are satisfied.
 
     This is fully backend-agnostic: it uses simulator ``Observation`` fields
@@ -62,7 +62,7 @@ def check_task_success(
     task: TaskConfig = scene.task
     info = info or {}
     success = False
-    details: Dict[str, Any] = {}
+    details: dict[str, Any] = {}
 
     # ------------------------------------------------------------------
     # 1. Distance-based heuristic (end-effector → target)

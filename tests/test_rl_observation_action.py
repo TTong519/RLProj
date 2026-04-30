@@ -1,23 +1,19 @@
 """Tests for RL observation and action deep coverage."""
 
-import pytest
 import numpy as np
-from unittest.mock import MagicMock
 
+from surg_rl.rl.action import (
+    ActionBuilder,
+    ActionConfig,
+    ActionScaling,
+    ActionSpec,
+    ActionType,
+)
 from surg_rl.rl.observation import (
     ObservationBuilder,
     ObservationConfig,
     ObservationSpec,
     ObservationType,
-    DEFAULT_SPECS,
-)
-from surg_rl.rl.action import (
-    ActionBuilder,
-    ActionConfig,
-    ActionSpec,
-    ActionType,
-    ActionScaling,
-    DEFAULT_ACTION_SPECS,
 )
 
 
@@ -58,6 +54,7 @@ class TestObservationBuilderDeep:
         config = ObservationConfig(observation_types=[ObservationType.FORCE_TORQUE])
         builder = ObservationBuilder(config)
         from surg_rl.simulators.base_simulator import Observation
+
         sim_obs = Observation()
         result = builder.extract_observation(sim_obs)
         assert "force_torque" in result
@@ -67,6 +64,7 @@ class TestObservationBuilderDeep:
         config = ObservationConfig(observation_types=[ObservationType.TISSUE_DEFORMATION])
         builder = ObservationBuilder(config)
         from surg_rl.simulators.base_simulator import Observation
+
         sim_obs = Observation(custom={"tissue_deformation": [0.1, 0.2]})
         result = builder.extract_observation(sim_obs)
         assert "tissue_deformation" in result
@@ -84,6 +82,7 @@ class TestObservationBuilderDeep:
         config = ObservationConfig(observation_types=[ObservationType.CUSTOM])
         builder = ObservationBuilder(config, custom_specs={"tool_positions": custom_spec})
         from surg_rl.simulators.base_simulator import Observation
+
         sim_obs = Observation(custom={"tool_positions": [0.1, 0.2, 0.3]})
         result = builder.extract_observation(sim_obs)
         assert "tool_positions" in result
@@ -93,6 +92,7 @@ class TestObservationBuilderDeep:
         config = ObservationConfig(observation_types=[ObservationType.TOOL_POSITIONS])
         builder = ObservationBuilder(config)
         from surg_rl.simulators.base_simulator import Observation
+
         sim_obs = Observation(tool_positions=np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6]))
         result = builder.extract_observation(sim_obs)
         assert "tool_positions" in result
@@ -144,3 +144,27 @@ class TestActionBuilderDeep:
         action = np.array([-1.0])
         normalized = builder._normalize_action(action)
         assert np.allclose(normalized, builder.get_action_space().low)
+
+    def test_joint_torques_action_space(self):
+        """JOINT_TORQUES returns a Box space with correct bounds."""
+        config = ActionConfig(
+            action_type=ActionType.JOINT_TORQUES,
+            num_joints=7,
+            include_gripper=False,
+        )
+        builder = ActionBuilder(config)
+        space = builder.get_action_space()
+        assert space.shape == (7,)
+        assert np.allclose(space.low, -100.0)
+        assert np.allclose(space.high, 100.0)
+
+    def test_joint_torques_no_not_implemented_error(self):
+        """JOINT_TORQUES no longer raises NotImplementedError."""
+        config = ActionConfig(
+            action_type=ActionType.JOINT_TORQUES,
+            num_joints=3,
+            include_gripper=False,
+        )
+        builder = ActionBuilder(config)
+        processed = builder.process_action(np.zeros(3, dtype=np.float32))
+        assert processed.shape == (3,)

@@ -20,6 +20,7 @@ def _yaml_serialize(scene):
     """Serialize a scene to YAML-safe dict."""
     return scene.model_dump(mode="json")
 
+
 app = typer.Typer(
     name="surg-rl",
     help="Surgical Robotics RL Training System",
@@ -98,9 +99,13 @@ def generate(
     template: str = typer.Option(None, "--template", "-T", help="Use a predefined template"),
     output: str = typer.Option("scene.json", "--output", "-o", help="Output file path"),
     format: str = typer.Option("json", "--format", "-f", help="Output format (json or yaml)"),
-    provider: str = typer.Option(None, "--provider", "-p", help="LLM provider (openai, anthropic, ollama)"),
+    provider: str = typer.Option(
+        None, "--provider", "-p", help="LLM provider (openai, anthropic, ollama)"
+    ),
     model: str = typer.Option(None, "--model", "-m", help="Model name to use"),
-    ollama_url: str = typer.Option(None, "--ollama-url", help="Ollama API base URL (for ollama provider)"),
+    ollama_url: str = typer.Option(
+        None, "--ollama-url", help="Ollama API base URL (for ollama provider)"
+    ),
 ) -> None:
     """Generate a scene from text, image, or template input."""
     try:
@@ -118,7 +123,10 @@ def generate(
 
             if format == "yaml":
                 import yaml
-                content = yaml.dump(_yaml_serialize(scene), default_flow_style=False, sort_keys=False)
+
+                content = yaml.dump(
+                    _yaml_serialize(scene), default_flow_style=False, sort_keys=False
+                )
             else:
                 content = json.dumps(scene.model_dump(mode="json"), indent=2)
 
@@ -155,7 +163,10 @@ def generate(
 
             if format == "yaml":
                 import yaml
-                content = yaml.dump(_yaml_serialize(scene), default_flow_style=False, sort_keys=False)
+
+                content = yaml.dump(
+                    _yaml_serialize(scene), default_flow_style=False, sort_keys=False
+                )
             else:
                 content = json.dumps(scene.model_dump(mode="json"), indent=2)
 
@@ -192,7 +203,10 @@ def generate(
 
             if format == "yaml":
                 import yaml
-                content = yaml.dump(_yaml_serialize(scene), default_flow_style=False, sort_keys=False)
+
+                content = yaml.dump(
+                    _yaml_serialize(scene), default_flow_style=False, sort_keys=False
+                )
             else:
                 content = json.dumps(scene.model_dump(mode="json"), indent=2)
 
@@ -217,7 +231,9 @@ def generate(
 @app.command()
 def train(
     scene: str = typer.Option(..., "--scene", "-s", help="Path to scene file"),
-    algorithm: str = typer.Option("PPO", "--algorithm", "-a", help="RL algorithm (PPO, SAC, TD3, DDPG, A2C)"),
+    algorithm: str = typer.Option(
+        "PPO", "--algorithm", "-a", help="RL algorithm (PPO, SAC, TD3, DDPG, A2C)"
+    ),
     timesteps: int = typer.Option(100000, "--timesteps", "-t", help="Total training timesteps"),
     n_envs: int = typer.Option(1, "--n-envs", "-n", help="Number of parallel environments"),
     seed: int = typer.Option(42, "--seed", help="Random seed"),
@@ -229,7 +245,9 @@ def train(
     eval_freq: int = typer.Option(10000, "--eval-freq", help="Evaluation frequency"),
     curriculum: bool = typer.Option(False, "--curriculum", help="Enable curriculum learning"),
     adaptive: bool = typer.Option(False, "--adaptive", help="Enable adaptive difficulty"),
-    simulator: str = typer.Option("mujoco", "--simulator", help="Simulator backend (mujoco, pybullet)"),
+    simulator: str = typer.Option(
+        "mujoco", "--simulator", help="Simulator backend (mujoco, pybullet)"
+    ),
     max_episode_steps: int = typer.Option(1000, "--max-steps", help="Max steps per episode"),
     verbose: int = typer.Option(1, "--verbose", "-v", help="Verbosity level (0, 1, 2)"),
 ) -> None:
@@ -282,10 +300,12 @@ def train(
 
     except ImportError as e:
         console.print(f"[bold red]Import Error:[/bold red] {e}")
-        console.print("[dim]Make sure stable-baselines3 is installed: pip install stable-baselines3[/dim]")
+        console.print(
+            "[dim]Make sure stable-baselines3 is installed: pip install stable-baselines3[/dim]"
+        )
         console.print(
             "[dim]stable-baselines3 is listed in pyproject.toml dependencies. "
-            "If the import still fails, reinstall with: pip install -e \".[dev]\"[/dim]"
+            'If the import still fails, reinstall with: pip install -e ".[dev]"[/dim]'
         )
         raise typer.Exit(1) from e
     except Exception as e:
@@ -351,10 +371,12 @@ def evaluate(
 
     except ImportError as e:
         console.print(f"[bold red]Import Error:[/bold red] {e}")
-        console.print("[dim]Make sure stable-baselines3 is installed: pip install stable-baselines3[/dim]")
+        console.print(
+            "[dim]Make sure stable-baselines3 is installed: pip install stable-baselines3[/dim]"
+        )
         console.print(
             "[dim]stable-baselines3 is listed in pyproject.toml dependencies. "
-            "If the import still fails, reinstall with: pip install -e \".[dev]\"[/dim]"
+            'If the import still fails, reinstall with: pip install -e ".[dev]"[/dim]'
         )
         raise typer.Exit(1) from e
     except Exception as e:

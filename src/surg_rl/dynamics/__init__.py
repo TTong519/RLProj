@@ -15,11 +15,11 @@ Main Classes:
 Example:
     >>> from surg_rl.dynamics import EnvironmentController
     >>> from surg_rl.scene_definition import SceneLoader
-    >>> 
+    >>>
     >>> # Create from scene
     >>> scene = SceneLoader.load("scenes/suturing.json")
     >>> controller = EnvironmentController.from_scene(scene)
-    >>> 
+    >>>
     >>> # Start training
     >>> controller.start()
     >>> params = controller.reset(seed=42)
@@ -31,6 +31,13 @@ Example:
     ... )
 """
 
+from .adaptive_difficulty import (
+    AdaptationDirection,
+    AdaptationStrategy,
+    AdaptiveDifficultyController,
+    DifficultyConfig,
+    DifficultyState,
+)
 from .base_controller import (
     BaseController,
     ControllerConfig,
@@ -38,32 +45,21 @@ from .base_controller import (
     ParameterBounds,
     ParameterSnapshot,
 )
-
-from .parameter_randomizer import (
-    ParameterRandomizer,
-    PhysicsParameterBounds,
-    VisualParameterBounds,
-    DynamicsParameterBounds,
-)
-
 from .curriculum import (
-    CurriculumScheduler,
     CurriculumConfig,
+    CurriculumScheduler,
     CurriculumStage,
     CurriculumStageConfig,
 )
-
-from .adaptive_difficulty import (
-    AdaptiveDifficultyController,
-    DifficultyConfig,
-    DifficultyState,
-    AdaptationStrategy,
-    AdaptationDirection,
-)
-
 from .environment_controller import (
     EnvironmentController,
     EnvironmentControllerConfig,
+)
+from .parameter_randomizer import (
+    DynamicsParameterBounds,
+    ParameterRandomizer,
+    PhysicsParameterBounds,
+    VisualParameterBounds,
 )
 
 __all__ = [
@@ -73,26 +69,22 @@ __all__ = [
     "ControllerState",
     "ParameterBounds",
     "ParameterSnapshot",
-    
     # Parameter randomizer
     "ParameterRandomizer",
     "PhysicsParameterBounds",
     "VisualParameterBounds",
     "DynamicsParameterBounds",
-    
     # Curriculum
     "CurriculumScheduler",
     "CurriculumConfig",
     "CurriculumStage",
     "CurriculumStageConfig",
-    
     # Adaptive difficulty
     "AdaptiveDifficultyController",
     "DifficultyConfig",
     "DifficultyState",
     "AdaptationStrategy",
     "AdaptationDirection",
-    
     # Main controller
     "EnvironmentController",
     "EnvironmentControllerConfig",

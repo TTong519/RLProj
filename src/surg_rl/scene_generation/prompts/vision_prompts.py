@@ -5,8 +5,7 @@ and generating scene definitions from visual input.
 """
 
 import json
-from typing import Any, Dict, Optional
-
+from typing import Any
 
 IMAGE_ANALYSIS_PROMPT = """Analyze this surgical image and describe the scene in detail.
 
@@ -54,8 +53,8 @@ def get_image_analysis_prompt() -> str:
 
 
 def get_image_to_scene_prompt(
-    additional_instructions: Optional[str] = None,
-    schema_example: Optional[Dict[str, Any]] = None,
+    additional_instructions: str | None = None,
+    schema_example: dict[str, Any] | None = None,
 ) -> str:
     """Generate a prompt for converting image to scene.
 
@@ -78,7 +77,7 @@ def get_image_to_scene_prompt(
     )
 
 
-def _get_visual_schema_example() -> Dict[str, Any]:
+def _get_visual_schema_example() -> dict[str, Any]:
     """Get a schema example optimized for visual analysis.
 
     Returns:
@@ -260,8 +259,7 @@ def get_specialized_prompt(scenario_type: str) -> str:
 
     if scenario_type not in prompts:
         raise ValueError(
-            f"Unknown scenario type: {scenario_type}. "
-            f"Available: {list(prompts.keys())}"
+            f"Unknown scenario type: {scenario_type}. " f"Available: {list(prompts.keys())}"
         )
 
     return prompts[scenario_type]

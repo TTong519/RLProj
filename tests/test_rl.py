@@ -4,67 +4,57 @@ Tests cover observation spaces, action spaces, reward functions,
 the Gymnasium environment wrapper, training configuration, and callbacks.
 """
 
-import json
 import os
 import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 
-from surg_rl.rl.observation import (
-    ObservationBuilder,
-    ObservationConfig,
-    ObservationSpec,
-    ObservationType,
-    JOINT_POSITIONS_SPEC,
-    JOINT_VELOCITIES_SPEC,
-    ENDEFFECTOR_POS_SPEC,
-    FORCE_TORQUE_SPEC,
-    TARGET_POS_SPEC,
-    DISTANCE_TO_TARGET_SPEC,
-)
 from surg_rl.rl.action import (
     ActionBuilder,
     ActionConfig,
     ActionScaling,
-    ActionSpec,
     ActionType,
-    GRIPPER_SPEC,
 )
-from surg_rl.rl.rewards import (
-    BaseRewardFunction,
-    CollisionPenalty,
-    CompositeReward,
-    DistanceReward,
-    OrientationReward,
-    ActionPenalty,
-    TimePenalty,
-    RewardConfig,
-    RewardResult,
-    RewardType,
-    SuccessReward,
-    create_default_reward,
+from surg_rl.rl.callbacks import (
+    CheckpointCallback,
+    TensorBoardCallback,
+    TrainingProgressCallback,
 )
 from surg_rl.rl.environment import (
     SurgicalEnv,
     SurgicalEnvConfig,
-    make_env,
     make_vec_env,
+)
+from surg_rl.rl.observation import (
+    DISTANCE_TO_TARGET_SPEC,
+    ENDEFFECTOR_POS_SPEC,
+    FORCE_TORQUE_SPEC,
+    JOINT_POSITIONS_SPEC,
+    JOINT_VELOCITIES_SPEC,
+    TARGET_POS_SPEC,
+    ObservationBuilder,
+    ObservationConfig,
+    ObservationSpec,
+    ObservationType,
+)
+from surg_rl.rl.rewards import (
+    ActionPenalty,
+    CollisionPenalty,
+    CompositeReward,
+    DistanceReward,
+    RewardConfig,
+    RewardResult,
+    SuccessReward,
+    TimePenalty,
+    create_default_reward,
 )
 from surg_rl.rl.training import (
     AlgorithmConfig,
     TrainingConfig,
     TrainingManager,
 )
-from surg_rl.rl.callbacks import (
-    CheckpointCallback,
-    TrainingProgressCallback,
-    EvaluationCallback,
-    TensorBoardCallback,
-)
-
 
 # ============================================================================
 # Observation Tests
@@ -147,7 +137,9 @@ class TestObservationBuilder:
         """Test creating an observation builder with defaults."""
         builder = ObservationBuilder()
         space = builder.get_observation_space()
-        from gymnasium import spaces; assert isinstance(space, spaces.Dict)
+        from gymnasium import spaces
+
+        assert isinstance(space, spaces.Dict)
         assert "joint_positions" in space.spaces
         assert "joint_velocities" in space.spaces
         assert "endeffector_pos" in space.spaces
@@ -215,6 +207,7 @@ class TestObservationBuilder:
         builder = ObservationBuilder(config=config, num_joints=7)
 
         from surg_rl.simulators.base_simulator import Observation
+
         sim_obs = Observation(
             robot_state=np.random.randn(14),
             end_effector_pos=np.array([0.3, 0.0, 0.5]),
@@ -499,11 +492,13 @@ class TestCompositeReward:
 
     def test_composite_reward(self):
         """Test combining multiple reward functions."""
-        reward_fn = CompositeReward([
-            (DistanceReward(weight=1.0, shape="exponential"), 1.0),
-            (ActionPenalty(weight=0.01), 1.0),
-            (TimePenalty(weight=0.001), 1.0),
-        ])
+        reward_fn = CompositeReward(
+            [
+                (DistanceReward(weight=1.0, shape="exponential"), 1.0),
+                (ActionPenalty(weight=0.01), 1.0),
+                (TimePenalty(weight=0.001), 1.0),
+            ]
+        )
 
         obs = {"distance_to_target": np.array([0.1])}
         action = np.ones(7) * 0.1
@@ -520,9 +515,11 @@ class TestCompositeReward:
 
     def test_composite_reset(self):
         """Test resetting composite reward."""
-        reward_fn = CompositeReward([
-            (TimePenalty(), 1.0),
-        ])
+        reward_fn = CompositeReward(
+            [
+                (TimePenalty(), 1.0),
+            ]
+        )
         reward_fn.compute({}, np.zeros(7), {})
         reward_fn.reset()
         # TimePenalty should reset to 0 steps
@@ -645,7 +642,6 @@ class TestTensorBoardCallback:
 
     def test_creation_with_controller(self):
         """Test creating a TensorBoard callback with a controller."""
-        from unittest.mock import MagicMock
 
         controller = MagicMock()
         controller.get_curriculum_stage.return_value = None
@@ -661,7 +657,6 @@ class TestTensorBoardCallback:
 
     def test_on_step_logs_episode_metrics(self):
         """Test that _on_step logs episode metrics."""
-        from unittest.mock import MagicMock
 
         callback = TensorBoardCallback(verbose=0)
         model = MagicMock()
@@ -682,7 +677,6 @@ class TestTensorBoardCallback:
 
     def test_on_step_logs_curriculum_and_difficulty(self):
         """Test that _on_step logs curriculum stage and difficulty."""
-        from unittest.mock import MagicMock
 
         from surg_rl.dynamics.curriculum import CurriculumStage
 
@@ -710,7 +704,6 @@ class TestTensorBoardCallback:
 
     def test_on_step_logs_fps(self):
         """Test that _on_step logs training FPS."""
-        from unittest.mock import MagicMock, patch
 
         callback = TensorBoardCallback(verbose=0)
         model = MagicMock()
@@ -725,10 +718,7 @@ class TestTensorBoardCallback:
             callback.on_step()
 
         assert logger.record.called
-        fps_calls = [
-            call for call in logger.record.call_args_list
-            if call[0][0] == "time/fps"
-        ]
+        fps_calls = [call for call in logger.record.call_args_list if call[0][0] == "time/fps"]
         assert len(fps_calls) == 1
         assert fps_calls[0][0][1] > 0
 
@@ -783,11 +773,13 @@ class TestObservationActionIntegration:
 
     def test_reward_with_observation(self):
         """Test reward computation with observation data."""
-        reward_fn = create_default_reward(RewardConfig(
-            distance_weight=1.0,
-            action_penalty_weight=0.01,
-            time_penalty_weight=0.001,
-        ))
+        reward_fn = create_default_reward(
+            RewardConfig(
+                distance_weight=1.0,
+                action_penalty_weight=0.01,
+                time_penalty_weight=0.001,
+            )
+        )
 
         obs = {
             "distance_to_target": np.array([0.1]),
@@ -826,7 +818,7 @@ class TestVectorizedEnv:
 
     def test_make_vec_env_explicit_cls(self):
         """Test that vec_env_cls overrides the default."""
-        from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+        from stable_baselines3.common.vec_env import DummyVecEnv
 
         vec_env = make_vec_env(
             "scenes/minimal_scene.json",
@@ -868,8 +860,7 @@ class TestVectorizedEnv:
 
 def test_evaluate_with_vec_env():
     """evaluate() must work when _create_environment returns a VecEnv."""
-    from unittest.mock import MagicMock
-    from surg_rl.rl.training import TrainingManager, TrainingConfig, AlgorithmConfig
+    from surg_rl.rl.training import AlgorithmConfig, TrainingConfig, TrainingManager
 
     config = TrainingConfig(
         scene_path="scenes/minimal_scene.json",
@@ -899,22 +890,20 @@ def test_evaluate_with_vec_env():
 
 def test_env_seeding_is_reproducible():
     """Seeded envs must produce identical target positions and not poison global RNG."""
-    from unittest.mock import MagicMock, patch
-    from surg_rl.rl.environment import SurgicalEnv, SurgicalEnvConfig
 
     config = SurgicalEnvConfig(
         scene_path="scenes/minimal_scene.json",
         seed=42,
     )
     # Mock simulator to avoid loading scene
-    with patch("surg_rl.rl.environment.MuJoCoSimulator") as MockSim:
+    with patch("surg_rl.rl.environment.MuJoCoSimulator") as mock_sim:
         sim = MagicMock()
         sim.get_observation.return_value = MagicMock(
             robot_state=np.zeros(7),
             end_effector_pos=np.array([0.0, 0.0, 0.0]),
             end_effector_quat=np.array([1.0, 0.0, 0.0, 0.0]),
         )
-        MockSim.return_value = sim
+        mock_sim.return_value = sim
 
         env1 = SurgicalEnv(config)
         env2 = SurgicalEnv(config)
@@ -935,7 +924,6 @@ def test_env_seeding_is_reproducible():
 def test_observation_noise_is_reproducible():
     """Observation noise must be reproducible with the same seed."""
     from surg_rl.rl.observation import ObservationBuilder, ObservationConfig
-    from unittest.mock import MagicMock
 
     config = ObservationConfig()
     builder = ObservationBuilder(config=config)
@@ -975,7 +963,6 @@ def test_tanh_scaling_maps_to_action_bounds():
 
 def test_checkpoint_callback_uses_self_num_timesteps():
     """CheckpointCallback must use self.num_timesteps, not locals."""
-    from unittest.mock import MagicMock, patch
     from surg_rl.rl.callbacks import CheckpointCallback
 
     callback = CheckpointCallback(save_freq=100, save_path="/tmp")
@@ -989,8 +976,9 @@ def test_checkpoint_callback_uses_self_num_timesteps():
 
 def test_algorithm_name_case_insensitive():
     """Algorithm names must be compared case-insensitively."""
-    from surg_rl.rl.training import TrainingManager, TrainingConfig, AlgorithmConfig
     from unittest.mock import MagicMock, patch
+
+    from surg_rl.rl.training import AlgorithmConfig, TrainingConfig
 
     config = TrainingConfig(
         scene_path="scenes/minimal_scene.json",
@@ -1003,12 +991,12 @@ def test_algorithm_name_case_insensitive():
     env.observation_space = MagicMock()
     env.action_space = MagicMock()
 
-    with patch("stable_baselines3.SAC") as MockSAC:
-        MockSAC.return_value = MagicMock()
+    with patch("stable_baselines3.SAC") as mock_sac:
+        mock_sac.return_value = MagicMock()
         manager._create_model(env)
-        MockSAC.assert_called_once()
+        mock_sac.assert_called_once()
         # Off-policy kwargs must be present even when name is lowercase
-        call_kwargs = MockSAC.call_args.kwargs
+        call_kwargs = mock_sac.call_args.kwargs
         assert "buffer_size" in call_kwargs
         assert "learning_starts" in call_kwargs
 

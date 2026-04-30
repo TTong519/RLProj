@@ -1,27 +1,25 @@
 """Tests for SceneBuilder MJCF generation and asset resolution."""
 
-import pytest
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
-from surg_rl.simulators.scene_builder import SceneBuilder
 from surg_rl.scene_definition.schema import (
-    SceneDefinition,
-    Metadata,
-    RobotConfig,
-    TissueConfig,
-    TissueMeshDefinition,
-    InstrumentConfig,
+    CameraConfig,
     EnvironmentConfig,
     GroundPlaneConfig,
-    CameraConfig,
+    InstrumentConfig,
     LightConfig,
-    Position,
+    Metadata,
     Orientation,
     Pose,
+    Position,
     RgbColor,
+    RobotConfig,
+    SceneDefinition,
+    TissueConfig,
+    TissueMeshDefinition,
 )
+from surg_rl.simulators.scene_builder import SceneBuilder
 
 
 class TestAssetResolution:
@@ -204,6 +202,7 @@ class TestSceneBuilderNoneLists:
         )
         # Bypass Pydantic default factories by constructing manually
         from surg_rl.scene_definition.schema import EnvironmentConfig
+
         env = EnvironmentConfig.model_construct(
             name="empty_room",
             cameras=None,

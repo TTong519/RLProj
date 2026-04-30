@@ -5,17 +5,17 @@ training scenes from natural language descriptions and images using LLMs/VLMs.
 """
 
 from .base_parser import BaseParser
-from .text_parser import TextParser
-from .vision_parser import VisionParser
 from .scene_composer import SceneComposer
 from .templates import (
-    get_template,
-    get_suturing_template,
+    TEMPLATE_REGISTRY,
     get_dissection_template,
     get_manipulation_template,
-    TEMPLATE_REGISTRY,
+    get_suturing_template,
+    get_template,
+    list_templates,
 )
-from .templates import list_templates
+from .text_parser import TextParser
+from .vision_parser import VisionParser
 
 __all__ = [
     # Parsers

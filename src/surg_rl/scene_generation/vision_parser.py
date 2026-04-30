@@ -10,13 +10,13 @@ import base64
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
+
+from pydantic import ValidationError
 
 from surg_rl.scene_definition import SceneDefinition
 from surg_rl.utils.config import get_settings
 from surg_rl.utils.logging import get_logger
-
-from pydantic import ValidationError
 
 from .base_parser import BaseParser, ParserError, ParseValidationError
 from .prompts.text_prompts import SYSTEM_PROMPT
@@ -53,13 +53,13 @@ class VisionParser(BaseParser):
 
     def __init__(
         self,
-        provider: Optional[str] = None,
-        model: Optional[str] = None,
-        api_key: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-        ollama_base_url: Optional[str] = None,
-        ollama_timeout: Optional[int] = None,
+        provider: str | None = None,
+        model: str | None = None,
+        api_key: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        ollama_base_url: str | None = None,
+        ollama_timeout: int | None = None,
     ):
         """Initialize the vision parser.
 
@@ -115,7 +115,7 @@ class VisionParser(BaseParser):
                 except ImportError:
                     raise ImportError(
                         "OpenAI package not installed. Install with: pip install openai"
-                    )
+                    ) from None
             elif self.provider == "anthropic":
                 try:
                     import anthropic
@@ -124,7 +124,7 @@ class VisionParser(BaseParser):
                 except ImportError:
                     raise ImportError(
                         "Anthropic package not installed. Install with: pip install anthropic"
-                    )
+                    ) from None
             elif self.provider == "ollama":
                 self._async_client = self._create_async_ollama_client()
             else:
@@ -221,7 +221,7 @@ class VisionParser(BaseParser):
                 f"Supported formats: {SUPPORTED_IMAGE_FORMATS}"
             )
 
-    def _encode_image(self, image_data: Union[Path, bytes]) -> str:
+    def _encode_image(self, image_data: Path | bytes) -> str:
         """Encode image to base64 string.
 
         Args:
@@ -238,7 +238,7 @@ class VisionParser(BaseParser):
 
         return base64.b64encode(image_bytes).decode("utf-8")
 
-    def _get_image_format(self, image_path: Optional[Path] = None) -> str:
+    def _get_image_format(self, image_path: Path | None = None) -> str:
         """Get image format for API.
 
         Args:
@@ -262,7 +262,7 @@ class VisionParser(BaseParser):
 
     async def parse(
         self,
-        input_data: Union[str, Path, bytes],
+        input_data: str | Path | bytes,
         **kwargs: Any,
     ) -> SceneDefinition:
         """Parse image into scene definition.
@@ -310,7 +310,7 @@ class VisionParser(BaseParser):
             logger.info(f"Successfully parsed scene: {scene.metadata.name}")
             return scene
         except ValidationError as e:
-            details: Dict[str, Any] = {
+            details: dict[str, Any] = {
                 "raw_response": scene_data,
                 "errors": [
                     {"loc": list(err.get("loc", [])), "msg": err.get("msg", "")}
@@ -329,8 +329,8 @@ class VisionParser(BaseParser):
 
     async def parse_with_context(
         self,
-        input_data: Union[str, Path, bytes],
-        context: Optional[SceneDefinition] = None,
+        input_data: str | Path | bytes,
+        context: SceneDefinition | None = None,
         **kwargs: Any,
     ) -> SceneDefinition:
         """Parse image with optional existing scene context.
@@ -374,11 +374,11 @@ class VisionParser(BaseParser):
             raise ParseValidationError(
                 f"Modified scene validation failed: {e}",
                 details={"raw_response": scene_data, "error": str(e)},
-            )
+            ) from e
 
     async def analyze_image(
         self,
-        input_data: Union[str, Path, bytes],
+        input_data: str | Path | bytes,
         **kwargs: Any,
     ) -> str:
         """Analyze image and return text description (no scene generation).
@@ -414,11 +414,11 @@ class VisionParser(BaseParser):
     async def _generate_scene_from_image(
         self,
         image_data: bytes,
-        image_path: Optional[Path] = None,
-        temperature: Optional[float] = None,
-        scenario_type: Optional[str] = None,
-        additional_instructions: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        image_path: Path | None = None,
+        temperature: float | None = None,
+        scenario_type: str | None = None,
+        additional_instructions: str | None = None,
+    ) -> dict[str, Any]:
         """Analyze image with VLM and return scene data.
 
         Args:
@@ -435,7 +435,9 @@ class VisionParser(BaseParser):
         if scenario_type:
             specialized = get_specialized_prompt(scenario_type)
             if additional_instructions:
-                additional_instructions = f"{specialized}\n\nAdditional instructions: {additional_instructions}"
+                additional_instructions = (
+                    f"{specialized}\n\nAdditional instructions: {additional_instructions}"
+                )
             else:
                 additional_instructions = specialized
 
@@ -455,10 +457,10 @@ class VisionParser(BaseParser):
     async def _modify_scene_from_image(
         self,
         image_data: bytes,
-        context_json: Optional[str],
-        image_path: Optional[Path] = None,
-        temperature: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        context_json: str | None,
+        image_path: Path | None = None,
+        temperature: float | None = None,
+    ) -> dict[str, Any]:
         """Modify existing scene based on image.
 
         Args:
@@ -470,7 +472,6 @@ class VisionParser(BaseParser):
         Returns:
             Dictionary containing modified scene data.
         """
-        import json
 
         context_str = context_json or "{}"
         prompt = f"""Analyze this image and modify the following scene definition accordingly.
@@ -493,9 +494,9 @@ Respond ONLY with the JSON object, no additional text."""
     async def _call_vlm_async(
         self,
         prompt: str,
-        image_data: Union[Path, bytes],
-        image_path: Optional[Path] = None,
-        temperature: Optional[float] = None,
+        image_data: Path | bytes,
+        image_path: Path | None = None,
+        temperature: float | None = None,
     ) -> str:
         """Make async API call to VLM provider.
 
@@ -580,9 +581,9 @@ Respond ONLY with the JSON object, no additional text."""
             raise ParserError(
                 f"VLM API call failed: {e}",
                 details={"provider": self.provider, "model": self.model, "error": str(e)},
-            )
+            ) from e
 
-    def _parse_json_response(self, response: str) -> Dict[str, Any]:
+    def _parse_json_response(self, response: str) -> dict[str, Any]:
         """Extract and parse JSON from VLM response.
 
         Args:
@@ -627,7 +628,7 @@ Respond ONLY with the JSON object, no additional text."""
 
     def parse_sync(
         self,
-        input_data: Union[str, Path, bytes],
+        input_data: str | Path | bytes,
         **kwargs: Any,
     ) -> SceneDefinition:
         """Synchronous wrapper for parse.
@@ -653,8 +654,8 @@ Respond ONLY with the JSON object, no additional text."""
 
     def parse_with_context_sync(
         self,
-        input_data: Union[str, Path, bytes],
-        context: Optional[SceneDefinition] = None,
+        input_data: str | Path | bytes,
+        context: SceneDefinition | None = None,
         **kwargs: Any,
     ) -> SceneDefinition:
         """Synchronous wrapper for parse_with_context.
@@ -681,7 +682,7 @@ Respond ONLY with the JSON object, no additional text."""
 
     def analyze_image_sync(
         self,
-        input_data: Union[str, Path, bytes],
+        input_data: str | Path | bytes,
         **kwargs: Any,
     ) -> str:
         """Synchronous wrapper for analyze_image.

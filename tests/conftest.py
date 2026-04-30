@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+
 import pytest
 
 from surg_rl.scene_definition import SceneLoader

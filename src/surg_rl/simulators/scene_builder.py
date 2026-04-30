@@ -5,11 +5,10 @@ simulator-specific formats (MJCF for MuJoCo, URDF for PyBullet) with
 automatic fallback to primitive shapes for missing assets.
 """
 
-import os
 import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 from surg_rl.utils.logging import get_logger
 
@@ -23,8 +22,7 @@ class AssetMissingError(Exception):
         self.asset_path = asset_path
         self.asset_type = asset_type
         super().__init__(
-            f"Missing {asset_type} asset: {asset_path}. "
-            f"Primitive fallback will be used."
+            f"Missing {asset_type} asset: {asset_path}. " f"Primitive fallback will be used."
         )
 
 
@@ -55,7 +53,7 @@ class SceneBuilder:
 
     def __init__(
         self,
-        assets_dir: Optional[Union[str, Path]] = None,
+        assets_dir: str | Path | None = None,
         use_primitive_fallback: bool = True,
     ):
         """Initialize the scene builder.
@@ -68,9 +66,9 @@ class SceneBuilder:
         self.use_primitive_fallback = use_primitive_fallback
         self._temp_dir_obj = tempfile.TemporaryDirectory(prefix="surg_rl_")
         self.temp_dir = Path(self._temp_dir_obj.name)
-        self._primitive_meshes: Dict[str, Path] = {}
+        self._primitive_meshes: dict[str, Path] = {}
 
-    def resolve_asset_path(self, asset_path: str) -> Optional[Path]:
+    def resolve_asset_path(self, asset_path: str) -> Path | None:
         """Resolve an asset path to an absolute path.
 
         Args:
@@ -100,8 +98,8 @@ class SceneBuilder:
     def _get_primitive_color(
         self,
         entity_type: str,
-        subtype: Optional[str] = None,
-    ) -> Tuple[float, float, float, float]:
+        subtype: str | None = None,
+    ) -> tuple[float, float, float, float]:
         """Get default color for a primitive based on entity type.
 
         Args:
@@ -125,9 +123,9 @@ class SceneBuilder:
 
     def _create_box_mesh(
         self,
-        dimensions: Tuple[float, float, float],
+        dimensions: tuple[float, float, float],
         name: str,
-        output_dir: Optional[Path] = None,
+        output_dir: Path | None = None,
     ) -> Path:
         """Create an OBJ file for a box primitive.
 
@@ -189,7 +187,7 @@ f 5 4 8
         height: float,
         name: str,
         segments: int = 16,
-        output_dir: Optional[Path] = None,
+        output_dir: Path | None = None,
     ) -> Path:
         """Create an OBJ file for a cylinder primitive.
 
@@ -270,7 +268,7 @@ f 5 4 8
         name: str,
         segments: int = 16,
         rings: int = 8,
-        output_dir: Optional[Path] = None,
+        output_dir: Path | None = None,
     ) -> Path:
         """Create an OBJ file for a sphere primitive.
 
@@ -325,12 +323,12 @@ f 5 4 8
 
     def get_mesh_or_primitive(
         self,
-        mesh_path: Optional[str],
-        primitive: Optional[str],
-        dimensions: Tuple[float, float, float],
+        mesh_path: str | None,
+        primitive: str | None,
+        dimensions: tuple[float, float, float],
         name: str,
-        radius: Optional[float] = None,
-    ) -> Tuple[Path, bool]:
+        radius: float | None = None,
+    ) -> tuple[Path, bool]:
         """Get mesh file or create primitive fallback.
 
         Args:
@@ -352,9 +350,7 @@ f 5 4 8
             elif not self.use_primitive_fallback:
                 raise AssetMissingError(mesh_path, "mesh")
             else:
-                logger.warning(
-                    f"Mesh file not found: {mesh_path}. Using primitive fallback."
-                )
+                logger.warning(f"Mesh file not found: {mesh_path}. Using primitive fallback.")
 
         # Create primitive
         if not self.use_primitive_fallback:
@@ -376,7 +372,7 @@ f 5 4 8
     def create_mjcf(
         self,
         scene_definition: Any,
-        output_path: Optional[Union[str, Path]] = None,
+        output_path: str | Path | None = None,
     ) -> Path:
         """Create MuJoCo MJCF (XML) file from scene definition.
 
@@ -411,7 +407,15 @@ f 5 4 8
         asset = ET.SubElement(mujoco, "asset")
 
         # Add textures and materials
-        ET.SubElement(asset, "texture", name="groundplane", type="2d", builtin="checker", width="512", height="512")
+        ET.SubElement(
+            asset,
+            "texture",
+            name="groundplane",
+            type="2d",
+            builtin="checker",
+            width="512",
+            height="512",
+        )
         ET.SubElement(asset, "material", name="groundplane", texture="groundplane", texrepeat="5 5")
 
         # Add worldbody before entities so that robot/tissue/instrument
@@ -465,14 +469,11 @@ f 5 4 8
         asset: ET.Element,
     ) -> None:
         """Add robot to MJCF structure."""
-        from surg_rl.scene_definition import RobotType
 
         # Get robot mesh or create primitive
-        urdf_resolved = False
         if robot.urdf_path:
             resolved = self.resolve_asset_path(robot.urdf_path)
             if resolved:
-                urdf_resolved = True
                 # TODO: full URDF-in-MuJoCo support requires conversion or direct loading.
                 return
             else:
@@ -496,7 +497,7 @@ f 5 4 8
         if robot.joints:
             for joint in robot.joints:
                 joint_type = "hinge" if joint.type.value == "revolute" else "slide"
-                joint_elem = ET.SubElement(
+                ET.SubElement(
                     body,
                     "joint",
                     name=joint.name,
@@ -618,26 +619,27 @@ f 5 4 8
             if geom_type == "box":
                 dims = tissue.geometry.dimensions or (0.1, 0.1, 0.01)
                 size = f"{dims[0]/2} {dims[1]/2} {dims[2]/2}"
-                geom = ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="box", size=size)
+                ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="box", size=size)
             elif geom_type == "sphere":
                 r = tissue.geometry.radius or 0.05
-                geom = ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="sphere", size=str(r))
+                ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="sphere", size=str(r))
             elif geom_type == "cylinder":
                 dims = tissue.geometry.dimensions or (0.05, 0.1)
                 r = dims[0] / 2 if len(dims) > 0 else 0.025
                 h = dims[1] / 2 if len(dims) > 1 else 0.05
-                geom = ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="cylinder", size=f"{r} {h}")
+                ET.SubElement(
+                    body, "geom", name=f"{tissue.name}_geom", type="cylinder", size=f"{r} {h}"
+                )
             else:
                 # Default to box
                 dims = tissue.geometry.dimensions or (0.1, 0.1, 0.01)
                 size = f"{dims[0]/2} {dims[1]/2} {dims[2]/2}"
-                geom = ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="box", size=size)
+                ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="box", size=size)
 
             # Add physics properties
-            if tissue.physics:
-                if tissue.physics.stiffness:
-                    # Soft body properties (simplified)
-                    pass  # MuJoCo soft bodies require more complex setup
+            if tissue.physics and tissue.physics.stiffness:
+                # Soft body properties (simplified)
+                pass  # MuJoCo soft bodies require more complex setup
 
     def _add_instrument_to_mjcf(
         self,
@@ -659,7 +661,9 @@ f 5 4 8
         body.set("pos", pos)
 
         # Add geometry based on type
-        geom = ET.SubElement(body, "geom", name=f"{instrument.name}_geom", type="box", size="0.01 0.01 0.05")
+        ET.SubElement(
+            body, "geom", name=f"{instrument.name}_geom", type="box", size="0.01 0.01 0.05"
+        )
 
         # Note: Instrument is static for now (no control implemented yet)
         # To make it dynamic, add: <freejoint name="instrument_root"/>
@@ -675,7 +679,7 @@ f 5 4 8
             return
 
         size = ground.size or (2.0, 2.0)
-        geom = ET.SubElement(
+        ET.SubElement(
             worldbody,
             "geom",
             name="ground",

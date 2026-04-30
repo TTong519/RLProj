@@ -1,7 +1,5 @@
 """Tests for CLI commands using subprocess."""
 
-import subprocess
-from pathlib import Path
 import pytest
 
 
@@ -20,7 +18,7 @@ class TestCLIConfig:
 
 class TestCLISetup:
     def test_setup_creates_directories(self, cli_runner, tmp_path):
-        with pytest.MonkeyPatch.context() as mp:
+        with pytest.MonkeyPatch.context():
             # setup may create dirs in cwd; just ensure command runs
             result = cli_runner("setup")
             assert result.returncode == 0
@@ -35,7 +33,9 @@ class TestCLIGenerate:
 
     def test_generate_template_saves_yaml(self, cli_runner, tmp_path):
         out = tmp_path / "scene.yaml"
-        result = cli_runner("generate", "--template", "suturing", "--output", str(out), "--format", "yaml")
+        result = cli_runner(
+            "generate", "--template", "suturing", "--output", str(out), "--format", "yaml"
+        )
         assert result.returncode == 0
         assert out.exists()
 
@@ -55,10 +55,14 @@ class TestCLITrain:
         # Run without SB3 being mockable in subprocess; expect failure with hint
         result = cli_runner(
             "train",
-            "--scene", "scenes/minimal_scene.json",
-            "--algorithm", "PPO",
-            "--timesteps", "1",
-            "--log-dir", str(out),
+            "--scene",
+            "scenes/minimal_scene.json",
+            "--algorithm",
+            "PPO",
+            "--timesteps",
+            "1",
+            "--log-dir",
+            str(out),
         )
         # It may fail because stable-baselines3 is not installed or scene missing
         assert result.returncode != 0
@@ -69,8 +73,11 @@ class TestCLIEvaluate:
         out = tmp_path / "eval_log"
         result = cli_runner(
             "evaluate",
-            "--scene", "scenes/minimal_scene.json",
-            "--model", str(tmp_path / "fake_model"),
-            "--log-dir", str(out),
+            "--scene",
+            "scenes/minimal_scene.json",
+            "--model",
+            str(tmp_path / "fake_model"),
+            "--log-dir",
+            str(out),
         )
         assert result.returncode != 0

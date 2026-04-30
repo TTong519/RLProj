@@ -5,12 +5,11 @@ training scenarios, which can be used as starting points or directly
 instantiated.
 """
 
-from typing import Callable, Dict
+from collections.abc import Callable
 
 from surg_rl.scene_definition import (
     CameraConfig,
     CameraType,
-    DomainRandomizationConfig,
     EndEffectorConfig,
     EnvironmentConfig,
     GroundPlaneConfig,
@@ -924,7 +923,7 @@ def get_retraction_template() -> SceneDefinition:
 
 
 # Template registry
-TEMPLATE_REGISTRY: Dict[str, Callable[[], SceneDefinition]] = {
+TEMPLATE_REGISTRY: dict[str, Callable[[], SceneDefinition]] = {
     "suturing": get_suturing_template,
     "dissection": get_dissection_template,
     "manipulation": get_manipulation_template,
@@ -954,22 +953,17 @@ def get_template(name: str) -> SceneDefinition:
 
     if name_lower not in TEMPLATE_REGISTRY:
         available = list(TEMPLATE_REGISTRY.keys())
-        raise ValueError(
-            f"Unknown template: '{name}'. Available templates: {available}"
-        )
+        raise ValueError(f"Unknown template: '{name}'. Available templates: {available}")
 
     # Return a copy to prevent modification of template
     template_func = TEMPLATE_REGISTRY[name_lower]
     return template_func()
 
 
-def list_templates() -> Dict[str, str]:
+def list_templates() -> dict[str, str]:
     """List all available templates with their descriptions.
 
     Returns:
         Dictionary mapping template names to descriptions.
     """
-    return {
-        name: func().metadata.description
-        for name, func in TEMPLATE_REGISTRY.items()
-    }
+    return {name: func().metadata.description for name, func in TEMPLATE_REGISTRY.items()}

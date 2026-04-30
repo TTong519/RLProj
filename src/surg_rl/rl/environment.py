@@ -5,36 +5,36 @@ environment that wraps the simulator and dynamic environment controller
 into a standard interface for RL training with Stable-Baselines3.
 """
 
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from dataclasses import dataclass
+from typing import Any
 
 import gymnasium as gym
 import numpy as np
 
-from surg_rl.scene_definition.schema import SceneDefinition
+from surg_rl.dynamics.environment_controller import (
+    EnvironmentController,
+    EnvironmentControllerConfig,
+)
 from surg_rl.scene_definition.loader import SceneLoader
-from surg_rl.simulators.base_simulator import BaseSimulator, Observation, StepResult
+from surg_rl.scene_definition.schema import SceneDefinition
+from surg_rl.simulators.base_simulator import BaseSimulator, Observation
 from surg_rl.simulators.mujoco_simulator import MuJoCoSimulator
 from surg_rl.simulators.pybullet_simulator import PyBulletSimulator
-from surg_rl.dynamics.environment_controller import EnvironmentController, EnvironmentControllerConfig
 from surg_rl.utils.logging import get_logger
 
+from .action import (
+    ActionBuilder,
+    ActionConfig,
+    ActionScaling,
+    ActionType,
+)
 from .observation import (
     ObservationBuilder,
     ObservationConfig,
     ObservationType,
-    ObservationSpec,
-)
-from .action import (
-    ActionScaling,
-    ActionBuilder,
-    ActionConfig,
-    ActionType,
 )
 from .rewards import (
     BaseRewardFunction,
-    CompositeReward,
     RewardConfig,
     RewardResult,
     create_default_reward,
@@ -65,20 +65,20 @@ class SurgicalEnvConfig:
         seed: Random seed for reproducibility.
     """
 
-    scene_path: Optional[str] = None
-    scene: Optional[SceneDefinition] = None
+    scene_path: str | None = None
+    scene: SceneDefinition | None = None
     simulator_type: str = "mujoco"
     timestep: float = 0.002
     frame_skip: int = 1
     max_episode_steps: int = 1000
-    render_mode: Optional[str] = None
-    reward_config: Optional[RewardConfig] = None
-    observation_config: Optional[ObservationConfig] = None
-    action_config: Optional[ActionConfig] = None
+    render_mode: str | None = None
+    reward_config: RewardConfig | None = None
+    observation_config: ObservationConfig | None = None
+    action_config: ActionConfig | None = None
     use_curriculum: bool = False
     use_adaptive_difficulty: bool = False
-    controller_config: Optional[EnvironmentControllerConfig] = None
-    seed: Optional[int] = None
+    controller_config: EnvironmentControllerConfig | None = None
+    seed: int | None = None
 
 
 class SurgicalEnv(gym.Env):
@@ -112,8 +112,8 @@ class SurgicalEnv(gym.Env):
 
     def __init__(
         self,
-        config: Optional[SurgicalEnvConfig] = None,
-        render_mode: Optional[str] = None,
+        config: SurgicalEnvConfig | None = None,
+        render_mode: str | None = None,
     ):
         """Initialize the surgical environment.
 
@@ -133,14 +133,20 @@ class SurgicalEnv(gym.Env):
         self._simulator = self._create_simulator()
         self._simulator.load_scene(self._scene)
 
+        # Propagate action mode to simulator if needed
+        action_cfg = self.config.action_config or self._default_action_config()
+        if action_cfg.action_type == ActionType.JOINT_TORQUES:
+            try:
+                self._simulator.set_action_mode("torque")
+            except (NotImplementedError, AttributeError):
+                logger.debug("Backend does not support torque mode switching")
+
         # Initialize observation and action builders
         self._obs_builder = ObservationBuilder(
-            config=self.config.observation_config
-            or self._default_observation_config()
+            config=self.config.observation_config or self._default_observation_config()
         )
         self._action_builder = ActionBuilder(
-            config=self.config.action_config
-            or self._default_action_config()
+            config=action_cfg
         )
 
         # Define spaces
@@ -157,15 +163,15 @@ class SurgicalEnv(gym.Env):
         self._reward_fn = create_default_reward(self.config.reward_config, task_name=task_name)
 
         # Initialize environment controller
-        self._controller: Optional[EnvironmentController] = None
+        self._controller: EnvironmentController | None = None
         self._setup_controller()
 
         # Episode state
         self._step_count = 0
         self._episode_count = 0
-        self._last_observation: Optional[Dict[str, np.ndarray]] = None
-        self._target_pos: Optional[np.ndarray] = None
-        self._target_quat: Optional[np.ndarray] = None
+        self._last_observation: dict[str, np.ndarray] | None = None
+        self._target_pos: np.ndarray | None = None
+        self._target_quat: np.ndarray | None = None
 
     def _load_scene(self) -> SceneDefinition:
         """Load the scene definition.
@@ -270,9 +276,9 @@ class SurgicalEnv(gym.Env):
 
     def reset(
         self,
-        seed: Optional[int] = None,
-        options: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[Dict[str, np.ndarray], Dict[str, Any]]:
+        seed: int | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
         """Reset the environment to initial state.
 
         Args:
@@ -308,9 +314,7 @@ class SurgicalEnv(gym.Env):
             sim_obs = Observation()
 
         # Set random target position for task
-        self._target_pos = np.array([0.3, 0.0, 0.5]) + self.np_random.uniform(
-            -0.1, 0.1, size=3
-        )
+        self._target_pos = np.array([0.3, 0.0, 0.5]) + self.np_random.uniform(-0.1, 0.1, size=3)
         self._target_quat = np.array([1.0, 0.0, 0.0, 0.0])
 
         # Extract observation
@@ -328,7 +332,7 @@ class SurgicalEnv(gym.Env):
 
     def step(
         self, action: np.ndarray
-    ) -> Tuple[Dict[str, np.ndarray], float, bool, bool, Dict[str, Any]]:
+    ) -> tuple[dict[str, np.ndarray], float, bool, bool, dict[str, Any]]:
         """Execute one environment step.
 
         Args:
@@ -342,9 +346,7 @@ class SurgicalEnv(gym.Env):
 
         # Apply domain randomization noise
         if self._controller is not None:
-            processed_action = self._controller.get_randomized_action(
-                processed_action
-            )
+            processed_action = self._controller.get_randomized_action(processed_action)
 
         # Step simulator
         try:
@@ -419,7 +421,7 @@ class SurgicalEnv(gym.Env):
 
         return obs_dict, reward, terminated, truncated, info
 
-    def render(self) -> Optional[np.ndarray]:
+    def render(self) -> np.ndarray | None:
         """Render the environment.
 
         Returns:
@@ -442,9 +444,9 @@ class SurgicalEnv(gym.Env):
     def _build_info(
         self,
         sim_obs: Observation,
-        reward_result: Optional[RewardResult] = None,
-        sim_info: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        reward_result: RewardResult | None = None,
+        sim_info: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Build the info dictionary.
 
         Args:
@@ -455,7 +457,7 @@ class SurgicalEnv(gym.Env):
         Returns:
             Info dictionary.
         """
-        info: Dict[str, Any] = {
+        info: dict[str, Any] = {
             "step": self._step_count,
             "episode": self._episode_count,
         }
@@ -491,7 +493,7 @@ class SurgicalEnv(gym.Env):
         return self._simulator
 
     @property
-    def controller(self) -> Optional[EnvironmentController]:
+    def controller(self) -> EnvironmentController | None:
         """Get the environment controller instance."""
         return self._controller
 
@@ -509,7 +511,7 @@ class SurgicalEnv(gym.Env):
         """
         self._reward_fn = reward_fn
 
-    def set_target(self, position: np.ndarray, orientation: Optional[np.ndarray] = None) -> None:
+    def set_target(self, position: np.ndarray, orientation: np.ndarray | None = None) -> None:
         """Set the target position and orientation for the task.
 
         Args:
@@ -520,7 +522,7 @@ class SurgicalEnv(gym.Env):
         if orientation is not None:
             self._target_quat = np.array(orientation)
 
-    def get_state(self) -> Dict[str, Any]:
+    def get_state(self) -> dict[str, Any]:
         """Get the full environment state for saving/restoring.
 
         Returns:
@@ -546,7 +548,7 @@ class SurgicalEnv(gym.Env):
 
         return state
 
-    def set_state(self, state: Dict[str, Any]) -> None:
+    def set_state(self, state: dict[str, Any]) -> None:
         """Restore the environment state.
 
         Args:
@@ -573,17 +575,18 @@ class SurgicalEnv(gym.Env):
 # Environment Factory
 # ============================================================================
 
+
 def make_env(
     scene_path: str,
     simulator_type: str = "mujoco",
-    render_mode: Optional[str] = None,
+    render_mode: str | None = None,
     max_episode_steps: int = 1000,
-    seed: Optional[int] = None,
+    seed: int | None = None,
     use_curriculum: bool = False,
     use_adaptive_difficulty: bool = False,
-    reward_config: Optional[RewardConfig] = None,
-    observation_config: Optional[ObservationConfig] = None,
-    action_config: Optional[ActionConfig] = None,
+    reward_config: RewardConfig | None = None,
+    observation_config: ObservationConfig | None = None,
+    action_config: ActionConfig | None = None,
 ) -> SurgicalEnv:
     """Factory function to create a SurgicalEnv.
 
@@ -620,7 +623,7 @@ def make_env(
 def make_vec_env(
     scene_path: str,
     n_envs: int = 4,
-    vec_env_cls: Optional[Any] = None,
+    vec_env_cls: Any | None = None,
     **kwargs,
 ) -> "gym.Env":
     """Create a vectorized environment for parallel training.
@@ -652,6 +655,7 @@ def make_vec_env(
                 **{k: v for k, v in kwargs.items() if k != "seed"},
             )
             return SurgicalEnv(config)
+
         return _init
 
     if vec_env_cls is None:

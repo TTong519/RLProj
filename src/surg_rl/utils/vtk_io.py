@@ -1,13 +1,12 @@
 """Pure-Python VTK I/O for tetrahedral meshes (legacy ASCII unstructured grid)."""
 
 from pathlib import Path
-from typing import Tuple, Union
 
 import numpy as np
 
 
 def write_vtk_unstructured_grid(
-    path: Union[str, Path], vertices: np.ndarray, tetrahedra: np.ndarray
+    path: str | Path, vertices: np.ndarray, tetrahedra: np.ndarray
 ) -> None:
     """Write a legacy ASCII VTK file containing an unstructured grid of tetrahedra.
 
@@ -49,7 +48,7 @@ def write_vtk_unstructured_grid(
     p.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def read_vtk_unstructured_grid(path: Union[str, Path]) -> Tuple[np.ndarray, np.ndarray]:
+def read_vtk_unstructured_grid(path: str | Path) -> tuple[np.ndarray, np.ndarray]:
     """Read a legacy ASCII VTK unstructured grid file and return vertices and tetrahedra.
 
     Args:
@@ -127,9 +126,7 @@ def read_vtk_unstructured_grid(path: Union[str, Path]) -> Tuple[np.ndarray, np.n
 
     expected_ints = n_cells * 5
     if total_ints != expected_ints:
-        raise ValueError(
-            f"CELLS total_ints mismatch: {total_ints} (expected {expected_ints})"
-        )
+        raise ValueError(f"CELLS total_ints mismatch: {total_ints} (expected {expected_ints})")
 
     if cells_idx + 1 + n_cells > len(lines):
         raise ValueError("CELLS section truncated")
@@ -138,9 +135,7 @@ def read_vtk_unstructured_grid(path: Union[str, Path]) -> Tuple[np.ndarray, np.n
     for idx, cl in enumerate(cell_lines):
         ints = cl.strip().split()
         if len(ints) != 5:
-            raise ValueError(
-                f"Cell {idx} has {len(ints)} entries (expected 5: count + 4 indices)"
-            )
+            raise ValueError(f"Cell {idx} has {len(ints)} entries (expected 5: count + 4 indices)")
         if int(ints[0]) != 4:
             raise ValueError(f"Cell {idx} has count {ints[0]} (expected 4)")
         tetrahedra[idx] = [int(ints[1]), int(ints[2]), int(ints[3]), int(ints[4])]
@@ -163,9 +158,7 @@ def read_vtk_unstructured_grid(path: Union[str, Path]) -> Tuple[np.ndarray, np.n
         raise ValueError(f"Invalid CELL_TYPES count: {tparts[1]}") from exc
 
     if n_types != n_cells:
-        raise ValueError(
-            f"CELL_TYPES count {n_types} does not match CELLS count {n_cells}"
-        )
+        raise ValueError(f"CELL_TYPES count {n_types} does not match CELLS count {n_cells}")
 
     if types_idx + 1 + n_types > len(lines):
         raise ValueError("CELL_TYPES section truncated")
@@ -180,7 +173,7 @@ def read_vtk_unstructured_grid(path: Union[str, Path]) -> Tuple[np.ndarray, np.n
     return vertices.astype(float), tetrahedra
 
 
-def validate_vtk(path: Union[str, Path]) -> None:
+def validate_vtk(path: str | Path) -> None:
     """Read and validate a VTK unstructured grid file.
 
     Args:

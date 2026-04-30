@@ -7,13 +7,14 @@ providing a unified API for loading scenes, stepping simulation, and rendering.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 
 
 class SimulationStatus(Enum):
     """Status of simulation step."""
+
     RUNNING = "running"
     SUCCESS = "success"
     FAILURE = "failure"
@@ -35,26 +36,27 @@ class Observation:
         tissue_state: Tissue positions/velocities or None.
         custom: Additional custom observations.
     """
-    rgb_image: Optional[np.ndarray] = None
-    depth_image: Optional[np.ndarray] = None
-    segmentation: Optional[np.ndarray] = None
-    robot_state: Optional[np.ndarray] = None
-    end_effector_pos: Optional[np.ndarray] = None
-    end_effector_quat: Optional[np.ndarray] = None
-    force_torque: Optional[np.ndarray] = None
-    tissue_state: Optional[Dict[str, np.ndarray]] = None
-    collision_detected: bool = False
-    needle_pos: Optional[np.ndarray] = None
-    entry_point: Optional[np.ndarray] = None
-    exit_point: Optional[np.ndarray] = None
-    incision_progress: float = 0.0
-    thread_tension: Optional[np.ndarray] = None
-    cut_force: Optional[np.ndarray] = None
-    receiver_pos: Optional[np.ndarray] = None
-    tool_positions: Optional[np.ndarray] = None
-    custom: Dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    rgb_image: np.ndarray | None = None
+    depth_image: np.ndarray | None = None
+    segmentation: np.ndarray | None = None
+    robot_state: np.ndarray | None = None
+    end_effector_pos: np.ndarray | None = None
+    end_effector_quat: np.ndarray | None = None
+    force_torque: np.ndarray | None = None
+    tissue_state: dict[str, np.ndarray] | None = None
+    collision_detected: bool = False
+    needle_pos: np.ndarray | None = None
+    entry_point: np.ndarray | None = None
+    exit_point: np.ndarray | None = None
+    incision_progress: float = 0.0
+    thread_tension: np.ndarray | None = None
+    cut_force: np.ndarray | None = None
+    receiver_pos: np.ndarray | None = None
+    tool_positions: np.ndarray | None = None
+    custom: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert observation to dictionary."""
         return {
             "rgb_image": self.rgb_image,
@@ -92,14 +94,15 @@ class State:
         body_orientations: Named body orientations.
         custom: Additional state data.
     """
+
     time: float = 0.0
-    qpos: Optional[np.ndarray] = None
-    qvel: Optional[np.ndarray] = None
-    mocap_pos: Optional[np.ndarray] = None
-    mocap_quat: Optional[np.ndarray] = None
-    body_positions: Dict[str, np.ndarray] = field(default_factory=dict)
-    body_orientations: Dict[str, np.ndarray] = field(default_factory=dict)
-    custom: Dict[str, Any] = field(default_factory=dict)
+    qpos: np.ndarray | None = None
+    qvel: np.ndarray | None = None
+    mocap_pos: np.ndarray | None = None
+    mocap_quat: np.ndarray | None = None
+    body_positions: dict[str, np.ndarray] = field(default_factory=dict)
+    body_orientations: dict[str, np.ndarray] = field(default_factory=dict)
+    custom: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -113,11 +116,12 @@ class StepResult:
         truncated: Whether episode was cut short.
         info: Additional information.
     """
+
     observation: Observation
     reward: float
     terminated: bool
     truncated: bool
-    info: Dict[str, Any] = field(default_factory=dict)
+    info: dict[str, Any] = field(default_factory=dict)
 
     @property
     def done(self) -> bool:
@@ -166,7 +170,7 @@ class BaseSimulator(ABC):
         self._simulation_time = 0.0
 
     @property
-    def scene(self):
+    def scene(self) -> Any:
         """Currently loaded scene."""
         return self._scene
 
@@ -189,7 +193,7 @@ class BaseSimulator(ABC):
         pass
 
     @abstractmethod
-    def reset(self, seed: Optional[int] = None) -> Observation:
+    def reset(self, seed: int | None = None) -> Observation:
         """Reset the simulation to initial state.
 
         Args:
@@ -216,10 +220,10 @@ class BaseSimulator(ABC):
     def render(
         self,
         mode: str = "rgb_array",
-        width: Optional[int] = None,
-        height: Optional[int] = None,
-        camera_name: Optional[str] = None,
-    ) -> Optional[np.ndarray]:
+        width: int | None = None,
+        height: int | None = None,
+        camera_name: str | None = None,
+    ) -> np.ndarray | None:
         """Render the current simulation state.
 
         Args:
@@ -257,7 +261,7 @@ class BaseSimulator(ABC):
         pass
 
     @abstractmethod
-    def get_joint_states(self) -> Dict[str, Dict[str, np.ndarray]]:
+    def get_joint_states(self) -> dict[str, dict[str, np.ndarray]]:
         """Get joint positions and velocities for all robots.
 
         Returns:
@@ -281,6 +285,21 @@ class BaseSimulator(ABC):
         """
         return 0
 
+    def set_action_mode(self, mode: str) -> None:
+        """Set the action mode for the simulator.
+
+        Subclasses should override to support per-backend mode switching
+        (e.g. POSITION_CONTROL vs TORQUE_CONTROL in PyBullet).
+
+        Args:
+            mode: Action mode (e.g. 'position', 'torque').
+
+        Raises:
+            NotImplementedError: If the backend does not support mode switching.
+        """
+        raise NotImplementedError(f"Backend does not support action mode switching: {mode}")
+
+    @abstractmethod
     def _apply_action(self, action: np.ndarray) -> None:
         """Internal implementation of action application.
 
@@ -290,7 +309,7 @@ class BaseSimulator(ABC):
 
     # Optional methods with default implementations
 
-    def get_robot_state(self, robot_name: str) -> Optional[np.ndarray]:
+    def get_robot_state(self, robot_name: str) -> np.ndarray | None:
         """Get joint state for a specific robot.
 
         (TODO: implement in subclass)
@@ -303,7 +322,7 @@ class BaseSimulator(ABC):
         """
         return None
 
-    def get_end_effector_pose(self, robot_name: str) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+    def get_end_effector_pose(self, robot_name: str) -> tuple[np.ndarray, np.ndarray] | None:
         """Get end effector pose for a specific robot.
 
         (TODO: implement in subclass)
@@ -316,7 +335,7 @@ class BaseSimulator(ABC):
         """
         return None
 
-    def get_body_pose(self, body_name: str) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+    def get_body_pose(self, body_name: str) -> tuple[np.ndarray, np.ndarray] | None:
         """Get pose of a named body in the simulation.
 
         (TODO: implement in subclass)
@@ -353,7 +372,7 @@ class BaseSimulator(ABC):
         self,
         body_name: str,
         force: np.ndarray,
-        torque: Optional[np.ndarray] = None,
+        torque: np.ndarray | None = None,
     ) -> bool:
         """Apply external force to a body.
 
@@ -369,7 +388,7 @@ class BaseSimulator(ABC):
         """
         return False
 
-    def get_contact_points(self, body_name: str) -> List[Dict[str, Any]]:
+    def get_contact_points(self, body_name: str) -> list[dict[str, Any]]:
         """Get contact points for a body.
 
         (TODO: implement in subclass)
@@ -385,9 +404,9 @@ class BaseSimulator(ABC):
     def get_camera_image(
         self,
         camera_name: str,
-        width: Optional[int] = None,
-        height: Optional[int] = None,
-    ) -> Optional[np.ndarray]:
+        width: int | None = None,
+        height: int | None = None,
+    ) -> np.ndarray | None:
         """Get image from a specific camera.
 
         (TODO: implement in subclass)
@@ -422,18 +441,22 @@ class BaseSimulator(ABC):
         """Context manager entry."""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> bool:
         """Context manager exit."""
         self.close()
         return False
 
     def __del__(self):
         """Destructor to ensure cleanup."""
+        import contextlib
         import sys
+
         if sys.is_finalizing():
             return
-        try:
+        with contextlib.suppress(Exception):
             self.close()
-        except Exception:
-            # Suppress cleanup errors during interpreter shutdown
-            pass

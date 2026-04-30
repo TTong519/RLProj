@@ -4,12 +4,12 @@ This module provides functionality to load scene definitions from JSON/YAML file
 validate them against the schema, cache loaded scenes, and manage referenced assets.
 """
 
-import json
 import hashlib
+import json
 import threading
-from functools import lru_cache
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Type, TypeVar, Union
+from typing import Any, TypeVar
 
 import yaml
 from pydantic import ValidationError
@@ -26,7 +26,7 @@ T = TypeVar("T", bound=SceneDefinition)
 class SceneLoaderError(Exception):
     """Base exception for scene loader errors."""
 
-    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, message: str, details: dict[str, Any] | None = None):
         super().__init__(message)
         self.message = message
         self.details = details or {}
@@ -44,8 +44,8 @@ class SceneValidationError(SceneLoaderError):
     def __init__(
         self,
         message: str,
-        validation_errors: List[Dict[str, Any]],
-        details: Optional[Dict[str, Any]] = None,
+        validation_errors: list[dict[str, Any]],
+        details: dict[str, Any] | None = None,
     ):
         super().__init__(message, details)
         self.validation_errors = validation_errors
@@ -83,8 +83,8 @@ class SceneCache:
                 is used when the cache is full.
         """
         self.max_size = max_size
-        self._cache: Dict[str, SceneDefinition] = {}
-        self._access_order: List[str] = []
+        self._cache: dict[str, SceneDefinition] = {}
+        self._access_order: list[str] = []
         self._lock = threading.RLock()
 
     def _get_cache_key(self, file_path: Path) -> str:
@@ -100,7 +100,7 @@ class SceneCache:
         mtime = file_path.stat().st_mtime if file_path.exists() else 0
         return f"{file_path}:{mtime}"
 
-    def get(self, file_path: Union[str, Path]) -> Optional[SceneDefinition]:
+    def get(self, file_path: str | Path) -> SceneDefinition | None:
         """Get a scene from the cache.
 
         Args:
@@ -122,7 +122,7 @@ class SceneCache:
 
         return None
 
-    def put(self, file_path: Union[str, Path], scene: SceneDefinition) -> None:
+    def put(self, file_path: str | Path, scene: SceneDefinition) -> None:
         """Add a scene to the cache.
 
         Args:
@@ -151,7 +151,7 @@ class SceneCache:
             self._access_order.clear()
             logger.debug("Cache cleared")
 
-    def __contains__(self, file_path: Union[str, Path]) -> bool:
+    def __contains__(self, file_path: str | Path) -> bool:
         """Check if a scene is in the cache.
 
         Args:
@@ -181,7 +181,7 @@ class AssetManager:
     SUPPORTED_MESH_FORMATS = {".obj", ".stl", ".ply", ".gltf", ".glb", ".urdf"}
     SUPPORTED_TEXTURE_FORMATS = {".png", ".jpg", ".jpeg", ".bmp", ".tga", ".hdr"}
 
-    def __init__(self, assets_dir: Optional[Path] = None):
+    def __init__(self, assets_dir: Path | None = None):
         """Initialize the asset manager.
 
         Args:
@@ -189,10 +189,10 @@ class AssetManager:
                 be specified with absolute paths.
         """
         self.assets_dir = Path(assets_dir) if assets_dir else None
-        self._cache: Dict[str, Any] = {}
+        self._cache: dict[str, Any] = {}
         self._lock = threading.RLock()
 
-    def _resolve_asset_path(self, asset_path: Union[str, Path]) -> Path:
+    def _resolve_asset_path(self, asset_path: str | Path) -> Path:
         """Resolve an asset path to an absolute path.
 
         Args:
@@ -238,7 +238,7 @@ class AssetManager:
                 hasher.update(chunk)
         return hasher.hexdigest()
 
-    def asset_exists(self, asset_path: Union[str, Path]) -> bool:
+    def asset_exists(self, asset_path: str | Path) -> bool:
         """Check if an asset file exists.
 
         Args:
@@ -255,8 +255,8 @@ class AssetManager:
 
     def load_asset(
         self,
-        asset_path: Union[str, Path],
-        loader: Optional[Callable[[Path], Any]] = None,
+        asset_path: str | Path,
+        loader: Callable[[Path], Any] | None = None,
     ) -> Any:
         """Load an asset file with caching.
 
@@ -286,7 +286,7 @@ class AssetManager:
                 raise AssetLoadError(
                     f"Failed to load asset: {asset_path}",
                     details={"asset_path": str(asset_path), "error": str(e)},
-                )
+                ) from e
         else:
             asset = resolved_path
 
@@ -296,7 +296,7 @@ class AssetManager:
 
         return asset
 
-    def load_mesh(self, mesh_path: Union[str, Path]) -> Path:
+    def load_mesh(self, mesh_path: str | Path) -> Path:
         """Load a mesh file.
 
         Args:
@@ -320,7 +320,7 @@ class AssetManager:
 
         return self.load_asset(mesh_path)
 
-    def load_texture(self, texture_path: Union[str, Path]) -> Path:
+    def load_texture(self, texture_path: str | Path) -> Path:
         """Load a texture file.
 
         Args:
@@ -344,7 +344,7 @@ class AssetManager:
 
         return self.load_asset(texture_path)
 
-    def validate_scene_assets(self, scene: SceneDefinition) -> List[str]:
+    def validate_scene_assets(self, scene: SceneDefinition) -> list[str]:
         """Validate that all assets referenced in a scene exist.
 
         Args:
@@ -357,27 +357,31 @@ class AssetManager:
 
         # Check robot URDF paths
         for robot in scene.robots:
-            if robot.urdf_path:
-                if not self.asset_exists(robot.urdf_path):
-                    missing_assets.append(f"Robot URDF: {robot.urdf_path}")
+            if robot.urdf_path and not self.asset_exists(robot.urdf_path):
+                missing_assets.append(f"Robot URDF: {robot.urdf_path}")
 
         # Check tissue mesh paths
         for tissue in scene.tissues:
-            if tissue.geometry.mesh and tissue.geometry.mesh.path:
-                if not self.asset_exists(tissue.geometry.mesh.path):
-                    missing_assets.append(f"Tissue mesh: {tissue.geometry.mesh.path}")
+            if (
+                tissue.geometry.mesh
+                and tissue.geometry.mesh.path
+                and not self.asset_exists(tissue.geometry.mesh.path)
+            ):
+                missing_assets.append(f"Tissue mesh: {tissue.geometry.mesh.path}")
 
         # Check instrument mesh paths
         for instrument in scene.instruments:
-            if instrument.mesh and instrument.mesh.path:
-                if not self.asset_exists(instrument.mesh.path):
-                    missing_assets.append(f"Instrument mesh: {instrument.mesh.path}")
+            if (
+                instrument.mesh
+                and instrument.mesh.path
+                and not self.asset_exists(instrument.mesh.path)
+            ):
+                missing_assets.append(f"Instrument mesh: {instrument.mesh.path}")
 
         # Check additional assets
         for name, asset in scene.assets.items():
-            if asset.path:
-                if not self.asset_exists(asset.path):
-                    missing_assets.append(f"Asset '{name}': {asset.path}")
+            if asset.path and not self.asset_exists(asset.path):
+                missing_assets.append(f"Asset '{name}': {asset.path}")
 
         return missing_assets
 
@@ -401,7 +405,7 @@ class SceneLoader:
 
     def __init__(
         self,
-        assets_dir: Optional[Union[str, Path]] = None,
+        assets_dir: str | Path | None = None,
         cache_size: int = 100,
         validate_assets: bool = True,
     ):
@@ -441,9 +445,9 @@ class SceneLoader:
             raise SceneParseError(
                 f"Failed to read file: {file_path}",
                 details={"file_path": str(file_path), "error": str(e)},
-            )
+            ) from e
 
-    def _parse_json(self, content: str, file_path: Path) -> Dict[str, Any]:
+    def _parse_json(self, content: str, file_path: Path) -> dict[str, Any]:
         """Parse JSON content.
 
         Args:
@@ -461,10 +465,15 @@ class SceneLoader:
         except json.JSONDecodeError as e:
             raise SceneParseError(
                 f"Invalid JSON in file: {file_path}",
-                details={"file_path": str(file_path), "line": e.lineno, "column": e.colno, "error": str(e)},
-            )
+                details={
+                    "file_path": str(file_path),
+                    "line": e.lineno,
+                    "column": e.colno,
+                    "error": str(e),
+                },
+            ) from e
 
-    def _parse_yaml(self, content: str, file_path: Path) -> Dict[str, Any]:
+    def _parse_yaml(self, content: str, file_path: Path) -> dict[str, Any]:
         """Parse YAML content.
 
         Args:
@@ -483,9 +492,9 @@ class SceneLoader:
             raise SceneParseError(
                 f"Invalid YAML in file: {file_path}",
                 details={"file_path": str(file_path), "error": str(e)},
-            )
+            ) from e
 
-    def _format_validation_errors(self, error: ValidationError) -> List[Dict[str, Any]]:
+    def _format_validation_errors(self, error: ValidationError) -> list[dict[str, Any]]:
         """Format Pydantic validation errors for user-friendly display.
 
         Args:
@@ -497,12 +506,14 @@ class SceneLoader:
         errors = []
         for err in error.errors():
             location = ".".join(str(loc) for loc in err["loc"])
-            errors.append({
-                "location": location,
-                "message": err["msg"],
-                "type": err["type"],
-                "input": str(err.get("input", ""))[:100],  # Truncate for display
-            })
+            errors.append(
+                {
+                    "location": location,
+                    "message": err["msg"],
+                    "type": err["type"],
+                    "input": str(err.get("input", ""))[:100],  # Truncate for display
+                }
+            )
         return errors
 
     def _get_file_format(self, file_path: Path) -> str:
@@ -525,12 +536,15 @@ class SceneLoader:
         else:
             raise SceneParseError(
                 f"Unsupported file format: {suffix}",
-                details={"file_path": str(file_path), "supported_formats": [".json", ".yaml", ".yml"]},
+                details={
+                    "file_path": str(file_path),
+                    "supported_formats": [".json", ".yaml", ".yml"],
+                },
             )
 
     def load(
         self,
-        file_path: Union[str, Path],
+        file_path: str | Path,
         use_cache: bool = True,
         validate: bool = True,
     ) -> SceneDefinition:
@@ -577,7 +591,7 @@ class SceneLoader:
                 f"Scene validation failed: {file_path}",
                 validation_errors=formatted_errors,
                 details={"file_path": str(file_path)},
-            )
+            ) from e
 
         # Validate assets if enabled
         if validate and self.validate_assets:
@@ -632,13 +646,13 @@ class SceneLoader:
             raise SceneValidationError(
                 "Scene validation failed",
                 validation_errors=formatted_errors,
-            )
+            ) from e
 
         return scene
 
     def load_from_dict(
         self,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         validate: bool = True,
     ) -> SceneDefinition:
         """Load a scene from a dictionary.
@@ -660,15 +674,15 @@ class SceneLoader:
             raise SceneValidationError(
                 "Scene validation failed",
                 validation_errors=formatted_errors,
-            )
+            ) from e
 
         return scene
 
     def save(
         self,
         scene: SceneDefinition,
-        file_path: Union[str, Path],
-        format: Optional[str] = None,
+        file_path: str | Path,
+        format: str | None = None,
     ) -> None:
         """Save a scene to a file.
 
@@ -695,6 +709,7 @@ class SceneLoader:
             # Convert tuples to lists for YAML serialization
             def convert_tuples(obj):
                 from enum import Enum
+
                 if isinstance(obj, Enum):
                     return obj.value
                 if isinstance(obj, tuple):
@@ -716,7 +731,7 @@ class SceneLoader:
         self.cache.clear()
         self.asset_manager.clear_cache()
 
-    def list_scenes(self, directory: Union[str, Path]) -> List[Path]:
+    def list_scenes(self, directory: str | Path) -> list[Path]:
         """List all scene files in a directory.
 
         Args:
@@ -737,9 +752,9 @@ class SceneLoader:
 
     def load_directory(
         self,
-        directory: Union[str, Path],
+        directory: str | Path,
         pattern: str = "*",
-    ) -> Dict[str, SceneDefinition]:
+    ) -> dict[str, SceneDefinition]:
         """Load all scenes from a directory.
 
         Args:
@@ -768,11 +783,11 @@ class SceneLoader:
 
 
 # Global loader instance
-_loader: Optional[SceneLoader] = None
+_loader: SceneLoader | None = None
 
 
 def get_loader(
-    assets_dir: Optional[Union[str, Path]] = None,
+    assets_dir: str | Path | None = None,
     cache_size: int = 100,
     validate_assets: bool = True,
 ) -> SceneLoader:
@@ -804,8 +819,9 @@ def reset_loader() -> None:
 
 # Convenience functions
 
+
 def load_scene(
-    file_path: Union[str, Path],
+    file_path: str | Path,
     use_cache: bool = True,
     validate: bool = True,
 ) -> SceneDefinition:
@@ -824,8 +840,8 @@ def load_scene(
 
 def save_scene(
     scene: SceneDefinition,
-    file_path: Union[str, Path],
-    format: Optional[str] = None,
+    file_path: str | Path,
+    format: str | None = None,
 ) -> None:
     """Save a scene to a file using the global loader.
 
@@ -840,13 +856,13 @@ def save_scene(
 # Convenience function for validation
 def validate_scene(scene: SceneDefinition) -> bool:
     """Validate a scene definition.
-    
+
     Args:
         scene: Scene definition to validate
-        
+
     Returns:
         True if scene is valid
-        
+
     Raises:
         SceneValidationError: If scene is invalid
     """
@@ -855,19 +871,19 @@ def validate_scene(scene: SceneDefinition) -> bool:
         # This function exists for API consistency
         if not isinstance(scene, SceneDefinition):
             raise SceneValidationError(f"Expected SceneDefinition, got {type(scene)}")
-        
+
         # Check required fields
         if not scene.metadata:
             raise SceneValidationError("Scene must have metadata")
-        
+
         if not scene.physics:
             raise SceneValidationError("Scene must have physics configuration")
-        
+
         # Validate using Pydantic's built-in validation
         # (already done during construction, but explicit check)
         _ = scene.model_dump()
-        
+
         return True
-        
+
     except Exception as e:
         raise SceneValidationError(f"Scene validation failed: {str(e)}") from e

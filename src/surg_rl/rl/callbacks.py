@@ -6,7 +6,7 @@ controlling the RL training process.
 
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback
@@ -44,8 +44,8 @@ class TrainingProgressCallback(BaseCallback):
         self.log_interval = log_interval
         self.reward_window = reward_window
         self._step = 0
-        self._episode_rewards: List[float] = []
-        self._episode_lengths: List[int] = []
+        self._episode_rewards: list[float] = []
+        self._episode_lengths: list[int] = []
         self._start_time = time.time()
 
     def _on_step(self) -> bool:
@@ -76,8 +76,8 @@ class TrainingProgressCallback(BaseCallback):
         if not self._episode_rewards:
             return
 
-        recent_rewards = self._episode_rewards[-self.reward_window:]
-        recent_lengths = self._episode_lengths[-self.reward_window:]
+        recent_rewards = self._episode_rewards[-self.reward_window :]
+        recent_lengths = self._episode_lengths[-self.reward_window :]
 
         elapsed = time.time() - self._start_time
         fps = self._step / elapsed if elapsed > 0 else 0
@@ -93,7 +93,7 @@ class TrainingProgressCallback(BaseCallback):
             f"FPS: {fps:.0f}"
         )
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get current training statistics.
 
         Returns:
@@ -102,8 +102,8 @@ class TrainingProgressCallback(BaseCallback):
         if not self._episode_rewards:
             return {"step": self._step, "episodes": 0}
 
-        recent_rewards = self._episode_rewards[-self.reward_window:]
-        recent_lengths = self._episode_lengths[-self.reward_window:]
+        recent_rewards = self._episode_rewards[-self.reward_window :]
+        recent_lengths = self._episode_lengths[-self.reward_window :]
 
         return {
             "step": self._step,
@@ -113,9 +113,7 @@ class TrainingProgressCallback(BaseCallback):
             "max_reward": float(np.max(recent_rewards)),
             "min_reward": float(np.min(recent_rewards)),
             "mean_length": float(np.mean(recent_lengths)),
-            "fps": self._step / (time.time() - self._start_time)
-            if self._start_time
-            else 0,
+            "fps": self._step / (time.time() - self._start_time) if self._start_time else 0,
         }
 
 
@@ -281,7 +279,7 @@ class EvaluationCallback(BaseCallback):
         self.n_eval_episodes = n_eval_episodes
         self.deterministic = deterministic
         self._last_eval_step = 0
-        self._eval_results: List[Dict[str, Any]] = []
+        self._eval_results: list[dict[str, Any]] = []
 
     def _on_step(self) -> bool:
         """Called by SB3 during each training step."""
@@ -341,7 +339,7 @@ class EvaluationCallback(BaseCallback):
                 f"mean_length={results['mean_length']:.0f}"
             )
 
-    def get_results(self) -> List[Dict[str, Any]]:
+    def get_results(self) -> list[dict[str, Any]]:
         """Get all evaluation results.
 
         Returns:
@@ -381,9 +379,9 @@ class TensorBoardCallback(BaseCallback):
         super().__init__(verbose)
         self.controller = controller
         self.log_interval = log_interval
-        self._episode_rewards: List[float] = []
-        self._episode_lengths: List[int] = []
-        self._start_time: Optional[float] = None
+        self._episode_rewards: list[float] = []
+        self._episode_lengths: list[int] = []
+        self._start_time: float | None = None
         self._last_log_step = 0
 
     def _on_training_start(self) -> None:

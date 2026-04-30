@@ -5,8 +5,7 @@ training scenes from natural language descriptions.
 """
 
 import json
-from typing import Any, Dict, Optional
-
+from typing import Any
 
 SYSTEM_PROMPT = """You are an expert surgical robotics simulation designer. Your task is to create detailed scene definitions for surgical training simulations in JSON format.
 
@@ -55,7 +54,7 @@ Respond ONLY with the JSON object, no additional text."""
 
 def get_scene_generation_prompt(
     description: str,
-    schema_example: Optional[Dict[str, Any]] = None,
+    schema_example: dict[str, Any] | None = None,
 ) -> str:
     """Generate a prompt for scene generation.
 
@@ -76,7 +75,7 @@ def get_scene_generation_prompt(
 
 
 def get_scene_modification_prompt(
-    current_scene: Dict[str, Any],
+    current_scene: dict[str, Any],
     instructions: str,
 ) -> str:
     """Generate a prompt for scene modification.
@@ -94,7 +93,7 @@ def get_scene_modification_prompt(
     )
 
 
-def _get_minimal_schema_example() -> Dict[str, Any]:
+def _get_minimal_schema_example() -> dict[str, Any]:
     """Get a minimal schema example for prompts.
 
     Returns:

@@ -6,7 +6,7 @@ providing a consistent API for parsing various input types into scene definition
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 from surg_rl.scene_definition import SceneDefinition
 
@@ -25,9 +25,9 @@ class BaseParser(ABC):
 
     def __init__(
         self,
-        provider: Optional[str] = None,
-        model: Optional[str] = None,
-        api_key: Optional[str] = None,
+        provider: str | None = None,
+        model: str | None = None,
+        api_key: str | None = None,
     ):
         """Initialize the base parser.
 
@@ -43,7 +43,7 @@ class BaseParser(ABC):
     @abstractmethod
     async def parse(
         self,
-        input_data: Union[str, Path, bytes],
+        input_data: str | Path | bytes,
         **kwargs: Any,
     ) -> SceneDefinition:
         """Parse input and return a scene definition.
@@ -64,8 +64,8 @@ class BaseParser(ABC):
     @abstractmethod
     async def parse_with_context(
         self,
-        input_data: Union[str, Path, bytes],
-        context: Optional[SceneDefinition] = None,
+        input_data: str | Path | bytes,
+        context: SceneDefinition | None = None,
         **kwargs: Any,
     ) -> SceneDefinition:
         """Parse input with optional context scene.
@@ -84,7 +84,7 @@ class BaseParser(ABC):
         pass
 
     @staticmethod
-    def validate_scene(scene_data: Dict[str, Any]) -> SceneDefinition:
+    def validate_scene(scene_data: dict[str, Any]) -> SceneDefinition:
         """Validate and create a SceneDefinition from dictionary data.
 
         Args:
@@ -100,8 +100,8 @@ class BaseParser(ABC):
 
     @staticmethod
     def _resolve_input(
-        input_data: Union[str, Path, bytes],
-    ) -> Union[str, bytes]:
+        input_data: str | Path | bytes,
+    ) -> str | bytes:
         """Resolve input data to either string (text) or bytes (image).
 
         Args:
@@ -131,8 +131,8 @@ class BaseParser(ABC):
 
     def _get_context_json(
         self,
-        context: Optional[SceneDefinition] = None,
-    ) -> Optional[str]:
+        context: SceneDefinition | None = None,
+    ) -> str | None:
         """Convert context scene to JSON string for LLM prompts.
 
         Args:
@@ -149,7 +149,7 @@ class BaseParser(ABC):
 class ParserError(Exception):
     """Exception raised when scene parsing fails."""
 
-    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, message: str, details: dict[str, Any] | None = None):
         """Initialize parser error.
 
         Args:

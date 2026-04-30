@@ -1,11 +1,9 @@
 """Tests for action–simulator DOF reconciliation (Phase 1)."""
-from pathlib import Path
+
 from typing import Any
 
 import numpy as np
-import pytest
 
-from surg_rl.rl.action import ActionBuilder, ActionConfig, ActionType
 from surg_rl.scene_definition.schema import SceneDefinition
 from surg_rl.simulators.mujoco_simulator import MuJoCoSimulator
 from surg_rl.simulators.pybullet_simulator import PyBulletSimulator
@@ -13,17 +11,21 @@ from surg_rl.simulators.pybullet_simulator import PyBulletSimulator
 
 def _minimal_scene(num_joints: int = 3) -> SceneDefinition:
     """Build a minimal schema-compliant scene with a single robot having N revolute joints."""
-    joints = [
-        {
-            "name": f"joint_{i}",
-            "type": "revolute",
-            "limits": {"lower": -1.0, "upper": 1.0},
-            "initial_position": 0.0,
-            "damping": 0.1,
-            "friction": 0.0,
-        }
-        for i in range(num_joints)
-    ] if num_joints > 0 else []
+    joints = (
+        [
+            {
+                "name": f"joint_{i}",
+                "type": "revolute",
+                "limits": {"lower": -1.0, "upper": 1.0},
+                "initial_position": 0.0,
+                "damping": 0.1,
+                "friction": 0.0,
+            }
+            for i in range(num_joints)
+        ]
+        if num_joints > 0
+        else []
+    )
     data: dict[str, Any] = {
         "metadata": {"name": "test_scene", "version": "1.0"},
         "robots": [
@@ -113,6 +115,7 @@ class TestEnvironmentActionConfig:
 
     def test_default_action_config_uses_simulator_dof_count(self) -> None:
         from surg_rl.rl.environment import SurgicalEnv, SurgicalEnvConfig
+
         scene = _minimal_scene(num_joints=5)
         env = SurgicalEnv(
             config=SurgicalEnvConfig(
@@ -126,6 +129,7 @@ class TestEnvironmentActionConfig:
 
     def test_action_space_size_matches_num_controls(self) -> None:
         from surg_rl.rl.environment import SurgicalEnv, SurgicalEnvConfig
+
         scene = _minimal_scene(num_joints=4)
         env = SurgicalEnv(
             config=SurgicalEnvConfig(
@@ -135,4 +139,3 @@ class TestEnvironmentActionConfig:
             )
         )
         assert env.action_space.shape[0] == 4
-

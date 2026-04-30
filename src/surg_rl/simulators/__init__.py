@@ -7,13 +7,13 @@ with automatic primitive fallbacks for missing asset files.
 from .base_simulator import (
     BaseSimulator,
     Observation,
+    SimulationStatus,
     State,
     StepResult,
-    SimulationStatus,
 )
 from .mujoco_simulator import MuJoCoSimulator
 from .pybullet_simulator import PyBulletSimulator
-from .scene_builder import SceneBuilder, AssetMissingError
+from .scene_builder import AssetMissingError, SceneBuilder
 
 __all__ = [
     # Base classes

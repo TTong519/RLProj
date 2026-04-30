@@ -89,9 +89,7 @@ class SceneComposer:
             total = len(inputs)
         else:
             total = len(text_inputs or []) + len(image_inputs or [])
-        logger.info(
-            f"Composing scene with {total} inputs"
-        )
+        logger.info(f"Composing scene with {total} inputs")
 
         if merge_strategy == "sequential":
             return await self._compose_sequential(
@@ -110,8 +108,7 @@ class SceneComposer:
             )
         else:
             raise ValueError(
-                f"Unknown merge strategy: {merge_strategy}. "
-                "Supported: 'sequential', 'parallel'"
+                f"Unknown merge strategy: {merge_strategy}. " "Supported: 'sequential', 'parallel'"
             )
 
     async def _compose_sequential(
@@ -230,16 +227,13 @@ class SceneComposer:
             if exceptions:
                 if not scenes:
                     # All tasks failed — raise composite error
-                    messages = "; ".join(
-                        f"{type(e).__name__}: {e}" for e in exceptions
-                    )
+                    messages = "; ".join(f"{type(e).__name__}: {e}" for e in exceptions)
                     raise ParserError(
                         f"All parallel composition tasks failed ({len(exceptions)}): {messages}",
                         details={
                             "task_count": len(tasks),
                             "failures": [
-                                {"type": type(e).__name__, "message": str(e)}
-                                for e in exceptions
+                                {"type": type(e).__name__, "message": str(e)} for e in exceptions
                             ],
                         },
                     )
@@ -325,8 +319,8 @@ class SceneComposer:
             merged_data["physics"] = {**merged_physics, **scene2_physics}
             # Concatenate materials lists instead of overwriting
             if merged_physics.get("materials") and scene2_physics.get("materials"):
-                merged_data["physics"]["materials"] = (
-                    list(merged_physics["materials"]) + list(scene2_physics["materials"])
+                merged_data["physics"]["materials"] = list(merged_physics["materials"]) + list(
+                    scene2_physics["materials"]
                 )
         elif scene2.physics is not None:
             merged_data["physics"] = scene2_data["physics"]

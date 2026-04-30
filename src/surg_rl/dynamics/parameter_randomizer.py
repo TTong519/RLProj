@@ -4,20 +4,17 @@ This module provides randomization utilities for physics, visual, and
 dynamics parameters in surgical robotics simulations.
 """
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Union
 import logging
-import numpy as np
 import weakref
+from dataclasses import dataclass
+from typing import Any
 
-logger = logging.getLogger(__name__)
+import numpy as np
 
 from surg_rl.scene_definition.schema import (
     DomainRandomizationConfig,
-    PhysicsRandomization,
-    VisualRandomization,
-    DynamicsRandomization,
 )
+
 from .base_controller import (
     BaseController,
     ControllerConfig,
@@ -25,56 +22,61 @@ from .base_controller import (
     ParameterSnapshot,
 )
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class PhysicsParameterBounds:
     """Default bounds for physics parameters."""
-    mass_ratio: Tuple[float, float] = (0.8, 1.2)
-    friction: Tuple[float, float] = (0.3, 0.8)
-    damping: Tuple[float, float] = (0.05, 0.3)
-    stiffness: Tuple[float, float] = (500.0, 2000.0)
-    gravity_x: Tuple[float, float] = (-0.5, 0.5)
-    gravity_y: Tuple[float, float] = (-0.5, 0.5)
-    gravity_z: Tuple[float, float] = (-10.0, -9.0)
+
+    mass_ratio: tuple[float, float] = (0.8, 1.2)
+    friction: tuple[float, float] = (0.3, 0.8)
+    damping: tuple[float, float] = (0.05, 0.3)
+    stiffness: tuple[float, float] = (500.0, 2000.0)
+    gravity_x: tuple[float, float] = (-0.5, 0.5)
+    gravity_y: tuple[float, float] = (-0.5, 0.5)
+    gravity_z: tuple[float, float] = (-10.0, -9.0)
 
 
 @dataclass
 class VisualParameterBounds:
     """Default bounds for visual parameters."""
-    color_variation: Tuple[float, float] = (-0.1, 0.1)
-    lighting_intensity: Tuple[float, float] = (0.5, 1.5)
-    camera_position_noise: Tuple[float, float] = (-0.01, 0.01)
-    camera_orientation_noise: Tuple[float, float] = (-0.01, 0.01)
+
+    color_variation: tuple[float, float] = (-0.1, 0.1)
+    lighting_intensity: tuple[float, float] = (0.5, 1.5)
+    camera_position_noise: tuple[float, float] = (-0.01, 0.01)
+    camera_orientation_noise: tuple[float, float] = (-0.01, 0.01)
 
 
 @dataclass
 class DynamicsParameterBounds:
     """Default bounds for dynamics parameters."""
-    joint_noise: Tuple[float, float] = (-0.01, 0.01)
-    action_noise: Tuple[float, float] = (-0.05, 0.05)
-    delay_range: Tuple[float, float] = (0.0, 0.05)
+
+    joint_noise: tuple[float, float] = (-0.01, 0.01)
+    action_noise: tuple[float, float] = (-0.05, 0.05)
+    delay_range: tuple[float, float] = (0.0, 0.05)
 
 
 class ParameterRandomizer(BaseController):
     """Domain randomization controller for physics, visual, and dynamics parameters.
-    
+
     This controller randomizes environment parameters at the start of each episode
     or during simulation steps, supporting domain randomization for RL training.
-    
+
     The randomization is configured via DomainRandomizationConfig from the
     scene definition, allowing per-scene customization.
     """
 
     def __init__(
         self,
-        config: Optional[ControllerConfig] = None,
-        domain_config: Optional[DomainRandomizationConfig] = None,
-        physics_bounds: Optional[PhysicsParameterBounds] = None,
-        visual_bounds: Optional[VisualParameterBounds] = None,
-        dynamics_bounds: Optional[DynamicsParameterBounds] = None,
+        config: ControllerConfig | None = None,
+        domain_config: DomainRandomizationConfig | None = None,
+        physics_bounds: PhysicsParameterBounds | None = None,
+        visual_bounds: VisualParameterBounds | None = None,
+        dynamics_bounds: DynamicsParameterBounds | None = None,
     ):
         """Initialize the parameter randomizer.
-        
+
         Args:
             config: Controller configuration.
             domain_config: Domain randomization config from scene.
@@ -87,11 +89,11 @@ class ParameterRandomizer(BaseController):
         self.physics_bounds = physics_bounds or PhysicsParameterBounds()
         self.visual_bounds = visual_bounds or VisualParameterBounds()
         self.dynamics_bounds = dynamics_bounds or DynamicsParameterBounds()
-        
+
         # Override seed from domain config if set
         if self.domain_config.seed is not None:
             self._rng = np.random.default_rng(self.domain_config.seed)
-        
+
         # Build parameter bounds for sampling
         self._build_parameter_bounds()
 
@@ -101,7 +103,7 @@ class ParameterRandomizer(BaseController):
     def _build_parameter_bounds(self) -> None:
         """Build parameter bounds from configuration."""
         self.parameter_bounds = {}
-        
+
         # Physics parameters
         phys = self.domain_config.physics
         if phys.enabled:
@@ -134,7 +136,7 @@ class ParameterRandomizer(BaseController):
                     default=1000.0,
                     distribution="log_uniform",
                 )
-        
+
         # Visual parameters
         vis = self.domain_config.visual
         if vis.enabled:
@@ -152,7 +154,7 @@ class ParameterRandomizer(BaseController):
                     max_value=vis.lighting_variation[1],
                     default=1.0,
                 )
-        
+
         # Dynamics parameters
         dyn = self.domain_config.dynamics
         if dyn.enabled:
@@ -180,14 +182,14 @@ class ParameterRandomizer(BaseController):
 
     def sample_parameters(self) -> ParameterSnapshot:
         """Sample randomized parameters.
-        
+
         Returns:
             Snapshot of randomized parameters.
         """
         physics_params = {}
         visual_params = {}
         dynamics_params = {}
-        
+
         # Sample physics parameters
         phys = self.domain_config.physics
         if phys.enabled:
@@ -196,18 +198,12 @@ class ParameterRandomizer(BaseController):
                     self.parameter_bounds["mass_ratio"]
                 )
             if "friction" in self.parameter_bounds:
-                physics_params["friction"] = self._sample_value(
-                    self.parameter_bounds["friction"]
-                )
+                physics_params["friction"] = self._sample_value(self.parameter_bounds["friction"])
             if "damping" in self.parameter_bounds:
-                physics_params["damping"] = self._sample_value(
-                    self.parameter_bounds["damping"]
-                )
+                physics_params["damping"] = self._sample_value(self.parameter_bounds["damping"])
             if "stiffness" in self.parameter_bounds:
-                physics_params["stiffness"] = self._sample_value(
-                    self.parameter_bounds["stiffness"]
-                )
-            
+                physics_params["stiffness"] = self._sample_value(self.parameter_bounds["stiffness"])
+
             # Handle gravity randomization
             if phys.gravity_range:
                 physics_params["gravity_x"] = self._rng.uniform(
@@ -222,11 +218,11 @@ class ParameterRandomizer(BaseController):
                     phys.gravity_range[2][0],
                     phys.gravity_range[2][1],
                 )
-        
+
         # Sample visual parameters
         vis = self.domain_config.visual
         if vis.enabled:
-            if "color_variation" in self.parameter_bounds:
+            if "color_variation" in self.parameter_bounds and vis.color_range is not None:
                 visual_params["color_r_offset"] = self._rng.uniform(
                     vis.color_range[0], vis.color_range[1]
                 )
@@ -236,12 +232,12 @@ class ParameterRandomizer(BaseController):
                 visual_params["color_b_offset"] = self._rng.uniform(
                     vis.color_range[0], vis.color_range[1]
                 )
-            
+
             if "lighting_intensity" in self.parameter_bounds:
                 visual_params["lighting_intensity"] = self._sample_value(
                     self.parameter_bounds["lighting_intensity"]
                 )
-            
+
             if vis.camera_pose_noise:
                 visual_params["camera_pos_noise"] = self._rng.uniform(
                     -vis.camera_pose_noise[0], vis.camera_pose_noise[0]
@@ -249,7 +245,7 @@ class ParameterRandomizer(BaseController):
                 visual_params["camera_rot_noise"] = self._rng.uniform(
                     -vis.camera_pose_noise[1], vis.camera_pose_noise[1]
                 )
-        
+
         # Sample dynamics parameters
         dyn = self.domain_config.dynamics
         if dyn.enabled:
@@ -262,10 +258,8 @@ class ParameterRandomizer(BaseController):
                     self.parameter_bounds["action_noise"]
                 )
             if "delay" in self.parameter_bounds:
-                dynamics_params["delay"] = self._sample_value(
-                    self.parameter_bounds["delay"]
-                )
-        
+                dynamics_params["delay"] = self._sample_value(self.parameter_bounds["delay"])
+
         return ParameterSnapshot(
             physics=physics_params,
             visual=visual_params,
@@ -291,9 +285,6 @@ class ParameterRandomizer(BaseController):
             True if successful, False otherwise.
         """
         try:
-            # Apply physics parameters based on simulator type
-            sim_type = type(simulator).__name__
-
             # Apply gravity changes
             if any(k.startswith("gravity_") for k in snapshot.physics):
                 gravity = [
@@ -305,27 +296,19 @@ class ParameterRandomizer(BaseController):
 
             # Apply mass scaling
             if "mass_ratio" in snapshot.physics:
-                self._apply_mass_scaling(
-                    simulator, snapshot.physics["mass_ratio"]
-                )
+                self._apply_mass_scaling(simulator, snapshot.physics["mass_ratio"])
 
             # Apply friction
             if "friction" in snapshot.physics:
-                self._apply_friction(
-                    simulator, snapshot.physics["friction"]
-                )
+                self._apply_friction(simulator, snapshot.physics["friction"])
 
             # Apply damping
             if "damping" in snapshot.physics:
-                self._apply_damping(
-                    simulator, snapshot.physics["damping"]
-                )
+                self._apply_damping(simulator, snapshot.physics["damping"])
 
             # Apply stiffness (soft body parameters)
             if "stiffness" in snapshot.physics:
-                self._apply_stiffness(
-                    simulator, snapshot.physics["stiffness"]
-                )
+                self._apply_stiffness(simulator, snapshot.physics["stiffness"])
 
             # Apply visual parameters
             if snapshot.visual:
@@ -336,25 +319,32 @@ class ParameterRandomizer(BaseController):
         except Exception as e:
             # Log error and return False
             import warnings
-            warnings.warn(f"Failed to apply parameters: {e}")
+
+            warnings.warn(f"Failed to apply parameters: {e}", stacklevel=2)
             return False
 
-    def _apply_gravity(self, simulator: Any, gravity: List[float]) -> None:
+    def _apply_gravity(self, simulator: Any, gravity: list[float]) -> None:
         """Apply gravity vector to simulator.
-        
+
         Args:
             simulator: Simulator instance.
             gravity: Gravity vector [x, y, z].
         """
         try:
             # MuJoCo
-            if hasattr(simulator, "_model") and simulator._model is not None and hasattr(simulator._model, "opt"):
+            if (
+                hasattr(simulator, "_model")
+                and simulator._model is not None
+                and hasattr(simulator._model, "opt")
+            ):
                 simulator._model.opt.gravity[:] = gravity
             # PyBullet
             elif hasattr(simulator, "_physics_client"):
                 import pybullet as p
-                p.setGravity(gravity[0], gravity[1], gravity[2],
-                            physicsClientId=simulator._physics_client)
+
+                p.setGravity(
+                    gravity[0], gravity[1], gravity[2], physicsClientId=simulator._physics_client
+                )
         except Exception as e:
             logger.warning(f"Failed to apply gravity: {e}")
 
@@ -405,6 +395,7 @@ class ParameterRandomizer(BaseController):
             # PyBullet
             elif hasattr(simulator, "_physics_client") and hasattr(simulator, "_body_ids"):
                 import pybullet as p
+
                 for body_id in simulator._body_ids.values():
                     baseline_key = f"mass_{body_id}"
                     baseline = self._get_baseline(simulator, baseline_key)
@@ -415,7 +406,9 @@ class ParameterRandomizer(BaseController):
                         baseline = dynamics[0]
                         self._set_baseline(simulator, baseline_key, baseline)
                     p.changeDynamics(
-                        body_id, -1, mass=baseline * ratio,
+                        body_id,
+                        -1,
+                        mass=baseline * ratio,
                         physicsClientId=simulator._physics_client,
                     )
         except Exception as e:
@@ -438,9 +431,12 @@ class ParameterRandomizer(BaseController):
             # PyBullet
             elif hasattr(simulator, "_physics_client") and hasattr(simulator, "_body_ids"):
                 import pybullet as p
+
                 for body_id in simulator._body_ids.values():
                     p.changeDynamics(
-                        body_id, -1, lateralFriction=friction,
+                        body_id,
+                        -1,
+                        lateralFriction=friction,
                         physicsClientId=simulator._physics_client,
                     )
         except Exception as e:
@@ -462,9 +458,11 @@ class ParameterRandomizer(BaseController):
             # PyBullet
             elif hasattr(simulator, "_physics_client") and hasattr(simulator, "_body_ids"):
                 import pybullet as p
+
                 for body_id in simulator._body_ids.values():
                     p.changeDynamics(
-                        body_id, -1,
+                        body_id,
+                        -1,
                         linearDamping=damping,
                         angularDamping=damping,
                         physicsClientId=simulator._physics_client,
@@ -491,9 +489,7 @@ class ParameterRandomizer(BaseController):
         except Exception as e:
             logger.warning(f"Failed to apply stiffness: {e}")
 
-    def _apply_visual_parameters(
-        self, simulator: Any, params: Dict[str, float]
-    ) -> None:
+    def _apply_visual_parameters(self, simulator: Any, params: dict[str, float]) -> None:
         """Apply visual randomization parameters to simulator.
 
         Args:
@@ -514,25 +510,24 @@ class ParameterRandomizer(BaseController):
                     if baseline is None:
                         baseline = model.geom_rgba.copy()
                         self._set_baseline(simulator, "geom_rgba", baseline)
-                    model.geom_rgba[:, 0] = np.clip(
-                        baseline[:, 0] + r_offset, 0.0, 1.0
-                    )
-                    model.geom_rgba[:, 1] = np.clip(
-                        baseline[:, 1] + g_offset, 0.0, 1.0
-                    )
-                    model.geom_rgba[:, 2] = np.clip(
-                        baseline[:, 2] + b_offset, 0.0, 1.0
-                    )
-                if lighting is not None and hasattr(model, "vis"):
-                    # Scale headlight intensity
-                    if hasattr(model.vis, "headlight"):
-                        model.vis.headlight[:] = [
-                            0.1 * lighting, 0.15 * lighting, 0.3 * lighting
-                        ]
+                    model.geom_rgba[:, 0] = np.clip(baseline[:, 0] + r_offset, 0.0, 1.0)
+                    model.geom_rgba[:, 1] = np.clip(baseline[:, 1] + g_offset, 0.0, 1.0)
+                    model.geom_rgba[:, 2] = np.clip(baseline[:, 2] + b_offset, 0.0, 1.0)
+                if (
+                    lighting is not None
+                    and hasattr(model, "vis")
+                    and hasattr(model.vis, "headlight")
+                ):
+                    model.vis.headlight[:] = [
+                        0.1 * lighting,
+                        0.15 * lighting,
+                        0.3 * lighting,
+                    ]
 
             # PyBullet
             elif hasattr(simulator, "_physics_client") and hasattr(simulator, "_body_ids"):
                 import pybullet as p
+
                 for body_id in simulator._body_ids.values():
                     # Read current visual shape data to get actual base color
                     base_r = base_g = base_b = 0.5
@@ -553,7 +548,8 @@ class ParameterRandomizer(BaseController):
                     except Exception:
                         pass
                     p.changeVisualShape(
-                        body_id, -1,
+                        body_id,
+                        -1,
                         rgbaColor=[
                             np.clip(base_r + r_offset, 0.0, 1.0),
                             np.clip(base_g + g_offset, 0.0, 1.0),
@@ -564,7 +560,8 @@ class ParameterRandomizer(BaseController):
                     )
                 if lighting is not None:
                     p.configureDebugVisualizer(
-                        p.COV_ENABLE_SHADOWS, 1 if lighting > 0.8 else 0,
+                        p.COV_ENABLE_SHADOWS,
+                        1 if lighting > 0.8 else 0,
                         lightPosition=[1.0 * lighting, 1.0 * lighting, 5.0 * lighting],
                         physicsClientId=simulator._physics_client,
                     )
@@ -574,18 +571,18 @@ class ParameterRandomizer(BaseController):
     def update_curriculum(
         self,
         episode: int,
-        metrics: Dict[str, float],
-    ) -> Dict[str, Any]:
+        metrics: dict[str, float],
+    ) -> dict[str, Any]:
         """Update curriculum (no-op for basic randomizer).
-        
+
         The parameter randomizer does not modify curriculum - it only
         randomizes parameters. Curriculum learning is handled by a
         separate controller.
-        
+
         Args:
             episode: Episode number.
             metrics: Episode metrics.
-            
+
         Returns:
             Empty dictionary (no curriculum updates).
         """
@@ -594,47 +591,55 @@ class ParameterRandomizer(BaseController):
     def get_randomized_action(
         self,
         action: np.ndarray,
-        noise_scale: Optional[float] = None,
+        noise_scale: float | None = None,
     ) -> np.ndarray:
         """Apply action noise to an action.
-        
+
         Args:
             action: Original action array.
             noise_scale: Optional override for noise scale.
-            
+
         Returns:
             Action with noise applied.
         """
         if not self.domain_config.dynamics.enabled:
             return action
-        
+
         if "action_noise" not in self._current_params.dynamics:
             return action
-        
-        scale = noise_scale if noise_scale is not None else abs(self._current_params.dynamics["action_noise"])
+
+        scale = (
+            noise_scale
+            if noise_scale is not None
+            else abs(self._current_params.dynamics["action_noise"])
+        )
         noise = self._rng.uniform(-scale, scale, size=action.shape)
         return action + noise
 
     def get_randomized_observation(
         self,
         observation: np.ndarray,
-        noise_scale: Optional[float] = None,
+        noise_scale: float | None = None,
     ) -> np.ndarray:
         """Apply observation noise.
-        
+
         Args:
             observation: Original observation array.
             noise_scale: Optional override for noise scale.
-            
+
         Returns:
             Observation with noise applied.
         """
         if not self.domain_config.dynamics.enabled:
             return observation
-        
+
         if "joint_noise" not in self._current_params.dynamics:
             return observation
-        
-        scale = noise_scale if noise_scale is not None else abs(self._current_params.dynamics["joint_noise"])
+
+        scale = (
+            noise_scale
+            if noise_scale is not None
+            else abs(self._current_params.dynamics["joint_noise"])
+        )
         noise = self._rng.uniform(-scale, scale, size=observation.shape)
         return observation + noise
