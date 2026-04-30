@@ -269,32 +269,48 @@ class TestGripper:
 
 
 class TestActionTypeValidation:
-    """ACT-05: Invalid or unimplemented ActionType values are rejected at scene load time."""
+    """ACT-05: Unsupported ActionType values are rejected at scene load time."""
 
-    def test_unimplemented_endeffector_pose_raises_on_init(self):
+    def test_endeffector_pose_does_not_raise(self):
+        """ENDEFFECTOR_POSE is now implemented via simulator IK."""
         from surg_rl.rl.action import ActionConfig, ActionType
 
         config = SurgicalEnvConfig(
             scene_path="scenes/minimal_scene.json",
+            simulator_type="mujoco",
             action_config=ActionConfig(
                 action_type=ActionType.ENDEFFECTOR_POSE,
                 num_joints=6,
+                include_gripper=False,
             ),
+            max_episode_steps=2,
         )
-        with pytest.raises(NotImplementedError, match="not yet supported"):
-            SurgicalEnv(config)
+        env = SurgicalEnv(config)
+        env.reset()
+        action = np.zeros(6, dtype=np.float32)
+        obs, reward, terminated, truncated, info = env.step(action)
+        assert isinstance(obs, dict)
+        env.close()
 
-    def test_unimplemented_endeffector_delta_raises_on_init(self):
+    def test_endeffector_delta_does_not_raise(self):
+        """ENDEFFECTOR_DELTA is now implemented via simulator IK."""
         from surg_rl.rl.action import ActionConfig, ActionType
 
         config = SurgicalEnvConfig(
             scene_path="scenes/minimal_scene.json",
+            simulator_type="mujoco",
             action_config=ActionConfig(
                 action_type=ActionType.ENDEFFECTOR_DELTA,
                 num_joints=6,
+                include_gripper=False,
             ),
+            max_episode_steps=2,
         )
-        with pytest.raises(NotImplementedError, match="not yet supported"):
-            SurgicalEnv(config)
+        env = SurgicalEnv(config)
+        env.reset()
+        action = np.zeros(6, dtype=np.float32)
+        obs, reward, terminated, truncated, info = env.step(action)
+        assert isinstance(obs, dict)
+        env.close()
 
 

@@ -324,13 +324,10 @@ class ActionBuilder:
         Raises:
             NotImplementedError: If the action type lacks full backend support.
         """
-        if self.config.action_type in (
-            ActionType.ENDEFFECTOR_POSE,
-            ActionType.ENDEFFECTOR_DELTA,
-        ):
+        if self.config.action_type in ():
             raise NotImplementedError(
-                f"Action type {self.config.action_type} is not yet fully implemented. "
-                "Only POSITION_CONTROL and JOINT_TORQUES are supported."
+                f"Action type {self.config.action_type} is not yet supported. "
+                f"Configure the simulator action_mode directly for pose control."
             )
 
         action = np.array(action, dtype=np.float32)

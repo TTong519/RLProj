@@ -237,6 +237,22 @@ class TestMuJoCoSimulator:
             assert sim is not None
         # Should be cleaned up after context exit
 
+    def test_endeffector_pose_ik_no_crash(self, suturing_scene):
+        """MuJoCo endeffector_pose action mode must not crash."""
+        sim = MuJoCoSimulator()
+        sim.load_scene(suturing_scene)
+        sim.set_action_mode("endeffector_pose")
+        action = np.zeros(6, dtype=np.float32)
+        sim.step(action)
+
+    def test_endeffector_delta_ik_no_crash(self, suturing_scene):
+        """MuJoCo endeffector_delta action mode must not crash."""
+        sim = MuJoCoSimulator()
+        sim.load_scene(suturing_scene)
+        sim.set_action_mode("endeffector_delta")
+        action = np.zeros(6, dtype=np.float32)
+        sim.step(action)
+
 
 class TestPyBulletSimulator:
     """Tests for PyBulletSimulator class."""

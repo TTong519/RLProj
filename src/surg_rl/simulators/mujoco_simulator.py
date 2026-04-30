@@ -58,6 +58,9 @@ class MuJoCoSimulator(BaseSimulator):
         self._control_map: list[dict[str, Any]] = []
         self._last_depth: np.ndarray | None = None
         self._action_mode: str = "position"
+        self._end_effector_target_pos: np.ndarray | None = None
+        self._end_effector_target_quat: np.ndarray | None = None
+        self._ik_result_joints: dict[str, np.ndarray] = {}
 
     def _check_mujoco(self) -> None:
         """Check if MuJoCo is available."""
@@ -560,6 +563,143 @@ class MuJoCoSimulator(BaseSimulator):
             return len(self._data.ctrl)
         return 0
 
+    def set_end_effector_target(
+        self, position: np.ndarray, orientation: np.ndarray | None = None
+    ) -> None:
+        """Store target end-effector pose for IK-based control.
+
+        Args:
+            position: Target position [x, y, z].
+            orientation: Target orientation quaternion [w, x, y, z] or None.
+        """
+        self._end_effector_target_pos = np.asarray(position, dtype=np.float64)
+        if orientation is not None:
+            self._end_effector_target_quat = np.asarray(orientation, dtype=np.float64)
+        else:
+            self._end_effector_target_quat = None
+
+    def _compute_ik(
+        self,
+        robot_name: str,
+        target_pos: np.ndarray,
+        target_quat: np.ndarray | None = None,
+    ) -> np.ndarray:
+        """Compute inverse kinematics for a robot.
+
+        For primitive 1-DOF robots the Y-Euler angle (pitch) is mapped
+        to the hinge joint directly. For robots with >1 DOF a Jacobian-
+        based damped-least-squares solver is used when MuJoCo Jacobian
+        functions are available.
+
+        Args:
+            robot_name: Name of the robot.
+            target_pos: Target end-effector position [x, y, z].
+            target_quat: Target orientation quaternion [w, x, y, z].
+
+        Returns:
+            Target joint angles. Falls back to current state if IK fails.
+        """
+        joint_state = self.get_joint_states().get(robot_name, {})
+        current_positions = joint_state.get("positions", np.array([])).copy()
+
+        joints = [
+            m for m in self._control_map if m["robot_name"] == robot_name and not m["is_gripper"]
+        ]
+        if not joints:
+            return current_positions
+
+        n = len(joints)
+
+        # --- 1-DOF primitive → map pitch to hinge joint ---------------------
+        if n == 1:
+            # Extract target rotation about Y (pitch) from quaternion.
+            if target_quat is not None:
+                w, x, y, z = target_quat
+                siny_cosp = 2.0 * (w * y - z * x)
+                cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+                target_pitch = float(np.arctan2(siny_cosp, cosy_cosp))
+            else:
+                target_pitch = 0.0
+            return np.array([target_pitch], dtype=np.float32)
+
+        # --- Multi-DOF → Jacobian IK (best-effort) -------------------------
+        try:
+            # Pick the end-effector body (heuristic: last link or robot base)
+            ee_name = f"{robot_name}_link_{n - 1}"
+            body_id = self._mujoco.mj_name2id(
+                self._model, self._mujoco.mjtObj.mjOBJ_BODY, ee_name
+            )
+            if body_id < 0:
+                body_id = self._mujoco.mj_name2id(
+                    self._model, self._mujoco.mjtObj.mjOBJ_BODY, robot_name
+                )
+            if body_id < 0:
+                return current_positions
+
+            nv = self._model.nv
+            jacp = np.zeros((3, nv), dtype=np.float64)
+            jacr = np.zeros((3, nv), dtype=np.float64)
+            self._mujoco.mj_jacBody(self._model, self._data, jacp, jacr, body_id)
+
+            # Build reduced Jacobian for just this robot's joints
+            reduced_jac = np.zeros((6, n), dtype=np.float64)
+            col = 0
+            for m in joints:
+                jnt_id = self._mujoco.mj_name2id(
+                    self._model, self._mujoco.mjtObj.mjOBJ_JOINT, m["joint_name"]
+                )
+                if jnt_id < 0:
+                    continue
+                dofr = self._model.jnt_dofadr[jnt_id]
+                ndof = self._model.jnt_dofnum[jnt_id]
+                for d in range(ndof):
+                    if dofr + d < nv:
+                        reduced_jac[:3, col] = jacp[:, dofr + d]
+                        reduced_jac[3:, col] = jacr[:, dofr + d]
+                        col += 1
+
+            # Error vector [pos_err; rot_err]
+            current_pos = self._data.xpos[body_id].copy()
+            pos_err = (target_pos - current_pos).astype(np.float64)
+
+            if target_quat is not None:
+                # Angular error ≈ 2 * imag( q_target ⊗ conj(q_current) )
+                w1, x1, y1, z1 = target_quat
+                w2, x2, y2, z2 = self._data.xquat[body_id]
+                # q_err = q_target * inverse(q_current)
+                qw = w1 * w2 + x1 * x2 + y1 * y2 + z1 * z2
+                qx = -w1 * x2 + x1 * w2 - y1 * z2 + z1 * y2
+                qy = -w1 * y2 + x1 * z2 + y1 * w2 - z1 * x2
+                qz = -w1 * z2 - x1 * y2 + y1 * x2 + z1 * w2
+                # axis-angle: angle ≈ 2*atan2(sqrt(qx²+qy²+qz²), qw)
+                # Simplified angular error vector:
+                rot_err = np.array([qx, qy, qz], dtype=np.float64)
+                if qw < 0.0:
+                    rot_err = -rot_err
+                err = np.concatenate([pos_err, rot_err])
+            else:
+                err = np.concatenate([pos_err, np.zeros(3, dtype=np.float64)])
+
+            # Damped least squares
+            alpha = 0.1
+            lam_sq = 0.001
+            J = reduced_jac[:, :col]
+            dq = alpha * np.linalg.solve(
+                J.T @ J + lam_sq * np.eye(col), J.T @ err
+            )
+
+            # Current qpos for these joints
+            current_q = []
+            for m in joints:
+                jnt_id = self._mujoco.mj_name2id(
+                    self._model, self._mujoco.mjtObj.mjOBJ_JOINT, m["joint_name"]
+                )
+                current_q.append(float(self._data.qpos[self._model.jnt_qposadr[jnt_id]]))
+            target_q = np.array(current_q, dtype=np.float32) + dq[:n].astype(np.float32)
+            return target_q
+        except Exception:
+            return current_positions
+
     def _apply_action(self, action: np.ndarray) -> None:
         """Apply action to the simulation.
 
@@ -569,6 +709,67 @@ class MuJoCoSimulator(BaseSimulator):
         if action is None or len(action) == 0:
             return
 
+        # --- End-effector control modes (IK) --------------------------------
+        if self._action_mode in ("endeffector_pose", "endeffector_delta"):
+            if not self._scene or not self._scene.robots:
+                return
+            robot = self._scene.robots[0]
+            robot_name = robot.name
+
+            if len(action) < 6:
+                return
+
+            pos_input = np.array(action[:3], dtype=np.float64)
+            euler_input = np.array(action[3:6], dtype=np.float64)
+
+            if self._action_mode == "endeffector_delta":
+                # Delta mode: add to current pose
+                current_pos, current_quat = self.get_body_pose(robot_name) or (
+                    np.zeros(3),
+                    np.array([1.0, 0.0, 0.0, 0.0]),
+                )
+                target_pos = current_pos + pos_input
+                # Current Euler
+                w, x, y, z = current_quat
+                siny_cosp = 2.0 * (w * y - z * x)
+                cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+                current_yaw = np.arctan2(siny_cosp, cosy_cosp)
+                target_yaw = current_yaw + euler_input[1]
+                # Back to quaternion
+                qw = np.cos(target_yaw / 2.0)
+                qy = np.sin(target_yaw / 2.0)
+                target_quat = np.array([qw, 0.0, float(qy), 0.0], dtype=np.float64)
+            else:
+                # Pose mode: absolute target
+                target_pos = pos_input
+                target_yaw = euler_input[1]
+                qw = np.cos(target_yaw / 2.0)
+                qy = np.sin(target_yaw / 2.0)
+                target_quat = np.array([qw, 0.0, float(qy), 0.0], dtype=np.float64)
+
+            joint_targets = self._compute_ik(robot_name, target_pos, target_quat)
+
+            # Apply targets through control map
+            joint_idx = 0
+            for mapping in self._control_map:
+                if mapping.get("is_gripper") and len(action) > 6:
+                    ctrl_idx = mapping["ctrl_index"]
+                    if ctrl_idx < len(self._data.ctrl):
+                        self._data.ctrl[ctrl_idx] = float(action[6])
+                    continue
+                if mapping["robot_name"] != robot_name or mapping.get("is_gripper"):
+                    continue
+                if joint_idx < len(joint_targets):
+                    ctrl_idx = mapping["ctrl_index"]
+                    if ctrl_idx < len(self._data.ctrl):
+                        self._data.ctrl[ctrl_idx] = float(joint_targets[joint_idx])
+                    joint_idx += 1
+
+            # Store for possible use in step() or observation
+            self._ik_result_joints[robot_name] = joint_targets
+            return
+
+        # --- Joint-space modes (position / torque / velocity) ---------------
         if self._control_map:
             for i, mapping in enumerate(self._control_map):
                 if i < len(action):

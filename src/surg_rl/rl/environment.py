@@ -140,6 +140,16 @@ class SurgicalEnv(gym.Env):
                 self._simulator.set_action_mode("torque")
             except (NotImplementedError, AttributeError):
                 logger.debug("Backend does not support torque mode switching")
+        elif action_cfg.action_type == ActionType.ENDEFFECTOR_POSE:
+            try:
+                self._simulator.set_action_mode("endeffector_pose")
+            except (NotImplementedError, AttributeError):
+                logger.debug("Backend does not support endeffector_pose mode switching")
+        elif action_cfg.action_type == ActionType.ENDEFFECTOR_DELTA:
+            try:
+                self._simulator.set_action_mode("endeffector_delta")
+            except (NotImplementedError, AttributeError):
+                logger.debug("Backend does not support endeffector_delta mode switching")
 
         # Initialize observation and action builders
         self._obs_builder = ObservationBuilder(
@@ -150,14 +160,14 @@ class SurgicalEnv(gym.Env):
         )
 
         # Validate action type is supported at load time (ACT-05)
-        if self._action_builder.config.action_type in (
-            ActionType.ENDEFFECTOR_POSE,
-            ActionType.ENDEFFECTOR_DELTA,
-        ):
+        # All ActionType enum values are now implemented; this guard catches
+        # any future or edge-case types.
+        unsupported_types = ()
+        if self._action_builder.config.action_type in unsupported_types:
             raise NotImplementedError(
                 f"Action type {self._action_builder.config.action_type.value!r} is not yet supported. "
                 "Supported types: JOINT_POSITIONS, JOINT_VELOCITIES, JOINT_TORQUES, "
-                "GRIPPER, DISCRETE."
+                "ENDEFFECTOR_POSE, ENDEFFECTOR_DELTA, GRIPPER, DISCRETE."
             )
 
         # Define spaces
