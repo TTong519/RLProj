@@ -1,7 +1,7 @@
 """Configuration management using Pydantic Settings."""
 
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -72,10 +72,39 @@ class Settings(BaseSettings):
         description="Model name for LLM",
     )
 
-    llm_api_key: Optional[str] = Field(
+    llm_api_key: str | None = Field(
         default=None,
         description="API key for LLM provider",
     )
+
+    @field_validator("llm_api_key", mode="before")
+    @classmethod
+    def reject_placeholder_api_key(cls, v: str | None) -> str | None:
+        """Reject known placeholder API keys.
+
+        Args:
+            v: The llm_api_key value to validate.
+
+        Returns:
+            The value if valid.
+
+        Raises:
+            ValueError: If the value matches a known placeholder pattern.
+        """
+        if v is None:
+            return v
+        placeholders = (
+            "your_api_key_here",
+            "YOUR_API_KEY",
+            "REPLACE_ME",
+            "sk-xxxxxxxx",
+            "xxxxxx",
+        )
+        if v.lower() in (p.lower() for p in placeholders):
+            raise ValueError(
+                "LLM_API_KEY appears to be a placeholder. Set a real API key."
+            )
+        return v
 
     # Ollama Configuration
     ollama_base_url: str = Field(
@@ -168,7 +197,7 @@ class Settings(BaseSettings):
         description="Random seed for reproducibility",
     )
 
-    rl_tensorboard_log: Optional[Path] = Field(
+    rl_tensorboard_log: Path | None = Field(
         default=None,
         description="TensorBoard log directory",
     )
@@ -200,7 +229,7 @@ class Settings(BaseSettings):
         description="Logging level",
     )
 
-    log_file: Optional[Path] = Field(
+    log_file: Path | None = Field(
         default=None,
         description="Optional log file path",
     )
@@ -236,7 +265,7 @@ class Settings(BaseSettings):
 
 
 # Global settings instance
-_settings: Optional[Settings] = None
+_settings: Settings | None = None
 
 
 def get_settings() -> Settings:
