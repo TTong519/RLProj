@@ -32,9 +32,9 @@ This roadmap stabilizes the Surg-RL surgical-robotics RL training system (v0.1.0
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: Fix simulator correctness bugs (quaternion order, joint reset, physics=None crash)
-- [ ] 01-02: Fix reward, curriculum, and config bugs (sign contract, apply_parameters, LightConfig, vision prompts)
-- [ ] 01-03: Fix evaluation and security bugs (VecEnv API, API key exposure)
+- [x] 01-01: Fix simulator correctness bugs (quaternion order, joint reset, physics=None crash)
+- [x] 01-02: Fix reward, curriculum, and config bugs (sign contract, apply_parameters, LightConfig, vision prompts)
+- [x] 01-03: Fix evaluation and security bugs (VecEnv API, API key exposure)
 
 ### Phase 2: Action Space + Gripper
 **Goal**: All action types are implemented and the gripper works in both backends. Demos show animated robot movement.
