@@ -15,13 +15,9 @@ from surg_rl.scene_definition import (
     DomainRandomizationConfig,
     DynamicsRandomization,
     EnvironmentConfig,
-    EulerAngles,
-    GroundPlaneConfig,
     GraspingProperties,
     InstrumentConfig,
     InstrumentType,
-    JointConfig,
-    JointLimits,
     JointType,
     LightConfig,
     LightType,
@@ -29,19 +25,15 @@ from surg_rl.scene_definition import (
     Metadata,
     Orientation,
     PhysicsConfig,
-    PhysicsMaterial,
     PhysicsRandomization,
     Position,
-    RewardShaping,
     RgbColor,
-    RigidBodyPhysics,
     RobotConfig,
     RobotType,
     SceneDefinition,
     SoftBodyPhysics,
     TaskConfig,
     TaskObjective,
-    TextureAsset,
     TissueConfig,
     TissueMeshDefinition,
     TissueType,
@@ -177,9 +169,7 @@ class TestAssetReference:
 
     def test_asset_with_checksum(self):
         """Test asset with checksum."""
-        asset = AssetReference(
-            path="assets/meshes/robot.stl", checksum="abc123"
-        )
+        asset = AssetReference(path="assets/meshes/robot.stl", checksum="abc123")
         assert asset.checksum == "abc123"
 
 
@@ -256,6 +246,7 @@ class TestSoftBodyPhysics:
     def test_pybullet_soft_body_defaults(self):
         """Test PyBulletSoftBodyConfig defaults."""
         from surg_rl.scene_definition import PyBulletSoftBodyConfig
+
         pbc = PyBulletSoftBodyConfig()
         assert pbc.use_mass_spring is True
         assert pbc.use_neo_hookean is False
@@ -267,6 +258,7 @@ class TestSoftBodyPhysics:
     def test_pybullet_soft_body_custom(self):
         """Test PyBulletSoftBodyConfig custom values."""
         from surg_rl.scene_definition import PyBulletSoftBodyConfig
+
         pbc = PyBulletSoftBodyConfig(
             use_mass_spring=True,
             use_bending_springs=True,
@@ -282,9 +274,8 @@ class TestSoftBodyPhysics:
     def test_soft_body_physics_pybullet_nested(self):
         """Test SoftBodyPhysics with nested pybullet config."""
         from surg_rl.scene_definition import PyBulletSoftBodyConfig
-        sbp = SoftBodyPhysics(
-            pybullet=PyBulletSoftBodyConfig(spring_elastic_stiffness=10.0)
-        )
+
+        sbp = SoftBodyPhysics(pybullet=PyBulletSoftBodyConfig(spring_elastic_stiffness=10.0))
         assert sbp.pybullet.spring_elastic_stiffness == 10.0
         assert sbp.pybullet.use_mass_spring is True
 
@@ -473,6 +464,12 @@ class TestLightConfig:
         assert cfg.direction == (0.0, 0.0, -1.0)
         assert cfg.type == LightType.DIRECTIONAL
 
+    def test_light_config_does_not_mutate_input_dict(self):
+        """Regression: passing a raw dict must not mutate the caller's dict."""
+        original = {"type": "directional"}  # direction omitted
+        LightConfig(**original)
+        assert "direction" not in original
+
 
 class TestTaskConfig:
     """Tests for TaskConfig model."""
@@ -493,8 +490,15 @@ class TestTaskConfig:
             name="complex_task",
             description="A complex task",
             objectives=[
-                TaskObjective(name="obj1", description="First objective", success_criteria="Done", weight=1.0),
-                TaskObjective(name="obj2", description="Second objective", success_criteria="Complete", weight=2.0),
+                TaskObjective(
+                    name="obj1", description="First objective", success_criteria="Done", weight=1.0
+                ),
+                TaskObjective(
+                    name="obj2",
+                    description="Second objective",
+                    success_criteria="Complete",
+                    weight=2.0,
+                ),
             ],
         )
         assert len(task.objectives) == 2
@@ -571,7 +575,7 @@ class TestSceneFileLoading:
         if not json_scene.exists():
             pytest.skip("JSON scene file not found")
 
-        with open(json_scene, "r") as f:
+        with open(json_scene) as f:
             data = json.load(f)
 
         scene = SceneDefinition(**data)
@@ -585,7 +589,7 @@ class TestSceneFileLoading:
         if not yaml_scene.exists():
             pytest.skip("YAML scene file not found")
 
-        with open(yaml_scene, "r") as f:
+        with open(yaml_scene) as f:
             data = yaml.safe_load(f)
 
         scene = SceneDefinition(**data)
@@ -598,7 +602,7 @@ class TestSceneFileLoading:
         if not minimal_scene.exists():
             pytest.skip("Minimal scene file not found")
 
-        with open(minimal_scene, "r") as f:
+        with open(minimal_scene) as f:
             data = json.load(f)
 
         scene = SceneDefinition(**data)
@@ -610,7 +614,7 @@ class TestSceneFileLoading:
             metadata=Metadata(name="Test", version="1.0.0"),
             physics=PhysicsConfig(gravity=(0.0, 0.0, -10.0)),
         )
-        
+
         # Serialize to dict
         scene_dict = scene.model_dump()
         assert scene_dict["metadata"]["name"] == "Test"
@@ -629,11 +633,11 @@ class TestSceneFileLoading:
                 RobotConfig(name="test_robot", urdf_path="test.urdf"),
             ],
         )
-        
+
         # Serialize and deserialize
         data = original.model_dump()
         restored = SceneDefinition(**data)
-        
+
         assert restored.metadata.name == original.metadata.name
         assert len(restored.robots) == len(original.robots)
         assert restored.robots[0].name == original.robots[0].name

@@ -5,11 +5,9 @@ including robots, tissues, instruments, environment settings, and physics parame
 """
 
 from enum import Enum
-from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
-
 
 # ============================================================================
 # Enums
@@ -99,7 +97,7 @@ class Position(BaseModel):
     y: float = Field(default=0.0, description="Y coordinate in meters")
     z: float = Field(default=0.0, description="Z coordinate in meters")
 
-    def to_tuple(self) -> Tuple[float, float, float]:
+    def to_tuple(self) -> tuple[float, float, float]:
         """Convert to tuple representation."""
         return (self.x, self.y, self.z)
 
@@ -112,7 +110,7 @@ class Orientation(BaseModel):
     y: float = Field(default=0.0, description="Quaternion y component")
     z: float = Field(default=0.0, description="Quaternion z component")
 
-    def to_tuple(self) -> Tuple[float, float, float, float]:
+    def to_tuple(self) -> tuple[float, float, float, float]:
         """Convert to tuple representation."""
         return (self.w, self.x, self.y, self.z)
 
@@ -124,7 +122,7 @@ class EulerAngles(BaseModel):
     pitch: float = Field(default=0.0, description="Pitch angle in radians")
     yaw: float = Field(default=0.0, description="Yaw angle in radians")
 
-    def to_tuple(self) -> Tuple[float, float, float]:
+    def to_tuple(self) -> tuple[float, float, float]:
         """Convert to tuple representation."""
         return (self.roll, self.pitch, self.yaw)
 
@@ -137,11 +135,11 @@ class Pose(BaseModel):
         default_factory=Orientation, description="Quaternion orientation"
     )
 
-    def get_position_tuple(self) -> Tuple[float, float, float]:
+    def get_position_tuple(self) -> tuple[float, float, float]:
         """Get position as tuple."""
         return self.position.to_tuple()
 
-    def get_orientation_tuple(self) -> Tuple[float, float, float, float]:
+    def get_orientation_tuple(self) -> tuple[float, float, float, float]:
         """Get orientation as tuple."""
         return self.orientation.to_tuple()
 
@@ -154,7 +152,7 @@ class RgbColor(BaseModel):
     b: float = Field(default=1.0, ge=0.0, le=1.0, description="Blue component (0-1)")
     a: float = Field(default=1.0, ge=0.0, le=1.0, description="Alpha component (0-1)")
 
-    def to_tuple(self) -> Tuple[float, float, float, float]:
+    def to_tuple(self) -> tuple[float, float, float, float]:
         """Convert to RGBA tuple."""
         return (self.r, self.g, self.b, self.a)
 
@@ -176,7 +174,7 @@ class BoundingBox(BaseModel):
             raise ValueError("min_corner.z must be <= max_corner.z")
         return self
 
-    def get_dimensions(self) -> Tuple[float, float, float]:
+    def get_dimensions(self) -> tuple[float, float, float]:
         """Get bounding box dimensions (width, height, depth)."""
         return (
             self.max_corner.x - self.min_corner.x,
@@ -194,14 +192,14 @@ class AssetReference(BaseModel):
     """Reference to an external asset file (mesh, texture, etc.)."""
 
     path: str = Field(description="Path to asset file (relative or absolute)")
-    file_type: Optional[str] = Field(default=None, description="File type (inferred if not set)")
-    checksum: Optional[str] = Field(
+    file_type: str | None = Field(default=None, description="File type (inferred if not set)")
+    checksum: str | None = Field(
         default=None, description="Optional checksum for integrity verification"
     )
 
     @field_validator("file_type", mode="before")
     @classmethod
-    def infer_file_type(cls, v: Optional[str], info) -> Optional[str]:
+    def infer_file_type(cls, v: str | None, info: Any) -> str | None:
         """Infer file type from path if not provided."""
         if v is not None:
             return v
@@ -215,10 +213,10 @@ class AssetReference(BaseModel):
 class MeshAsset(AssetReference):
     """Mesh asset with optional scale and material."""
 
-    scale: Tuple[float, float, float] = Field(
+    scale: tuple[float, float, float] = Field(
         default=(1.0, 1.0, 1.0), description="Scale factors (x, y, z)"
     )
-    material: Optional[str] = Field(default=None, description="Optional material reference")
+    material: str | None = Field(default=None, description="Optional material reference")
 
 
 class TextureAsset(AssetReference):
@@ -227,7 +225,9 @@ class TextureAsset(AssetReference):
     wrap_mode: Literal["repeat", "clamp", "mirror"] = Field(
         default="repeat", description="Texture wrap mode"
     )
-    filtering: Literal["nearest", "linear"] = Field(default="linear", description="Texture filtering")
+    filtering: Literal["nearest", "linear"] = Field(
+        default="linear", description="Texture filtering"
+    )
 
 
 # ============================================================================
@@ -243,10 +243,7 @@ class PhysicsMaterial(BaseModel):
     restitution: float = Field(
         default=0.0, ge=0.0, le=1.0, description="Coefficient of restitution (bounciness)"
     )
-    damping: Optional[float] = Field(
-        default=None, ge=0.0, description="Contact damping coefficient"
-    )
-
+    damping: float | None = Field(default=None, ge=0.0, description="Contact damping coefficient")
 
 
 class PyBulletSoftBodyConfig(BaseModel):
@@ -269,31 +266,35 @@ class PyBulletSoftBodyConfig(BaseModel):
         default=False,
         description="Enable bending springs (only when use_mass_spring=True)",
     )
-    use_self_collision: bool = Field(
-        default=False, description="Enable self-collision"
-    )
+    use_self_collision: bool = Field(default=False, description="Enable self-collision")
     spring_elastic_stiffness: float = Field(
-        default=1.0, ge=0.0,
+        default=1.0,
+        ge=0.0,
         description="Elastic stiffness for mass-spring model",
     )
     spring_damping_stiffness: float = Field(
-        default=0.1, ge=0.0,
+        default=0.1,
+        ge=0.0,
         description="Damping stiffness for mass-spring model",
     )
     spring_bending_stiffness: float = Field(
-        default=0.1, ge=0.0,
+        default=0.1,
+        ge=0.0,
         description="Bending stiffness for mass-spring model",
     )
     neo_hookean_mu: float = Field(
-        default=1.0, ge=0.0,
+        default=1.0,
+        ge=0.0,
         description="Shear modulus for Neo-Hookean model",
     )
     neo_hookean_lambda: float = Field(
-        default=1.0, ge=0.0,
+        default=1.0,
+        ge=0.0,
         description="Lame's first parameter for Neo-Hookean model",
     )
     neo_hookean_damping: float = Field(
-        default=0.1, ge=0.0,
+        default=0.1,
+        ge=0.0,
         description="Damping for Neo-Hookean model",
     )
     repulsion_stiffness: float = Field(
@@ -306,52 +307,45 @@ class PyBulletSoftBodyConfig(BaseModel):
         default=False,
         description="Apply damping in all directions, not just along springs",
     )
-    sim_mesh_path: Optional[str] = Field(
+    sim_mesh_path: str | None = Field(
         default=None,
         description="Optional separate simulation mesh file (e.g. coarse .vtk)",
     )
-    mass: Optional[float] = Field(
-        default=None, ge=0.0,
+    mass: float | None = Field(
+        default=None,
+        ge=0.0,
         description="Override total mass (defaults to density * volume)",
     )
-    scale: Optional[float] = Field(
-        default=None, gt=0.0, description="Geometry scale factor (>0 only)",
+    scale: float | None = Field(
+        default=None,
+        gt=0.0,
+        description="Geometry scale factor (>0 only)",
     )
-    collision_margin: Optional[float] = Field(
-        default=None, gt=0.0, description="Collision margin (>0 only)",
+    collision_margin: float | None = Field(
+        default=None,
+        gt=0.0,
+        description="Collision margin (>0 only)",
     )
 
 
 class SoftBodyPhysics(BaseModel):
     """Soft body physics parameters for tissues."""
 
-    stiffness: float = Field(
-        default=1000.0, ge=0.0, description="Material stiffness (N/m)"
-    )
+    stiffness: float = Field(default=1000.0, ge=0.0, description="Material stiffness (N/m)")
     damping: float = Field(default=0.1, ge=0.0, le=1.0, description="Damping ratio")
     density: float = Field(default=1000.0, ge=0.0, description="Material density (kg/m³)")
-    poissons_ratio: float = Field(
-        default=0.45, ge=-1.0, le=0.5, description="Poisson's ratio"
-    )
-    youngs_modulus: float = Field(
-        default=10000.0, ge=0.0, description="Young's modulus (Pa)"
-    )
-    elasticity: float = Field(
-        default=0.5, ge=0.0, le=1.0, description="Elasticity factor (0-1)"
-    )
-    bending_stiffness: float = Field(
-        default=100.0, ge=0.0, description="Bending stiffness (N·m)"
-    )
-    self_collision: bool = Field(
-        default=False, description="Enable self-collision for soft body"
-    )
-    yield_stress: Optional[float] = Field(
+    poissons_ratio: float = Field(default=0.45, ge=-1.0, le=0.5, description="Poisson's ratio")
+    youngs_modulus: float = Field(default=10000.0, ge=0.0, description="Young's modulus (Pa)")
+    elasticity: float = Field(default=0.5, ge=0.0, le=1.0, description="Elasticity factor (0-1)")
+    bending_stiffness: float = Field(default=100.0, ge=0.0, description="Bending stiffness (N·m)")
+    self_collision: bool = Field(default=False, description="Enable self-collision for soft body")
+    yield_stress: float | None = Field(
         default=None, ge=0.0, description="Yield stress for plastic deformation"
     )
-    tear_threshold: Optional[float] = Field(
+    tear_threshold: float | None = Field(
         default=None, ge=0.0, description="Stress threshold for tearing"
     )
-    max_deformation: Optional[float] = Field(
+    max_deformation: float | None = Field(
         default=None, ge=0.0, description="Maximum allowed deformation"
     )
     pybullet: PyBulletSoftBodyConfig = Field(
@@ -364,10 +358,10 @@ class RigidBodyPhysics(BaseModel):
     """Rigid body physics parameters."""
 
     mass: float = Field(default=1.0, ge=0.0, description="Mass in kg")
-    inertia: Optional[Tuple[float, float, float, float, float, float]] = Field(
+    inertia: tuple[float, float, float, float, float, float] | None = Field(
         default=None, description="Inertia tensor (ixx, iyy, izz, ixy, ixz, iyz)"
     )
-    center_of_mass: Optional[Position] = Field(
+    center_of_mass: Position | None = Field(
         default=None, description="Center of mass offset from geometry center"
     )
     friction: float = Field(default=0.5, ge=0.0, le=2.0, description="Friction coefficient")
@@ -381,7 +375,7 @@ class RigidBodyPhysics(BaseModel):
 class PhysicsConfig(BaseModel):
     """Global physics configuration for the scene."""
 
-    gravity: Tuple[float, float, float] = Field(
+    gravity: tuple[float, float, float] = Field(
         default=(0.0, 0.0, -9.81), description="Gravity vector (m/s²)"
     )
     timestep: float = Field(
@@ -399,10 +393,8 @@ class PhysicsConfig(BaseModel):
     air_resistance: float = Field(default=0.0, ge=0.0, description="Air resistance coefficient")
     ground_plane: bool = Field(default=True, description="Whether to include a ground plane")
     ground_friction: float = Field(default=0.8, ge=0.0, le=2.0, description="Ground friction")
-    ground_restitution: float = Field(
-        default=0.0, ge=0.0, le=1.0, description="Ground restitution"
-    )
-    materials: List[PhysicsMaterial] = Field(
+    ground_restitution: float = Field(default=0.0, ge=0.0, le=1.0, description="Ground restitution")
+    materials: list[PhysicsMaterial] = Field(
         default_factory=lambda: [PhysicsMaterial()],
         description="Physics material definitions",
     )
@@ -440,25 +432,21 @@ class EndEffectorConfig(BaseModel):
     type: str = Field(default="gripper", description="End effector type")
     max_aperture: float = Field(default=0.05, ge=0.0, description="Maximum opening width (m)")
     force_limit: float = Field(default=10.0, ge=0.0, description="Maximum gripping force (N)")
-    mesh: Optional[MeshAsset] = Field(default=None, description="Optional mesh asset")
-    pose: Optional[Pose] = Field(default=None, description="Pose relative to last link")
+    mesh: MeshAsset | None = Field(default=None, description="Optional mesh asset")
+    pose: Pose | None = Field(default=None, description="Pose relative to last link")
 
 
 class RobotLink(BaseModel):
     """Configuration for a robot link."""
 
     name: str = Field(description="Link name")
-    mesh: Optional[MeshAsset] = Field(default=None, description="Link mesh")
-    visual_mesh: Optional[MeshAsset] = Field(
-        default=None, description="Visual-only mesh"
-    )
-    collision_mesh: Optional[MeshAsset] = Field(
-        default=None, description="Collision-only mesh"
-    )
+    mesh: MeshAsset | None = Field(default=None, description="Link mesh")
+    visual_mesh: MeshAsset | None = Field(default=None, description="Visual-only mesh")
+    collision_mesh: MeshAsset | None = Field(default=None, description="Collision-only mesh")
     physics: RigidBodyPhysics = Field(
         default_factory=RigidBodyPhysics, description="Physics properties"
     )
-    visual_offset: Optional[Pose] = Field(
+    visual_offset: Pose | None = Field(
         default=None, description="Visual offset from collision geometry"
     )
 
@@ -468,20 +456,16 @@ class RobotConfig(BaseModel):
 
     name: str = Field(description="Robot name/identifier")
     type: RobotType = Field(default=RobotType.CUSTOM, description="Robot type")
-    description: Optional[str] = Field(default=None, description="Human-readable description")
+    description: str | None = Field(default=None, description="Human-readable description")
 
     # URDF/mesh reference
-    urdf_path: Optional[str] = Field(
-        default=None, description="Path to URDF file (if using URDF)"
-    )
-    mujoco_xml_path: Optional[str] = Field(
-        default=None, description="Path to MuJoCo XML file"
-    )
+    urdf_path: str | None = Field(default=None, description="Path to URDF file (if using URDF)")
+    mujoco_xml_path: str | None = Field(default=None, description="Path to MuJoCo XML file")
 
     # Direct definition
-    links: List[RobotLink] = Field(default_factory=list, description="Robot links")
-    joints: List[JointConfig] = Field(default_factory=list, description="Robot joints")
-    end_effectors: List[EndEffectorConfig] = Field(
+    links: list[RobotLink] = Field(default_factory=list, description="Robot links")
+    joints: list[JointConfig] = Field(default_factory=list, description="Robot joints")
+    end_effectors: list[EndEffectorConfig] = Field(
         default_factory=list, description="End effectors"
     )
 
@@ -501,7 +485,7 @@ class RobotConfig(BaseModel):
     max_angular_velocity: float = Field(
         default=1.0, ge=0.0, description="Maximum angular velocity (rad/s)"
     )
-    workspace_limits: Optional[BoundingBox] = Field(
+    workspace_limits: BoundingBox | None = Field(
         default=None, description="Allowed workspace volume"
     )
 
@@ -526,15 +510,15 @@ class RobotConfig(BaseModel):
 class TissueMeshDefinition(BaseModel):
     """Mesh definition for tissue geometry."""
 
-    mesh: Optional[MeshAsset] = Field(default=None, description="External mesh file")
-    primitive: Optional[Literal["box", "sphere", "cylinder", "capsule", "plane"]] = Field(
+    mesh: MeshAsset | None = Field(default=None, description="External mesh file")
+    primitive: Literal["box", "sphere", "cylinder", "capsule", "plane"] | None = Field(
         default=None, description="Primitive shape type"
     )
-    dimensions: Optional[Tuple[float, float, float]] = Field(
+    dimensions: tuple[float, float, float] | None = Field(
         default=None, description="Dimensions for primitive shapes"
     )
-    radius: Optional[float] = Field(default=None, description="Radius for sphere/cylinder")
-    length: Optional[float] = Field(default=None, description="Length for cylinder/capsule")
+    radius: float | None = Field(default=None, description="Radius for sphere/cylinder")
+    length: float | None = Field(default=None, description="Length for cylinder/capsule")
 
     @model_validator(mode="after")
     def validate_geometry(self) -> "TissueMeshDefinition":
@@ -562,15 +546,13 @@ class TissueConfig(BaseModel):
 
     name: str = Field(description="Tissue/organ name")
     type: TissueType = Field(default=TissueType.CUSTOM, description="Tissue type")
-    description: Optional[str] = Field(default=None, description="Human-readable description")
+    description: str | None = Field(default=None, description="Human-readable description")
 
     # Geometry
     geometry: TissueMeshDefinition = Field(description="Tissue geometry definition")
 
     # Physics
-    soft_body: bool = Field(
-        default=False, description="Whether tissue uses soft body physics"
-    )
+    soft_body: bool = Field(default=False, description="Whether tissue uses soft body physics")
     physics: SoftBodyPhysics = Field(
         default_factory=SoftBodyPhysics, description="Soft body physics"
     )
@@ -579,7 +561,7 @@ class TissueConfig(BaseModel):
     pose: Pose = Field(default_factory=Pose, description="Pose in scene")
 
     # Attachments (fixed points)
-    attachments: List[TissueAttachment] = Field(
+    attachments: list[TissueAttachment] = Field(
         default_factory=list, description="Fixed attachment points"
     )
 
@@ -588,18 +570,14 @@ class TissueConfig(BaseModel):
         default_factory=lambda: RgbColor(r=0.9, g=0.7, b=0.7),
         description="Tissue color (RGBA)",
     )
-    texture: Optional[TextureAsset] = Field(default=None, description="Texture asset")
+    texture: TextureAsset | None = Field(default=None, description="Texture asset")
 
     # Medical properties
-    anatomical_region: Optional[str] = Field(
+    anatomical_region: str | None = Field(
         default=None, description="Anatomical region (e.g., 'abdomen', 'thorax')"
     )
-    pathology: Optional[str] = Field(
-        default=None, description="Pathological condition (if any)"
-    )
-    vitality: float = Field(
-        default=1.0, ge=0.0, le=1.0, description="Tissue health indicator"
-    )
+    pathology: str | None = Field(default=None, description="Pathological condition (if any)")
+    vitality: float = Field(default=1.0, ge=0.0, le=1.0, description="Tissue health indicator")
 
 
 # ============================================================================
@@ -611,7 +589,7 @@ class InstrumentPhysics(BaseModel):
     """Physics properties for surgical instruments."""
 
     mass: float = Field(default=0.1, ge=0.0, description="Mass in kg")
-    inertia_tensor: Optional[Tuple[float, float, float, float, float, float]] = Field(
+    inertia_tensor: tuple[float, float, float, float, float, float] | None = Field(
         default=None, description="Inertia tensor components"
     )
     friction: float = Field(default=0.3, ge=0.0, le=1.0, description="Surface friction")
@@ -638,12 +616,12 @@ class GraspingProperties(BaseModel):
 class NeedleDriverProperties(BaseModel):
     """Properties for needle drivers."""
 
-    compatible_needle_sizes: List[float] = Field(
+    compatible_needle_sizes: list[float] = Field(
         default_factory=lambda: [0.02, 0.03, 0.04],
         description="Compatible needle diameters (m)",
     )
     grip_force: float = Field(default=10.0, ge=0.0, description="Needle grip force (N)")
-    rotation_range: Tuple[float, float] = Field(
+    rotation_range: tuple[float, float] = Field(
         default=(-180.0, 180.0), description="Rotation range (degrees)"
     )
 
@@ -653,14 +631,14 @@ class InstrumentConfig(BaseModel):
 
     name: str = Field(description="Instrument name/identifier")
     type: InstrumentType = Field(default=InstrumentType.CUSTOM, description="Instrument type")
-    description: Optional[str] = Field(default=None, description="Human-readable description")
+    description: str | None = Field(default=None, description="Human-readable description")
 
     # Geometry
-    mesh: Optional[MeshAsset] = Field(default=None, description="Instrument mesh")
-    primitive: Optional[Literal["box", "sphere", "cylinder", "capsule"]] = Field(
+    mesh: MeshAsset | None = Field(default=None, description="Instrument mesh")
+    primitive: Literal["box", "sphere", "cylinder", "capsule"] | None = Field(
         default=None, description="Primitive shape"
     )
-    dimensions: Tuple[float, float, float] = Field(
+    dimensions: tuple[float, float, float] = Field(
         default=(0.01, 0.01, 0.1), description="Dimensions for primitive shapes"
     )
 
@@ -670,18 +648,18 @@ class InstrumentConfig(BaseModel):
     )
 
     # Type-specific properties
-    cutting: Optional[CuttingProperties] = Field(
+    cutting: CuttingProperties | None = Field(
         default=None, description="Cutting properties (for cutting instruments)"
     )
-    grasping: Optional[GraspingProperties] = Field(
+    grasping: GraspingProperties | None = Field(
         default=None, description="Grasping properties (for graspers)"
     )
-    needle_driver: Optional[NeedleDriverProperties] = Field(
+    needle_driver: NeedleDriverProperties | None = Field(
         default=None, description="Needle driver properties"
     )
 
     # Initial pose (if placed in scene)
-    pose: Optional[Pose] = Field(default=None, description="Initial pose in scene")
+    pose: Pose | None = Field(default=None, description="Initial pose in scene")
 
     # Tool tips and interaction points
     tip_offset: Position = Field(
@@ -709,7 +687,7 @@ class CameraConfig(BaseModel):
     pose: Pose = Field(default_factory=Pose, description="Camera pose")
 
     # Look-at target (alternative to orientation)
-    look_at: Optional[Position] = Field(
+    look_at: Position | None = Field(
         default=None, description="Point to look at (alternative to orientation)"
     )
 
@@ -722,12 +700,8 @@ class CameraConfig(BaseModel):
     far: float = Field(default=100.0, ge=1.0, description="Far clipping plane (m)")
 
     # For orthographic cameras
-    orthographic_width: Optional[float] = Field(
-        default=None, description="Orthographic width"
-    )
-    orthographic_height: Optional[float] = Field(
-        default=None, description="Orthographic height"
-    )
+    orthographic_width: float | None = Field(default=None, description="Orthographic width")
+    orthographic_height: float | None = Field(default=None, description="Orthographic height")
 
     # Active camera
     active: bool = Field(default=True, description="Whether camera is active for rendering")
@@ -740,12 +714,12 @@ class LightConfig(BaseModel):
     type: LightType = Field(default=LightType.DIRECTIONAL, description="Light type")
 
     # Position (for point/spotlight)
-    position: Optional[Position] = Field(
+    position: Position | None = Field(
         default=None, description="Position for point/spotlight lights"
     )
 
     # Direction (for directional/spotlight)
-    direction: Optional[Tuple[float, float, float]] = Field(
+    direction: tuple[float, float, float] | None = Field(
         default=None, description="Direction vector for directional/spotlight"
     )
 
@@ -757,33 +731,33 @@ class LightConfig(BaseModel):
     intensity: float = Field(default=1.0, ge=0.0, description="Light intensity")
 
     # Spotlight-specific
-    inner_cone_angle: Optional[float] = Field(
+    inner_cone_angle: float | None = Field(
         default=None, ge=0.0, le=180.0, description="Inner cone angle for spotlight (degrees)"
     )
-    outer_cone_angle: Optional[float] = Field(
+    outer_cone_angle: float | None = Field(
         default=None, ge=0.0, le=180.0, description="Outer cone angle for spotlight (degrees)"
     )
 
     # Shadow
     cast_shadows: bool = Field(default=True, description="Whether light casts shadows")
-    shadow_softness: float = Field(
-        default=0.5, ge=0.0, le=1.0, description="Shadow softness"
-    )
+    shadow_softness: float = Field(default=0.5, ge=0.0, le=1.0, description="Shadow softness")
 
     @model_validator(mode="before")
     @classmethod
-    def validate_light_type(cls, data):
+    def validate_light_type(cls, data: Any) -> Any:
         """Validate that required fields are present for each light type."""
         if isinstance(data, dict):
+            data = dict(data)
             light_type = data.get("type")
             if light_type == LightType.POINT and data.get("position") is None:
                 raise ValueError("Point lights require a position")
             if light_type == LightType.DIRECTIONAL and data.get("direction") is None:
                 # Default to overhead light
                 data["direction"] = (0.0, 0.0, -1.0)
-            if light_type == LightType.SPOTLIGHT:
-                if data.get("position") is None or data.get("direction") is None:
-                    raise ValueError("Spotlights require position and direction")
+            if light_type == LightType.SPOTLIGHT and (
+                data.get("position") is None or data.get("direction") is None
+            ):
+                raise ValueError("Spotlights require position and direction")
         return data
 
 
@@ -791,18 +765,16 @@ class GroundPlaneConfig(BaseModel):
     """Ground plane configuration."""
 
     enabled: bool = Field(default=True, description="Whether ground plane is enabled")
-    size: Tuple[float, float] = Field(
+    size: tuple[float, float] = Field(
         default=(10.0, 10.0), description="Ground plane size (width, length) in meters"
     )
     color: RgbColor = Field(
         default_factory=lambda: RgbColor(r=0.5, g=0.5, b=0.5, a=1.0),
         description="Ground plane color",
     )
-    texture: Optional[TextureAsset] = Field(default=None, description="Ground texture")
+    texture: TextureAsset | None = Field(default=None, description="Ground texture")
     friction: float = Field(default=0.8, ge=0.0, le=2.0, description="Ground friction")
-    restitution: float = Field(
-        default=0.0, ge=0.0, le=1.0, description="Ground restitution"
-    )
+    restitution: float = Field(default=0.0, ge=0.0, le=1.0, description="Ground restitution")
 
 
 class SurgicalTableConfig(BaseModel):
@@ -810,14 +782,14 @@ class SurgicalTableConfig(BaseModel):
 
     name: str = Field(default="surgical_table", description="Table name")
     pose: Pose = Field(default_factory=Pose, description="Table pose")
-    dimensions: Tuple[float, float, float] = Field(
+    dimensions: tuple[float, float, float] = Field(
         default=(2.0, 0.8, 0.5), description="Table dimensions (width, length, height)"
     )
     color: RgbColor = Field(
         default_factory=lambda: RgbColor(r=0.2, g=0.2, b=0.2, a=1.0),
         description="Table color",
     )
-    mesh: Optional[MeshAsset] = Field(default=None, description="Table mesh")
+    mesh: MeshAsset | None = Field(default=None, description="Table mesh")
 
 
 class EnvironmentConfig(BaseModel):
@@ -826,13 +798,13 @@ class EnvironmentConfig(BaseModel):
     name: str = Field(default="operating_room", description="Environment name")
 
     # Lighting
-    lights: List[LightConfig] = Field(
+    lights: list[LightConfig] = Field(
         default_factory=lambda: [LightConfig(name="overhead", type=LightType.DIRECTIONAL)],
         description="Light sources",
     )
 
     # Cameras
-    cameras: List[CameraConfig] = Field(
+    cameras: list[CameraConfig] = Field(
         default_factory=lambda: [CameraConfig(name="main_camera")],
         description="Camera configurations",
     )
@@ -843,12 +815,12 @@ class EnvironmentConfig(BaseModel):
     )
 
     # Surgical table
-    surgical_table: Optional[SurgicalTableConfig] = Field(
+    surgical_table: SurgicalTableConfig | None = Field(
         default=None, description="Surgical table configuration"
     )
 
     # Environment mesh (room geometry)
-    environment_mesh: Optional[MeshAsset] = Field(
+    environment_mesh: MeshAsset | None = Field(
         default=None, description="Optional environment mesh (e.g., operating room)"
     )
 
@@ -857,17 +829,15 @@ class EnvironmentConfig(BaseModel):
         default_factory=lambda: RgbColor(r=0.1, g=0.1, b=0.1, a=1.0),
         description="Background color",
     )
-    skybox: Optional[TextureAsset] = Field(default=None, description="Skybox texture")
+    skybox: TextureAsset | None = Field(default=None, description="Skybox texture")
 
     # Ambient settings
-    ambient_light: Tuple[float, float, float] = Field(
+    ambient_light: tuple[float, float, float] = Field(
         default=(0.1, 0.1, 0.1), description="Ambient light color"
     )
     fog_enabled: bool = Field(default=False, description="Whether fog is enabled")
-    fog_color: Optional[Tuple[float, float, float]] = Field(
-        default=None, description="Fog color"
-    )
-    fog_distance: Optional[float] = Field(default=None, description="Fog distance")
+    fog_color: tuple[float, float, float] | None = Field(default=None, description="Fog color")
+    fog_distance: float | None = Field(default=None, description="Fog distance")
 
 
 # ============================================================================
@@ -881,7 +851,7 @@ class TaskObjective(BaseModel):
     name: str = Field(description="Objective name")
     description: str = Field(description="Objective description")
     success_criteria: str = Field(description="Success criteria description")
-    failure_criteria: Optional[str] = Field(default=None, description="Failure criteria")
+    failure_criteria: str | None = Field(default=None, description="Failure criteria")
     weight: float = Field(default=1.0, ge=0.0, description="Objective weight")
 
 
@@ -893,12 +863,12 @@ class ConstraintConfig(BaseModel):
         description="Constraint type"
     )
     target_entity: str = Field(description="Entity to constrain")
-    reference_entity: Optional[str] = Field(default=None, description="Reference entity")
-    limits: Tuple[float, float] = Field(description="Min and max limits")
+    reference_entity: str | None = Field(default=None, description="Reference entity")
+    limits: tuple[float, float] = Field(description="Min and max limits")
     penalty_weight: float = Field(
         default=1.0, ge=0.0, description="Penalty weight for constraint violation"
     )
-    description: Optional[str] = Field(default=None, description="Constraint description")
+    description: str | None = Field(default=None, description="Constraint description")
 
 
 class RewardShaping(BaseModel):
@@ -920,10 +890,8 @@ class TaskConfig(BaseModel):
 
     name: str = Field(description="Task name")
     description: str = Field(description="Task description")
-    objectives: List[TaskObjective] = Field(
-        default_factory=list, description="Task objectives"
-    )
-    constraints: List[ConstraintConfig] = Field(
+    objectives: list[TaskObjective] = Field(default_factory=list, description="Task objectives")
+    constraints: list[ConstraintConfig] = Field(
         default_factory=list, description="Task constraints"
     )
     reward_shaping: RewardShaping = Field(
@@ -947,20 +915,20 @@ class PhysicsRandomization(BaseModel):
     """Physics parameter randomization."""
 
     enabled: bool = Field(default=False, description="Enable randomization")
-    mass_range: Optional[Tuple[float, float]] = Field(
+    mass_range: tuple[float, float] | None = Field(
         default=None, description="Mass randomization range (ratio)"
     )
-    friction_range: Optional[Tuple[float, float]] = Field(
+    friction_range: tuple[float, float] | None = Field(
         default=None, description="Friction randomization range"
     )
-    damping_range: Optional[Tuple[float, float]] = Field(
+    damping_range: tuple[float, float] | None = Field(
         default=None, description="Damping randomization range"
     )
-    stiffness_range: Optional[Tuple[float, float]] = Field(
+    stiffness_range: tuple[float, float] | None = Field(
         default=None, description="Stiffness randomization range"
     )
-    gravity_range: Optional[Tuple[Tuple[float, float], Tuple[float, float], Tuple[float, float]]] = Field(
-        default=None, description="Gravity randomization ranges for (x, y, z)"
+    gravity_range: tuple[tuple[float, float], tuple[float, float], tuple[float, float]] | None = (
+        Field(default=None, description="Gravity randomization ranges for (x, y, z)")
     )
 
 
@@ -968,16 +936,14 @@ class VisualRandomization(BaseModel):
     """Visual parameter randomization."""
 
     enabled: bool = Field(default=False, description="Enable randomization")
-    color_range: Optional[Tuple[float, float]] = Field(
+    color_range: tuple[float, float] | None = Field(
         default=None, description="Color variation range"
     )
-    texture_randomization: bool = Field(
-        default=False, description="Enable texture randomization"
-    )
-    lighting_variation: Optional[Tuple[float, float]] = Field(
+    texture_randomization: bool = Field(default=False, description="Enable texture randomization")
+    lighting_variation: tuple[float, float] | None = Field(
         default=None, description="Lighting intensity variation range"
     )
-    camera_pose_noise: Optional[Tuple[float, float]] = Field(
+    camera_pose_noise: tuple[float, float] | None = Field(
         default=None, description="Camera pose noise (position, orientation)"
     )
 
@@ -986,13 +952,11 @@ class DynamicsRandomization(BaseModel):
     """Dynamics parameter randomization."""
 
     enabled: bool = Field(default=False, description="Enable randomization")
-    joint_noise: Optional[Tuple[float, float]] = Field(
+    joint_noise: tuple[float, float] | None = Field(
         default=None, description="Joint position/velocity noise"
     )
-    action_noise: Optional[Tuple[float, float]] = Field(
-        default=None, description="Action noise range"
-    )
-    delay_range: Optional[Tuple[float, float]] = Field(
+    action_noise: tuple[float, float] | None = Field(default=None, description="Action noise range")
+    delay_range: tuple[float, float] | None = Field(
         default=None, description="Action/reaction delay range"
     )
 
@@ -1012,7 +976,7 @@ class DomainRandomizationConfig(BaseModel):
     randomize_each_episode: bool = Field(
         default=True, description="Randomize at each episode reset"
     )
-    seed: Optional[int] = Field(default=None, description="Random seed for reproducibility")
+    seed: int | None = Field(default=None, description="Random seed for reproducibility")
 
 
 # ============================================================================
@@ -1024,12 +988,12 @@ class Metadata(BaseModel):
     """Scene metadata."""
 
     name: str = Field(default="Untitled Scene", description="Scene name")
-    description: Optional[str] = Field(default=None, description="Scene description")
+    description: str | None = Field(default=None, description="Scene description")
     version: str = Field(default="1.0.0", description="Scene version")
-    author: Optional[str] = Field(default=None, description="Author name")
-    created: Optional[str] = Field(default=None, description="Creation date")
-    modified: Optional[str] = Field(default=None, description="Last modification date")
-    tags: List[str] = Field(default_factory=list, description="Tags for categorization")
+    author: str | None = Field(default=None, description="Author name")
+    created: str | None = Field(default=None, description="Creation date")
+    modified: str | None = Field(default=None, description="Last modification date")
+    tags: list[str] = Field(default_factory=list, description="Tags for categorization")
 
 
 class SceneDefinition(BaseModel):
@@ -1052,20 +1016,16 @@ class SceneDefinition(BaseModel):
     )
 
     # Entities
-    robots: List[RobotConfig] = Field(
-        default_factory=list, description="Robot configurations"
-    )
-    tissues: List[TissueConfig] = Field(
+    robots: list[RobotConfig] = Field(default_factory=list, description="Robot configurations")
+    tissues: list[TissueConfig] = Field(
         default_factory=list, description="Tissue/organ configurations"
     )
-    instruments: List[InstrumentConfig] = Field(
+    instruments: list[InstrumentConfig] = Field(
         default_factory=list, description="Instrument configurations"
     )
 
     # Task
-    task: Optional[TaskConfig] = Field(
-        default=None, description="Task configuration"
-    )
+    task: TaskConfig | None = Field(default=None, description="Task configuration")
 
     # Domain randomization
     domain_randomization: DomainRandomizationConfig = Field(
@@ -1079,43 +1039,43 @@ class SceneDefinition(BaseModel):
     )
 
     # Additional assets
-    assets: Dict[str, AssetReference] = Field(
+    assets: dict[str, AssetReference] = Field(
         default_factory=dict, description="Additional asset references"
     )
 
     # Custom parameters
-    custom: Dict[str, Any] = Field(
+    custom: dict[str, Any] = Field(
         default_factory=dict, description="Custom parameters for extensions"
     )
 
-    def get_robot(self, name: str) -> Optional[RobotConfig]:
+    def get_robot(self, name: str) -> RobotConfig | None:
         """Get robot by name."""
         for robot in self.robots:
             if robot.name == name:
                 return robot
         return None
 
-    def get_tissue(self, name: str) -> Optional[TissueConfig]:
+    def get_tissue(self, name: str) -> TissueConfig | None:
         """Get tissue by name."""
         for tissue in self.tissues:
             if tissue.name == name:
                 return tissue
         return None
 
-    def get_instrument(self, name: str) -> Optional[InstrumentConfig]:
+    def get_instrument(self, name: str) -> InstrumentConfig | None:
         """Get instrument by name."""
         for instrument in self.instruments:
             if instrument.name == name:
                 return instrument
         return None
 
-    def get_camera(self, name: str) -> Optional[CameraConfig]:
+    def get_camera(self, name: str) -> CameraConfig | None:
         """Get camera by name."""
         for camera in self.environment.cameras:
             if camera.name == name:
                 return camera
         return None
 
-    def get_active_cameras(self) -> List[CameraConfig]:
+    def get_active_cameras(self) -> list[CameraConfig]:
         """Get all active cameras."""
         return [cam for cam in self.environment.cameras if cam.active]
