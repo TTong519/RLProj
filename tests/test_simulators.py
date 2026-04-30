@@ -265,6 +265,22 @@ class TestPyBulletSimulator:
         assert sim.scene is None
         assert sim.simulation_time == 0.0
 
+    def test_endeffector_pose_action_sets_joint_targets(self, suturing_scene):
+        """Test endeffector_pose action mode applies IK without crashing."""
+        sim = PyBulletSimulator()
+        sim.load_scene(suturing_scene)
+        sim.set_action_mode("endeffector_pose")
+        action = np.zeros(6, dtype=np.float32)
+        sim.step(action)
+
+    def test_endeffector_delta_action_sets_joint_targets(self, suturing_scene):
+        """Test endeffector_delta action mode applies IK without crashing."""
+        sim = PyBulletSimulator()
+        sim.load_scene(suturing_scene)
+        sim.set_action_mode("endeffector_delta")
+        action = np.zeros(6, dtype=np.float32)
+        sim.step(action)
+
 
 class TestBaseSimulator:
     """Tests for BaseSimulator abstract class."""
