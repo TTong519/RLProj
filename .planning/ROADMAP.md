@@ -103,7 +103,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Critical Bug Fixes | 2/3 | In progress | 01-01 verified, 01-02 completed (Reward, Curriculum, LightConfig fixes) |
+| 1. Critical Bug Fixes | 3/3 | Complete | 2026-04-29 |
 | 2. Action Space + Gripper | 0/3 | Not started | - |
 | 3. Simulator Robustness | 0/2 | Not started | - |
 | 4. Task Geometry + Assets | 0/2 | Not started | - |

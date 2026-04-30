@@ -7,14 +7,14 @@
 
 ### Critical Bugs
 
-- [ ] **BUG-01**: PyBullet primitive robot quaternion order matches PyBullet convention `[x, y, z, w]`, producing correct orientation
-- [ ] **BUG-02**: PyBullet `reset()` clears all joint positions and velocities to initial values, preventing state leakage between episodes
-- [ ] **BUG-03**: `load_scene()` does not crash when `scene_definition.physics` is `None`
-- [ ] **BUG-04**: `RewardConfig` validates that penalty values are non-negative; collision penalty sign contract is enforced without `abs()` patch
-- [ ] **BUG-05**: Vision prompts produce valid JSON strings (not Python `repr()`) when passed to LLM APIs
-- [ ] **BUG-06**: `CurriculumScheduler.apply_parameters()` applies stage-specific parameter overrides instead of returning `True` as a no-op
-- [ ] **BUG-07**: `LightConfig` validator uses `model_copy(update=...)` instead of in-place `data` mutation
-- [ ] **BUG-08**: `TrainingManager.evaluate()` handles both Gymnasium 5-tuple and SB3 `VecEnv` 4-tuple APIs without crashing
+- [x] **BUG-01**: PyBullet primitive robot quaternion order matches PyBullet convention `[x, y, z, w]`, producing correct orientation
+- [x] **BUG-02**: PyBullet `reset()` clears all joint positions and velocities to initial values, preventing state leakage between episodes
+- [x] **BUG-03**: `load_scene()` does not crash when `scene_definition.physics` is `None`
+- [x] **BUG-04**: `RewardConfig` validates that penalty values are non-negative; collision penalty sign contract is enforced without `abs()` patch
+- [x] **BUG-05**: Vision prompts produce valid JSON strings (not Python `repr()`) when passed to LLM APIs
+- [x] **BUG-06**: `CurriculumScheduler.apply_parameters()` applies stage-specific parameter overrides instead of returning `True` as a no-op
+- [x] **BUG-07**: `LightConfig` validator copies input dict instead of mutating it in place
+- [x] **BUG-08**: `TrainingManager.evaluate()` handles both Gymnasium 5-tuple and SB3 `VecEnv` 4-tuple APIs without crashing
 
 ### Action Space
 
@@ -40,8 +40,8 @@
 
 ### Security & Config
 
-- [ ] **SEC-01**: `.env.example` does not contain a placeholder API key; `Settings.llm_api_key` rejects placeholder values
-- [ ] **SEC-02**: LLM API keys are masked in log output (only last 4 characters shown)
+- [x] **SEC-01**: `.env.example` does not contain a placeholder API key; `Settings.llm_api_key` rejects placeholder values
+- [x] **SEC-02**: LLM API keys are masked in log output (only last 4 characters shown)
 
 ## v2 Requirements
 
@@ -65,14 +65,16 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BUG-01 | Phase 1 | Pending |
-| BUG-02 | Phase 1 | Pending |
-| BUG-03 | Phase 1 | Pending |
-| BUG-04 | Phase 1 | Pending |
-| BUG-05 | Phase 1 | Pending |
-| BUG-06 | Phase 1 | Pending |
-| BUG-07 | Phase 1 | Pending |
-| BUG-08 | Phase 1 | Pending |
+| BUG-01 | Phase 1 | Complete |
+| BUG-02 | Phase 1 | Complete |
+| BUG-03 | Phase 1 | Complete |
+| BUG-04 | Phase 1 | Complete |
+| BUG-05 | Phase 1 | Complete |
+| BUG-06 | Phase 1 | Complete |
+| BUG-07 | Phase 1 | Complete |
+| BUG-08 | Phase 1 | Complete |
+| SEC-01 | Phase 1 | Complete |
+| SEC-02 | Phase 1 | Complete |
 | ACT-01 | Phase 2 | Pending |
 | ACT-02 | Phase 2 | Pending |
 | ACT-03 | Phase 2 | Pending |
@@ -86,8 +88,6 @@
 | TASK-02 | Phase 4 | Pending |
 | TASK-03 | Phase 4 | Pending |
 | TASK-04 | Phase 4 | Pending |
-| SEC-01 | Phase 1 | Pending |
-| SEC-02 | Phase 1 | Pending |
 
 **Coverage:**
 - v1 requirements: 23 total

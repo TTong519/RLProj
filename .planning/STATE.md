@@ -5,33 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-04-29)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** Phase 1 — Critical Bug Fixes
+**Current focus:** Phase 1 complete — proceeding to Phase 2
 
 ## Current Position
 
 Phase: 1 of 5 (Critical Bug Fixes)
-Plan: 0 of 3 in current phase
-Status: Ready to plan
-Last activity: 2026-04-29 — Initialized project with research, requirements, and roadmap
+Plan: 3 of 3 complete
+Status: Complete
+Last activity: 2026-04-29 — Phase 1 executed; 10 requirements satisfied
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██████████░░] 20%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: -
-- Total execution time: 0 hours
+- Total plans completed: 3
+- Average duration: ~10 minutes
+- Total execution time: ~0.5 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 1. Critical Bug Fixes | 3/3 | 3 | ~10 min |
 
 **Recent Trend:**
-- Last 5 plans: -
-- Trend: -
+- Last 3 plans: 01-01 (verify), 01-02 (fix), 01-03 (fix)
+- Trend: increasing velocity, zero regressions
 
 *Updated after each plan completion*
 
@@ -39,16 +39,15 @@ Progress: [░░░░░░░░░░] 0%
 
 ### Decisions
 
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
 - [Init]: Stabilization-first roadmap — fix critical bugs before new features
-- [Init]: Phase count = 5 (standard granularity); commit_docs = true
-- [Init]: Stack unchanged — existing MuJoCo/PyBullet/SB3/Pydantic stack is correct
+- [Phase 1]: BUG-01..03 already fixed in source; verified by regression tests
+- [Phase 1]: BUG-04 required RewardConfig refactor from dataclass → Pydantic BaseModel; accepted
+- [Phase 1]: BUG-06 mischaracterized as "no-op"; actual bug was "dynamics params silently dropped"
+- [Phase 1]: SEC-01 validator uses pattern matching (case-insensitive substring) rather than exact match
 
 ### Pending Todos
 
-None yet.
+- [Phase 2] Plan action space + gripper implementation (ACT-01..05)
 
 ### Blockers/Concerns
 
@@ -70,5 +69,5 @@ Items acknowledged and carried forward from previous milestone close:
 ## Session Continuity
 
 Last session: 2026-04-29
-Stopped at: Roadmap and STATE.md created; all artifacts ready for Phase 1 planning
+Stopped at: Phase 1 complete
 Resume file: None
