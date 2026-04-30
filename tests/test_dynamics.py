@@ -3,10 +3,17 @@
 Tests domain randomization, curriculum learning, and adaptive difficulty.
 """
 
-import pytest
-import numpy as np
 from unittest.mock import MagicMock, patch
 
+import numpy as np
+import pytest
+
+from surg_rl.dynamics.adaptive_difficulty import (
+    AdaptationDirection,
+    AdaptiveDifficultyController,
+    DifficultyConfig,
+    DifficultyState,
+)
 from surg_rl.dynamics.base_controller import (
     BaseController,
     ControllerConfig,
@@ -14,135 +21,119 @@ from surg_rl.dynamics.base_controller import (
     ParameterBounds,
     ParameterSnapshot,
 )
-
-from surg_rl.dynamics.parameter_randomizer import (
-    ParameterRandomizer,
-    PhysicsParameterBounds,
-    VisualParameterBounds,
-    DynamicsParameterBounds,
-)
-
 from surg_rl.dynamics.curriculum import (
-    CurriculumScheduler,
     CurriculumConfig,
+    CurriculumScheduler,
     CurriculumStage,
-    CurriculumStageConfig,
 )
-
-from surg_rl.dynamics.adaptive_difficulty import (
-    AdaptiveDifficultyController,
-    DifficultyConfig,
-    DifficultyState,
-    AdaptationStrategy,
-    AdaptationDirection,
-)
-
 from surg_rl.dynamics.environment_controller import (
     EnvironmentController,
     EnvironmentControllerConfig,
 )
-
+from surg_rl.dynamics.parameter_randomizer import (
+    ParameterRandomizer,
+)
 from surg_rl.scene_definition.schema import (
     DomainRandomizationConfig,
+    DynamicsRandomization,
     PhysicsRandomization,
     VisualRandomization,
-    DynamicsRandomization,
 )
-
 
 # === Test BaseController ===
 
+
 class ConcreteController(BaseController):
     """Concrete implementation for testing."""
-    
+
     def sample_parameters(self) -> ParameterSnapshot:
         return ParameterSnapshot(
             physics={"mass_ratio": self._rng.uniform(0.8, 1.2)},
             episode=self._episode,
             step=self._step,
         )
-    
+
     def apply_parameters(self, snapshot, simulator):
         return True
-    
+
     def update_curriculum(self, episode, metrics):
         return {"episode": episode}
 
 
 class TestBaseController:
     """Tests for BaseController."""
-    
+
     def test_init(self):
         """Test controller initialization."""
         config = ControllerConfig(enabled=True, seed=42)
         controller = ConcreteController(config=config)
-        
+
         assert controller.state == ControllerState.IDLE
         assert controller.step == 0
         assert controller.episode == 0
-    
+
     def test_start_stop(self):
         """Test start and stop lifecycle."""
         controller = ConcreteController()
-        
+
         controller.start()
         assert controller.state == ControllerState.ACTIVE
-        
+
         controller.stop()
         assert controller.state == ControllerState.IDLE
-        
+
         controller.pause()
         assert controller.state == ControllerState.PAUSED
-        
+
         controller.resume()
         assert controller.state == ControllerState.ACTIVE
-    
+
     def test_reset(self):
         """Test episode reset."""
         controller = ConcreteController()
         controller.start()
-        
+
         params = controller.reset(seed=42)
-        
+
         assert controller.episode == 1
         assert params.episode == 1
         assert "mass_ratio" in params.physics
-    
+
     def test_sample_parameters_reproducible(self):
         """Test that sampling is reproducible with seed."""
         controller1 = ConcreteController(config=ControllerConfig(seed=42))
         controller2 = ConcreteController(config=ControllerConfig(seed=42))
-        
+
         controller1.start()
         controller2.start()
-        
+
         params1 = controller1.reset()
         params2 = controller2.reset()
-        
+
         # Both should have same sampled values
         assert params1.physics == params2.physics
-    
+
     def test_callbacks(self):
         """Test callback system."""
         controller = ConcreteController()
-        
+
         called = []
-        
+
         def on_reset():
             called.append("reset")
-        
+
         def on_episode_start():
             called.append("start")
-        
+
         controller.on("on_reset", on_reset)
         controller.on("on_episode_start", on_episode_start)
-        
+
         controller.start()
         controller.reset()
-        
+
         assert "reset" in called
         assert "start" in called
-    
+
     def test_parameter_bounds(self):
         """Test parameter bounds sampling."""
         bounds = ParameterBounds(
@@ -151,11 +142,11 @@ class TestBaseController:
             max_value=1.0,
             default=0.5,
         )
-        
+
         assert bounds.name == "test_param"
         assert bounds.min_value == 0.0
         assert bounds.max_value == 1.0
-    
+
     def test_parameter_snapshot(self):
         """Test parameter snapshot."""
         snapshot = ParameterSnapshot(
@@ -165,7 +156,7 @@ class TestBaseController:
             episode=5,
             step=100,
         )
-        
+
         assert snapshot.physics["mass_ratio"] == 1.1
         assert snapshot.visual["lighting"] == 0.8
         assert snapshot.dynamics["action_noise"] == 0.02
@@ -175,16 +166,17 @@ class TestBaseController:
 
 # === Test ParameterRandomizer ===
 
+
 class TestParameterRandomizer:
     """Tests for ParameterRandomizer."""
-    
+
     def test_init(self):
         """Test randomizer initialization."""
         domain_config = DomainRandomizationConfig()
         randomizer = ParameterRandomizer(domain_config=domain_config)
-        
+
         assert randomizer.domain_config == domain_config
-    
+
     def test_sample_parameters_physics(self):
         """Test physics parameter sampling."""
         domain_config = DomainRandomizationConfig(
@@ -194,14 +186,14 @@ class TestParameterRandomizer:
                 friction_range=(0.3, 0.7),
             )
         )
-        
+
         randomizer = ParameterRandomizer(domain_config=domain_config)
         randomizer.start()
-        
+
         params = randomizer.reset()
-        
+
         assert "mass_ratio" in params.physics or len(params.physics) >= 0
-    
+
     def test_sample_parameters_disabled(self):
         """Test that disabled randomization returns empty params."""
         domain_config = DomainRandomizationConfig(
@@ -209,16 +201,16 @@ class TestParameterRandomizer:
             visual=VisualRandomization(enabled=False),
             dynamics=DynamicsRandomization(enabled=False),
         )
-        
+
         randomizer = ParameterRandomizer(domain_config=domain_config)
         randomizer.start()
-        
+
         params = randomizer.reset()
-        
+
         assert len(params.physics) == 0
         assert len(params.visual) == 0
         assert len(params.dynamics) == 0
-    
+
     def test_get_randomized_action(self):
         """Test action randomization."""
         domain_config = DomainRandomizationConfig(
@@ -227,17 +219,17 @@ class TestParameterRandomizer:
                 action_noise=(-0.1, 0.1),
             )
         )
-        
+
         randomizer = ParameterRandomizer(domain_config=domain_config)
         randomizer.start()
         randomizer.reset()
-        
+
         action = np.array([0.5, 0.5, 0.5])
         randomized = randomizer.get_randomized_action(action)
-        
+
         # Action should potentially be different (though not guaranteed)
         assert randomized.shape == action.shape
-    
+
     def test_get_randomized_observation(self):
         """Test observation randomization."""
         domain_config = DomainRandomizationConfig(
@@ -259,6 +251,7 @@ class TestParameterRandomizer:
     def test_apply_visual_parameters_mujoco(self):
         """Test applying visual parameters to a mock MuJoCo simulator."""
         from unittest.mock import MagicMock
+
         import numpy as np
 
         randomizer = ParameterRandomizer()
@@ -285,6 +278,7 @@ class TestParameterRandomizer:
     def test_apply_mass_scaling_mujoco(self):
         """Test mass scaling on a mock MuJoCo simulator."""
         from unittest.mock import MagicMock
+
         import numpy as np
 
         randomizer = ParameterRandomizer()
@@ -299,6 +293,7 @@ class TestParameterRandomizer:
     def test_apply_friction_mujoco(self):
         """Test friction application on a mock MuJoCo simulator."""
         from unittest.mock import MagicMock
+
         import numpy as np
 
         randomizer = ParameterRandomizer()
@@ -313,6 +308,7 @@ class TestParameterRandomizer:
     def test_apply_parameters_calls_visual(self):
         """Test that apply_parameters calls visual parameter application."""
         from unittest.mock import MagicMock, patch
+
         import numpy as np
 
         domain_config = DomainRandomizationConfig(
@@ -331,7 +327,7 @@ class TestParameterRandomizer:
         sim._model.vis = MagicMock()
         sim._model.vis.headlight = np.array([0.1, 0.15, 0.3])
 
-        with patch.object(randomizer, '_apply_visual_parameters') as mock_visual:
+        with patch.object(randomizer, "_apply_visual_parameters") as mock_visual:
             result = randomizer.apply_parameters(snapshot, sim)
             assert result is True
             mock_visual.assert_called_once()
@@ -339,20 +335,21 @@ class TestParameterRandomizer:
 
 # === Test CurriculumScheduler ===
 
+
 class TestCurriculumScheduler:
     """Tests for CurriculumScheduler."""
-    
+
     def test_init(self):
         """Test scheduler initialization."""
         scheduler = CurriculumScheduler()
-        
+
         assert scheduler.current_stage == CurriculumStage.EASY
         assert scheduler.current_difficulty == 0.25
-    
+
     def test_stage_progression(self):
         """Test manual stage progression."""
         scheduler = CurriculumScheduler()
-        
+
         assert scheduler.current_stage == CurriculumStage.EASY
         assert scheduler.advance_stage() is True
         assert scheduler.current_stage == CurriculumStage.MEDIUM
@@ -361,40 +358,38 @@ class TestCurriculumScheduler:
         assert scheduler.advance_stage() is True
         assert scheduler.current_stage == CurriculumStage.EXPERT
         assert scheduler.advance_stage() is False  # Already at max
-    
+
     def test_stage_regression(self):
         """Test manual stage regression."""
-        curriculum_config = CurriculumConfig(
-            initial_stage=CurriculumStage.HARD
-        )
+        curriculum_config = CurriculumConfig(initial_stage=CurriculumStage.HARD)
         scheduler = CurriculumScheduler(curriculum_config=curriculum_config)
-        
+
         assert scheduler.current_stage == CurriculumStage.HARD
         assert scheduler.regress_stage() is True
         assert scheduler.current_stage == CurriculumStage.MEDIUM
         assert scheduler.regress_stage() is True
         assert scheduler.current_stage == CurriculumStage.EASY
         assert scheduler.regress_stage() is False  # Already at min
-    
+
     def test_set_stage(self):
         """Test manual stage setting."""
         scheduler = CurriculumScheduler()
-        
+
         scheduler.set_stage(CurriculumStage.EXPERT)
-        
+
         assert scheduler.current_stage == CurriculumStage.EXPERT
         assert scheduler.current_difficulty == 1.0
-    
+
     def test_sample_parameters(self):
         """Test parameter sampling for curriculum stages."""
         scheduler = CurriculumScheduler()
         scheduler.start()
-        
+
         params = scheduler.reset()
-        
+
         assert params.episode == 1
         assert isinstance(params.physics, dict)
-    
+
     def test_auto_advancement(self):
         """Test automatic stage advancement based on performance."""
         curriculum_config = CurriculumConfig(
@@ -403,28 +398,28 @@ class TestCurriculumScheduler:
         )
         scheduler = CurriculumScheduler(curriculum_config=curriculum_config)
         scheduler.start()
-        
+
         # Simulate good performance
-        for i in range(60):
+        for _i in range(60):
             scheduler.reset()
-            info = scheduler.episode_end(
+            scheduler.episode_end(
                 {"success": 1, "reward": 100},
                 simulator=None,
             )
-        
+
         # Should have advanced from EASY
         assert scheduler.current_stage != CurriculumStage.EASY or scheduler._episode < 50
-    
+
     def test_get_progress(self):
         """Test progress reporting."""
         scheduler = CurriculumScheduler()
-        
+
         progress = scheduler.get_progress()
-        
+
         assert "current_stage" in progress
         assert "difficulty" in progress
         assert "progress" in progress
-    
+
     def test_get_performance_summary(self):
         """Test performance summary."""
         scheduler = CurriculumScheduler()
@@ -441,8 +436,8 @@ class TestCurriculumScheduler:
 
         assert "success_rate" in summary
         assert "avg_reward" in summary
-        assert summary["success_rate"] == pytest.approx(2/3, rel=0.1)
-        assert summary["avg_reward"] == pytest.approx(230/3, rel=0.1)
+        assert summary["success_rate"] == pytest.approx(2 / 3, rel=0.1)
+        assert summary["avg_reward"] == pytest.approx(230 / 3, rel=0.1)
 
     def test_curriculum_apply_parameters_not_noop(self):
         """apply_parameters must not be a no-op returning True."""
@@ -452,7 +447,9 @@ class TestCurriculumScheduler:
         scheduler.start()
         scheduler.reset()
 
-        snapshot = ParameterSnapshot(physics={"gravity_x": 0.0}, visual={}, dynamics={}, episode=1, step=0)
+        snapshot = ParameterSnapshot(
+            physics={"gravity_x": 0.0}, visual={}, dynamics={}, episode=1, step=0
+        )
         simulator = MagicMock()
 
         result = scheduler.apply_parameters(snapshot, simulator)
@@ -460,26 +457,52 @@ class TestCurriculumScheduler:
         # Must have attempted to apply parameters
         assert simulator.setGravity.called, "apply_parameters was a no-op"
 
+    def test_curriculum_applies_dynamics_params(self):
+        """apply_parameters must apply or store dynamics parameters."""
+        from unittest.mock import MagicMock
+
+        scheduler = CurriculumScheduler()
+        scheduler.start()
+        scheduler.reset()
+
+        snapshot = ParameterSnapshot(
+            physics={"gravity_x": 0.0},
+            visual={},
+            dynamics={"action_noise": 0.05},
+            episode=1,
+            step=0,
+        )
+        # Only expose setGravity so dynamics setter is missing -> storage path
+        simulator = MagicMock(spec=["setGravity"])
+
+        result = scheduler.apply_parameters(snapshot, simulator)
+        assert result is True
+        # Physics branch must have been exercised
+        assert simulator.setGravity.called
+        # Dynamics parameter stored for downstream consumption
+        assert scheduler._active_action_noise == 0.05
+
 
 # === Test AdaptiveDifficultyController ===
 
+
 class TestAdaptiveDifficultyController:
     """Tests for AdaptiveDifficultyController."""
-    
+
     def test_init(self):
         """Test controller initialization."""
         controller = AdaptiveDifficultyController()
-        
+
         assert controller.difficulty == 0.3  # Default initial
         assert controller.direction == AdaptationDirection.MAINTAIN
-    
+
     def test_custom_initial_difficulty(self):
         """Test custom initial difficulty."""
         config = DifficultyConfig(initial_difficulty=0.5)
         controller = AdaptiveDifficultyController(difficulty_config=config)
-        
+
         assert controller.difficulty == 0.5
-    
+
     def test_difficulty_bounds(self):
         """Test difficulty bounds."""
         config = DifficultyConfig(
@@ -487,23 +510,23 @@ class TestAdaptiveDifficultyController:
             max_difficulty=0.8,
         )
         controller = AdaptiveDifficultyController(difficulty_config=config)
-        
+
         controller.set_difficulty(0.1)
         assert controller.difficulty == 0.2  # Clamped to min
-        
+
         controller.set_difficulty(1.0)
         assert controller.difficulty == 0.8  # Clamped to max
-    
+
     def test_sample_parameters(self):
         """Test parameter sampling."""
         controller = AdaptiveDifficultyController()
         controller.start()
-        
+
         params = controller.reset()
-        
+
         assert params.episode == 1
         assert isinstance(params.physics, dict)
-    
+
     def test_difficulty_adaptation(self):
         """Test difficulty adaptation based on performance."""
         config = DifficultyConfig(
@@ -512,17 +535,17 @@ class TestAdaptiveDifficultyController:
         )
         controller = AdaptiveDifficultyController(difficulty_config=config)
         controller.start()
-        
+
         initial_difficulty = controller.difficulty
-        
+
         # Simulate good performance
         controller.reset()
         for _ in range(25):
             controller.episode_end({"success": 1, "reward": 100}, simulator=None)
-        
+
         # Difficulty should have increased
         assert controller.difficulty >= initial_difficulty
-    
+
     def test_difficulty_decrease(self):
         """Test difficulty decrease on poor performance."""
         config = DifficultyConfig(
@@ -532,42 +555,43 @@ class TestAdaptiveDifficultyController:
         )
         controller = AdaptiveDifficultyController(difficulty_config=config)
         controller.start()
-        
+
         initial_difficulty = controller.difficulty
-        
+
         # Simulate poor performance
         controller.reset()
         for _ in range(25):
             controller.episode_end({"success": 0, "reward": -100}, simulator=None)
-        
+
         # Difficulty should have decreased
         assert controller.difficulty <= initial_difficulty
-    
+
     def test_get_difficulty_state(self):
         """Test difficulty state retrieval."""
         controller = AdaptiveDifficultyController()
-        
+
         state = controller.get_difficulty_state()
-        
+
         assert isinstance(state, DifficultyState)
         assert state.difficulty == controller.difficulty
-    
+
     def test_reset_difficulty(self):
         """Test difficulty reset."""
         config = DifficultyConfig(initial_difficulty=0.5)
         controller = AdaptiveDifficultyController(difficulty_config=config)
-        
+
         controller.set_difficulty(0.8)
         controller.reset_difficulty()
-        
+
         assert controller.difficulty == 0.5
 
 
 # === Test EnvironmentController ===
 
+
 class TestEnvironmentController:
     """Tests for EnvironmentController."""
-    
+
     def test_init(self):
         """Test controller initialization."""
         config = EnvironmentControllerConfig(
@@ -576,20 +600,20 @@ class TestEnvironmentController:
             use_adaptive_difficulty=False,
         )
         controller = EnvironmentController(config=config)
-        
+
         assert controller.config.enabled is True
         assert controller.randomizer is None
         assert controller.curriculum is None
         assert controller.adaptive is None
-    
+
     def test_init_defaults(self):
         """Test controller with default config."""
         controller = EnvironmentController()
-        
+
         # Default config has use_randomization=True
         assert controller.config.use_randomization is True
         assert controller.randomizer is not None
-    
+
     def test_with_randomization(self):
         """Test controller with randomization."""
         domain_config = DomainRandomizationConfig(
@@ -598,53 +622,53 @@ class TestEnvironmentController:
                 mass_range=(0.9, 1.1),
             )
         )
-        
+
         config = EnvironmentControllerConfig(
             use_randomization=True,
             randomization_config=domain_config,
         )
         controller = EnvironmentController(config=config)
-        
+
         assert controller.randomizer is not None
-    
+
     def test_with_curriculum(self):
         """Test controller with curriculum learning."""
         config = EnvironmentControllerConfig(
             use_curriculum=True,
         )
         controller = EnvironmentController(config=config)
-        
+
         assert controller.curriculum is not None
-    
+
     def test_with_adaptive_difficulty(self):
         """Test controller with adaptive difficulty."""
         config = EnvironmentControllerConfig(
             use_adaptive_difficulty=True,
         )
         controller = EnvironmentController(config=config)
-        
+
         assert controller.adaptive is not None
-    
+
     def test_lifecycle(self):
         """Test controller lifecycle."""
         config = EnvironmentControllerConfig(
             use_randomization=True,
         )
         controller = EnvironmentController(config=config)
-        
+
         controller.start()
         params = controller.reset(seed=42)
-        
+
         assert params.episode == 1
-        
+
         info = controller.episode_end(
             {"reward": 100, "success": True},
             simulator=None,
         )
-        
+
         assert "episode" in info
         assert "params" in info
-    
+
     def test_get_status(self):
         """Test status retrieval."""
         config = EnvironmentControllerConfig(
@@ -653,12 +677,12 @@ class TestEnvironmentController:
             use_adaptive_difficulty=True,
         )
         controller = EnvironmentController(config=config)
-        
+
         status = controller.get_status()
-        
+
         assert "enabled" in status
         assert "episode" in status
-    
+
     def test_utility_methods(self):
         """Test utility methods."""
         controller = EnvironmentController(
@@ -667,22 +691,22 @@ class TestEnvironmentController:
                 use_adaptive_difficulty=True,
             )
         )
-        
+
         # Test curriculum stage
         stage = controller.get_curriculum_stage()
         assert stage == CurriculumStage.EASY
-        
+
         # Test difficulty
         difficulty = controller.get_difficulty()
         assert difficulty == 0.3  # Default
-        
+
         # Test set methods
         controller.set_difficulty(0.7)
         assert controller.get_difficulty() == 0.7
-        
+
         controller.set_curriculum_stage(CurriculumStage.HARD)
         assert controller.get_curriculum_stage() == CurriculumStage.HARD
-    
+
     def test_action_observation_randomization(self):
         """Test action and observation randomization."""
         domain_config = DomainRandomizationConfig(
@@ -692,22 +716,22 @@ class TestEnvironmentController:
                 joint_noise=(-0.02, 0.02),
             )
         )
-        
+
         controller = EnvironmentController(
             config=EnvironmentControllerConfig(
                 use_randomization=True,
                 randomization_config=domain_config,
             )
         )
-        
+
         controller.start()
         controller.reset()
-        
+
         # Test action randomization
         action = np.array([0.5, 0.5])
         randomized = controller.get_randomized_action(action)
         assert randomized.shape == action.shape
-        
+
         # Test observation randomization
         obs = np.array([1.0, 2.0, 3.0])
         randomized = controller.get_randomized_observation(obs)
@@ -717,6 +741,7 @@ class TestEnvironmentController:
 def test_parameter_randomizer_logs_on_failure():
     """Failed parameter application must log a warning, not be silent."""
     from unittest.mock import MagicMock, patch
+
     from surg_rl.dynamics.parameter_randomizer import ParameterRandomizer
     from surg_rl.scene_definition.schema import DomainRandomizationConfig
 
@@ -728,15 +753,18 @@ def test_parameter_randomizer_logs_on_failure():
     simulator._model = None
     simulator._physics_client = 0
 
-    with patch("surg_rl.dynamics.parameter_randomizer.logger") as mock_logger:
-        with patch.dict("sys.modules", {"pybullet": None}):
-            randomizer._apply_gravity(simulator, [0.0, 0.0, -9.81])
-            mock_logger.warning.assert_called()
+    with (
+        patch("surg_rl.dynamics.parameter_randomizer.logger") as mock_logger,
+        patch.dict("sys.modules", {"pybullet": None}),
+    ):
+        randomizer._apply_gravity(simulator, [0.0, 0.0, -9.81])
+        mock_logger.warning.assert_called()
 
 
 def test_visual_randomization_preserves_original_colors():
     """Visual randomization must offset from original color, not hardcode 0.5."""
     from unittest.mock import MagicMock, patch
+
     from surg_rl.dynamics.parameter_randomizer import ParameterRandomizer
     from surg_rl.scene_definition.schema import DomainRandomizationConfig, VisualRandomization
 
@@ -769,6 +797,7 @@ def test_visual_randomization_preserves_original_colors():
 def test_adaptive_difficulty_applies_mass_and_friction():
     """apply_parameters must apply mass_ratio and friction, not just gravity."""
     from unittest.mock import MagicMock
+
     from surg_rl.dynamics.adaptive_difficulty import AdaptiveDifficultyController, DifficultyConfig
     from surg_rl.dynamics.base_controller import ParameterSnapshot
 
@@ -779,20 +808,25 @@ def test_adaptive_difficulty_applies_mass_and_friction():
 
     snapshot = ParameterSnapshot(
         physics={"gravity_variation": 0.1, "mass_ratio": 1.2, "friction": 0.8},
-        visual={}, dynamics={}, episode=1, step=0,
+        visual={},
+        dynamics={},
+        episode=1,
+        step=0,
     )
     simulator = MagicMock()
     simulator._body_ids = {"body1": 1}
 
     controller.apply_parameters(snapshot, simulator)
 
-    assert simulator.set_body_property.called, \
-        "apply_parameters did not apply mass_ratio or friction"
+    assert (
+        simulator.set_body_property.called
+    ), "apply_parameters did not apply mass_ratio or friction"
 
 
 def test_adaptive_difficulty_gravity_without_getdynamicsinfo():
     """apply_parameters must not call getDynamicsInfo for gravity."""
     from unittest.mock import MagicMock, patch
+
     from surg_rl.dynamics.adaptive_difficulty import AdaptiveDifficultyController, DifficultyConfig
     from surg_rl.dynamics.base_controller import ParameterSnapshot
 
@@ -803,7 +837,10 @@ def test_adaptive_difficulty_gravity_without_getdynamicsinfo():
 
     snapshot = ParameterSnapshot(
         physics={"gravity_variation": 0.1},
-        visual={}, dynamics={}, episode=1, step=0,
+        visual={},
+        dynamics={},
+        episode=1,
+        step=0,
     )
     simulator = MagicMock()
     simulator._physics_client = 0
@@ -969,11 +1006,10 @@ class TestAdaptiveDifficultyEdgeCases:
         """apply_parameters calls set_body_property on simulator for mass."""
         ctrl = AdaptiveDifficultyController()
         from unittest.mock import ANY
+
         from surg_rl.dynamics.base_controller import ParameterSnapshot
 
-        snapshot = ParameterSnapshot(
-            physics={"mass_ratio": 1.2, "gravity_variation": 0.0}
-        )
+        snapshot = ParameterSnapshot(physics={"mass_ratio": 1.2, "gravity_variation": 0.0})
         sim = MagicMock()
         sim._body_ids = {"body1": 1}
         ctrl.apply_parameters(snapshot, sim)
@@ -983,6 +1019,7 @@ class TestAdaptiveDifficultyEdgeCases:
         """apply_parameters calls set_body_property on simulator for friction."""
         ctrl = AdaptiveDifficultyController()
         from unittest.mock import ANY
+
         from surg_rl.dynamics.base_controller import ParameterSnapshot
 
         snapshot = ParameterSnapshot(physics={"friction": 0.5})
@@ -1020,7 +1057,7 @@ class TestParameterRandomizerEdgeCases:
 
     def test_get_randomized_action_disabled(self):
         """When disabled, returns action unchanged."""
-        from surg_rl.dynamics.parameter_randomizer import ParameterRandomizer, ControllerConfig
+        from surg_rl.dynamics.parameter_randomizer import ControllerConfig, ParameterRandomizer
 
         config = ControllerConfig(enabled=False)
         randomizer = ParameterRandomizer(config=config)
@@ -1029,7 +1066,7 @@ class TestParameterRandomizerEdgeCases:
 
     def test_get_randomized_observation_disabled(self):
         """When disabled, returns observation unchanged."""
-        from surg_rl.dynamics.parameter_randomizer import ParameterRandomizer, ControllerConfig
+        from surg_rl.dynamics.parameter_randomizer import ControllerConfig, ParameterRandomizer
 
         config = ControllerConfig(enabled=False)
         randomizer = ParameterRandomizer(config=config)

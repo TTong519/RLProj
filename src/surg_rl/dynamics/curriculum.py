@@ -5,25 +5,26 @@ training, allowing tasks to start easy and progressively increase in
 difficulty as the agent improves.
 """
 
+import contextlib
+import copy
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
-import copy
-import numpy as np
+from typing import Any
+
+from surg_rl.utils.logging import get_logger
 
 from .base_controller import (
     BaseController,
     ControllerConfig,
-    ParameterBounds,
     ParameterSnapshot,
 )
-from surg_rl.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
 class CurriculumStage(Enum):
     """Stages of curriculum learning."""
+
     EASY = "easy"
     MEDIUM = "medium"
     HARD = "hard"
@@ -34,7 +35,7 @@ class CurriculumStage(Enum):
 @dataclass
 class CurriculumStageConfig:
     """Configuration for a single curriculum stage.
-    
+
     Attributes:
         name: Stage name.
         stage: Stage enum value.
@@ -44,10 +45,11 @@ class CurriculumStageConfig:
         episode_threshold: Minimum episodes before advancement.
         reward_threshold: Reward threshold to advance.
     """
+
     name: str
     stage: CurriculumStage
     difficulty: float = 0.5
-    parameter_overrides: Dict[str, Any] = field(default_factory=dict)
+    parameter_overrides: dict[str, Any] = field(default_factory=dict)
     success_threshold: float = 0.8
     episode_threshold: int = 100
     reward_threshold: float = 0.0
@@ -56,7 +58,7 @@ class CurriculumStageConfig:
 @dataclass
 class CurriculumConfig:
     """Configuration for curriculum learning.
-    
+
     Attributes:
         enabled: Whether curriculum learning is enabled.
         initial_stage: Starting stage.
@@ -65,23 +67,22 @@ class CurriculumConfig:
         min_success_rate: Minimum success rate to advance.
         stage_configs: Per-stage configurations.
     """
+
     enabled: bool = True
     initial_stage: CurriculumStage = CurriculumStage.EASY
     auto_advance: bool = True
     advancement_window: int = 50
     min_success_rate: float = 0.7
-    stage_configs: Dict[CurriculumStage, CurriculumStageConfig] = field(
-        default_factory=dict
-    )
+    stage_configs: dict[CurriculumStage, CurriculumStageConfig] = field(default_factory=dict)
 
 
 class CurriculumScheduler(BaseController):
     """Curriculum learning scheduler for progressive difficulty.
-    
+
     This controller manages curriculum learning by tracking episode results
     and automatically advancing through difficulty stages based on agent
     performance.
-    
+
     Example:
         >>> config = CurriculumConfig(
         ...     initial_stage=CurriculumStage.EASY,
@@ -98,7 +99,7 @@ class CurriculumScheduler(BaseController):
     """
 
     # Default stage configurations
-    DEFAULT_STAGES: Dict[CurriculumStage, CurriculumStageConfig] = {
+    DEFAULT_STAGES: dict[CurriculumStage, CurriculumStageConfig] = {
         CurriculumStage.EASY: CurriculumStageConfig(
             name="Easy",
             stage=CurriculumStage.EASY,
@@ -151,29 +152,34 @@ class CurriculumScheduler(BaseController):
 
     def __init__(
         self,
-        config: Optional[ControllerConfig] = None,
-        curriculum_config: Optional[CurriculumConfig] = None,
+        config: ControllerConfig | None = None,
+        curriculum_config: CurriculumConfig | None = None,
     ):
         """Initialize the curriculum scheduler.
-        
+
         Args:
             config: Base controller configuration.
             curriculum_config: Curriculum learning configuration.
         """
         super().__init__(config)
         self.curriculum_config = curriculum_config or CurriculumConfig()
-        
+
         # Initialize stages
         self._stages = copy.deepcopy(self.DEFAULT_STAGES)
         if self.curriculum_config.stage_configs:
             self._stages.update(self.curriculum_config.stage_configs)
-        
+
         # Current state
         self._current_stage = self.curriculum_config.initial_stage
-        self._stage_history: List[CurriculumStage] = []
-        self._performance_history: List[Dict[str, float]] = []
+        self._stage_history: list[CurriculumStage] = []
+        self._performance_history: list[dict[str, float]] = []
         self._stage_entry_episode: int = 0
-        
+
+        # Active dynamics parameters (stored for downstream consumption)
+        self._active_action_noise: float | None = None
+        self._active_joint_noise: float | None = None
+        self._active_delay: float | None = None
+
         # Stage order
         self._stage_order = [
             CurriculumStage.EASY,
@@ -242,16 +248,16 @@ class CurriculumScheduler(BaseController):
 
     def sample_parameters(self) -> ParameterSnapshot:
         """Sample parameters for current curriculum stage.
-        
+
         Returns:
             Parameter snapshot with stage-specific parameters.
         """
         stage_cfg = self._stages[self._current_stage]
-        
+
         physics_params = {}
         visual_params = {}
         dynamics_params = {}
-        
+
         # Sample from stage parameter overrides
         for param_name, param_value in stage_cfg.parameter_overrides.items():
             if isinstance(param_value, tuple) and len(param_value) == 2:
@@ -260,16 +266,23 @@ class CurriculumScheduler(BaseController):
             else:
                 # Use fixed value
                 value = param_value
-            
+
             # Categorize parameter
-            if param_name in ["mass_ratio", "friction", "damping", 
-                           "stiffness", "gravity_x", "gravity_y", "gravity_z"]:
+            if param_name in [
+                "mass_ratio",
+                "friction",
+                "damping",
+                "stiffness",
+                "gravity_x",
+                "gravity_y",
+                "gravity_z",
+            ]:
                 physics_params[param_name] = value
             elif param_name in ["action_noise", "joint_noise", "delay"]:
                 dynamics_params[param_name] = value
             else:
                 visual_params[param_name] = value
-        
+
         return ParameterSnapshot(
             physics=physics_params,
             visual=visual_params,
@@ -315,9 +328,7 @@ class CurriculumScheduler(BaseController):
                     )
 
             # Mass ratio applied via simulator.set_body_property when available
-            if "mass_ratio" in snapshot.physics and hasattr(
-                simulator, "set_body_property"
-            ):
+            if "mass_ratio" in snapshot.physics and hasattr(simulator, "set_body_property"):
                 ratio = snapshot.physics["mass_ratio"]
                 # Discover body names from simulator internals
                 body_names = []
@@ -329,15 +340,11 @@ class CurriculumScheduler(BaseController):
                     body_names.extend(t.name for t in getattr(scene, "tissues", []))
                     body_names.extend(i.name for i in getattr(scene, "instruments", []))
                 for name in body_names:
-                    try:
+                    with contextlib.suppress(Exception):
                         simulator.set_body_property(name, "mass", ratio)
-                    except Exception:
-                        pass
 
             # Friction coefficient applied via set_body_property
-            if "friction" in snapshot.physics and hasattr(
-                simulator, "set_body_property"
-            ):
+            if "friction" in snapshot.physics and hasattr(simulator, "set_body_property"):
                 friction = snapshot.physics["friction"]
                 body_names = []
                 if hasattr(simulator, "_body_ids"):
@@ -347,21 +354,15 @@ class CurriculumScheduler(BaseController):
                     body_names.extend(r.name for r in getattr(scene, "robots", []))
                     body_names.extend(t.name for t in getattr(scene, "tissues", []))
                 for name in body_names:
-                    try:
+                    with contextlib.suppress(Exception):
                         simulator.set_body_property(name, "friction", friction)
-                    except Exception:
-                        pass
 
             # Damping coefficient (MuJoCo direct / PyBullet fallback)
             if "damping" in snapshot.physics:
                 damping = snapshot.physics["damping"]
-                if hasattr(simulator, "_model") and hasattr(
-                    simulator._model, "dof_damping"
-                ):
+                if hasattr(simulator, "_model") and hasattr(simulator._model, "dof_damping"):
                     simulator._model.dof_damping[:] = damping
-                elif hasattr(simulator, "_physics_client") and hasattr(
-                    simulator, "_body_ids"
-                ):
+                elif hasattr(simulator, "_physics_client") and hasattr(simulator, "_body_ids"):
                     import pybullet as p
 
                     for body_id in simulator._body_ids.values():
@@ -376,20 +377,32 @@ class CurriculumScheduler(BaseController):
             # Stiffness (soft-body) — only MuJoCo flex has this natively
             if "stiffness" in snapshot.physics:
                 stiffness = snapshot.physics["stiffness"]
-                if hasattr(simulator, "_model") and hasattr(
-                    simulator._model, "flex_stiffness"
-                ):
-                    try:
+                if hasattr(simulator, "_model") and hasattr(simulator._model, "flex_stiffness"):
+                    with contextlib.suppress(Exception):
                         simulator._model.flex_stiffness[:] = stiffness
-                    except Exception:
-                        pass
 
             # --- Visual ---
             if snapshot.visual and hasattr(simulator, "set_body_property"):
                 intensity = snapshot.visual.get("lighting_intensity")
                 if intensity is not None:
                     # No universal lighting setter; log for now
-                    logger.debug(f"Visual parameter lighting_intensity={intensity} not applied (no simulator API)")
+                    logger.debug(
+                        f"Visual parameter lighting_intensity={intensity} not applied (no simulator API)"
+                    )
+
+            # --- Dynamics ---
+            for key in ("action_noise", "joint_noise", "delay"):
+                value = snapshot.dynamics.get(key)
+                if value is not None:
+                    setter_name = f"set_{key}"
+                    if hasattr(simulator, setter_name):
+                        getattr(simulator, setter_name)(value)
+                    else:
+                        logger.debug(
+                            f"Dynamics parameter {key}={value} received but cannot be applied directly (no simulator.{setter_name})"
+                        )
+                        setattr(self, f"_active_{key}", value)
+
             return True
         except Exception:
             return False
@@ -397,93 +410,86 @@ class CurriculumScheduler(BaseController):
     def update_curriculum(
         self,
         episode: int,
-        metrics: Dict[str, float],
-    ) -> Dict[str, Any]:
+        metrics: dict[str, float],
+    ) -> dict[str, Any]:
         """Update curriculum based on episode results.
-        
+
         Args:
             episode: Episode number.
             metrics: Episode metrics (reward, success, etc.).
-            
+
         Returns:
             Curriculum update information.
         """
         # Store performance
         self._performance_history.append(metrics)
-        
+
         # Keep only recent history
         if len(self._performance_history) > self.curriculum_config.advancement_window:
             self._performance_history = self._performance_history[
-                -self.curriculum_config.advancement_window:
+                -self.curriculum_config.advancement_window :
             ]
-        
+
         curriculum_info = {
             "episode": episode,
             "stage": self._current_stage.value,
             "difficulty": self.current_difficulty,
             "advanced": False,
         }
-        
+
         # Check if we should advance
-        if self.curriculum_config.auto_advance:
-            if self._should_advance():
-                advanced = self.advance_stage()
-                curriculum_info["advanced"] = advanced
-                if advanced:
-                    curriculum_info["new_stage"] = self._current_stage.value
-                    curriculum_info["new_difficulty"] = self.current_difficulty
-        
+        if self.curriculum_config.auto_advance and self._should_advance():
+            advanced = self.advance_stage()
+            curriculum_info["advanced"] = advanced
+            if advanced:
+                curriculum_info["new_stage"] = self._current_stage.value
+                curriculum_info["new_difficulty"] = self.current_difficulty
+
         return curriculum_info
 
     def _should_advance(self) -> bool:
         """Check if conditions are met to advance curriculum stage.
-        
+
         Returns:
             True if should advance, False otherwise.
         """
         stage_cfg = self._stages[self._current_stage]
-        
+
         # Check episode threshold (per-stage count)
         episodes_at_stage = self._episode - self._stage_entry_episode
         if episodes_at_stage < stage_cfg.episode_threshold:
             return False
-        
+
         # Check if already at max stage
         if self._current_stage not in self._stage_order:
             return False
         current_idx = self._stage_order.index(self._current_stage)
         if current_idx >= len(self._stage_order) - 1:
             return False
-        
+
         # Calculate performance metrics
-        recent_metrics = self._performance_history[
-            -self.curriculum_config.advancement_window:
-        ]
-        
+        recent_metrics = self._performance_history[-self.curriculum_config.advancement_window :]
+
         if not recent_metrics:
             return False
-        
+
         # Check success rate
-        success_rate = sum(
-            m.get("success", 0) for m in recent_metrics
-        ) / len(recent_metrics)
-        
+        success_rate = sum(m.get("success", 0) for m in recent_metrics) / len(recent_metrics)
+
         if success_rate >= stage_cfg.success_threshold:
             return True
-        
+
         # Check reward threshold if set
         if stage_cfg.reward_threshold > 0:
-            avg_reward = sum(
-                m.get("reward", 0) for m in recent_metrics
-            ) / len(recent_metrics)
+            avg_reward = sum(m.get("reward", 0) for m in recent_metrics) / len(recent_metrics)
             if avg_reward >= stage_cfg.reward_threshold:
                 return True
-        
+
         return False
 
-    def get_progress(self) -> Dict[str, Any]:
+    def get_progress(self) -> dict[str, Any]:
         """Get curriculum progress information.
-        
+
         Returns:
             Dictionary with progress details.
         """
@@ -491,7 +497,7 @@ class CurriculumScheduler(BaseController):
             return {"current_stage": self._current_stage.value, "stage_index": -1, "progress": 0.0}
         stage_idx = self._stage_order.index(self._current_stage)
         progress = stage_idx / (len(self._stage_order) - 1) if len(self._stage_order) > 1 else 1.0
-        
+
         return {
             "current_stage": self._current_stage.value,
             "stage_index": stage_idx,
@@ -501,19 +507,17 @@ class CurriculumScheduler(BaseController):
             "episodes_at_stage": self._episode - self._stage_entry_episode,
         }
 
-    def get_performance_summary(self) -> Dict[str, float]:
+    def get_performance_summary(self) -> dict[str, float]:
         """Get performance summary over recent episodes.
-        
+
         Returns:
             Dictionary with performance metrics.
         """
         if not self._performance_history:
             return {"success_rate": 0.0, "avg_reward": 0.0}
-        
-        recent = self._performance_history[
-            -self.curriculum_config.advancement_window:
-        ]
-        
+
+        recent = self._performance_history[-self.curriculum_config.advancement_window :]
+
         return {
             "success_rate": sum(m.get("success", 0) for m in recent) / len(recent),
             "avg_reward": sum(m.get("reward", 0) for m in recent) / len(recent),
