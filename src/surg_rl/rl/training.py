@@ -195,6 +195,7 @@ class TrainingManager:
         self._model = None
         self._env = None
         self._eval_env = None
+        self._eval_env_key = ""
         self._start_time = None
         self._total_steps = 0
 
@@ -441,6 +442,22 @@ class TrainingManager:
 
         return self._model
 
+    def _build_eval_env_key(self) -> str:
+        """Build a stable key representing current eval env configuration."""
+        algo = self.config.algorithm
+        return (
+            f"{self.config.scene_path}:"
+            f"{self.config.simulator}:"
+            f"{algo.name}:"
+            f"{algo.learning_rate}:"
+            f"{algo.gamma}:"
+            f"{self.config.n_envs}:"
+            f"{self.config.max_episode_steps}:"
+            f"{self.config.seed}:"
+            f"{self.config.use_curriculum}:"
+            f"{self.config.use_adaptive_difficulty}"
+        )
+
     def evaluate(
         self,
         model_path: str | None = None,
@@ -466,8 +483,21 @@ class TrainingManager:
         else:
             raise ValueError("No model available. Provide model_path or train first.")
 
-        # Create eval environment
-        eval_env = self._create_environment()
+        # Determine if we can reuse cached eval env
+        current_key = self._build_eval_env_key()
+        if self._eval_env is not None and self._eval_env_key == current_key:
+            eval_env = self._eval_env
+            try:
+                eval_env.reset()
+            except Exception:
+                pass
+        else:
+            # Cache mismatch — dispose old and create new
+            if self._eval_env is not None:
+                self._eval_env.close()
+            eval_env = self._create_environment()
+            self._eval_env = eval_env
+            self._eval_env_key = current_key
 
         # Run evaluation
         episode_rewards = []
@@ -522,8 +552,6 @@ class TrainingManager:
             else:
                 episode_successes.append(False)
 
-        eval_env.close()
-
         # Compute statistics
         results = {
             "n_episodes": n_episodes,
@@ -577,3 +605,5 @@ class TrainingManager:
             self._env.close()
         if self._eval_env is not None:
             self._eval_env.close()
+            self._eval_env = None
+            self._eval_env_key = ""

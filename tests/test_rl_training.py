@@ -253,6 +253,102 @@ class TestModelPersistence:
         assert manager._model is loaded
 
 
+class TestEvalEnvCaching:
+    """Tests for persistent evaluation environment caching (PERF-04)."""
+
+    def test_eval_env_created_on_first_evaluate(self):
+        """PERF-04: First evaluate() must create and cache eval env."""
+        config = TrainingConfig(
+            scene_path="scenes/minimal_scene.json",
+            total_timesteps=1000,
+            n_envs=1,
+            seed=42,
+        )
+        manager = TrainingManager(config)
+
+        with patch.object(manager, "_create_environment") as mock_create:
+            mock_env = MagicMock()
+            mock_env.num_envs = 1
+            mock_env.reset.return_value = np.zeros(10)
+            mock_env.step.return_value = (
+                np.zeros(10),
+                np.array([0.0]),
+                np.array([True]),
+                [{}],
+            )
+            mock_create.return_value = mock_env
+
+            # Mock model
+            manager._model = MagicMock()
+            manager._model.predict.return_value = (np.zeros((1, 1)), None)
+
+            manager.evaluate(n_episodes=1)
+            assert mock_create.call_count == 1
+            assert manager._eval_env is mock_env
+
+    def test_eval_env_reused_on_second_evaluate(self):
+        """PERF-04: Second evaluate() must reuse cached eval env."""
+        config = TrainingConfig(
+            scene_path="scenes/minimal_scene.json",
+            total_timesteps=1000,
+            n_envs=1,
+            seed=42,
+        )
+        manager = TrainingManager(config)
+
+        with patch.object(manager, "_create_environment") as mock_create:
+            mock_env = MagicMock()
+            mock_env.num_envs = 1
+            mock_env.reset.return_value = np.zeros(10)
+            mock_env.step.return_value = (
+                np.zeros(10),
+                np.array([0.0]),
+                np.array([True]),
+                [{}],
+            )
+            mock_create.return_value = mock_env
+
+            manager._model = MagicMock()
+            manager._model.predict.return_value = (np.zeros((1, 1)), None)
+
+            manager.evaluate(n_episodes=1)
+            manager.evaluate(n_episodes=1)
+            assert mock_create.call_count == 1  # reused on second call
+
+    def test_eval_env_recreated_when_config_changes(self):
+        """PERF-04: Config change must discard cached env."""
+        config = TrainingConfig(
+            scene_path="scenes/minimal_scene.json",
+            total_timesteps=1000,
+            n_envs=1,
+            seed=42,
+        )
+        manager = TrainingManager(config)
+
+        with patch.object(manager, "_create_environment") as mock_create:
+            mock_env = MagicMock()
+            mock_env.num_envs = 1
+            mock_env.reset.return_value = np.zeros(10)
+            mock_env.step.return_value = (
+                np.zeros(10),
+                np.array([0.0]),
+                np.array([True]),
+                [{}],
+            )
+            mock_create.return_value = mock_env
+
+            manager._model = MagicMock()
+            manager._model.predict.return_value = (np.zeros((1, 1)), None)
+
+            manager.evaluate(n_episodes=1)
+
+            # Change config
+            manager.config.scene_path = "scenes/other_scene.json"
+            manager.evaluate(n_episodes=1)
+
+            assert mock_create.call_count == 2  # new env created after config change
+
+
 class TestCleanup:
     def test_close_cleans_envs(self):
         """close() cleans up environment resources."""
