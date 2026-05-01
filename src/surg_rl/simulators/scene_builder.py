@@ -67,6 +67,19 @@ class SceneBuilder:
         self._temp_dir_obj = tempfile.TemporaryDirectory(prefix="surg_rl_")
         self.temp_dir = Path(self._temp_dir_obj.name)
         self._primitive_meshes: dict[str, Path] = {}
+        self._vtk_meshes: dict[str, Path] = {}
+
+    def _get_cached_vtk_path(self, cache_key: str, generator_fn, *args, **kwargs) -> Path:
+        """Get a cached .vtk path or generate it via *generator_fn*."""
+        if cache_key in self._vtk_meshes:
+            return self._vtk_meshes[cache_key]
+        mesh_path = self.temp_dir / f"{cache_key}.vtk"
+        verts, tets = generator_fn(*args, **kwargs)
+        from surg_rl.utils.vtk_io import write_vtk_unstructured_grid
+
+        write_vtk_unstructured_grid(mesh_path, verts, tets)
+        self._vtk_meshes[cache_key] = mesh_path
+        return mesh_path
 
     def resolve_asset_path(self, asset_path: str) -> Path | None:
         """Resolve an asset path to an absolute path.
@@ -728,6 +741,7 @@ f 5 4 8
             self._temp_dir_obj.cleanup()
             self._temp_dir_obj = None
         self._primitive_meshes.clear()
+        self._vtk_meshes.clear()
 
     def __del__(self):
         """Destructor to clean up temp files."""

@@ -78,6 +78,10 @@ llm = [
     "anthropic>=0.18.0",
 ]
 
+meshing = [
+    "pyvista>=0.43",
+]
+
 vision = [
     "torch>=2.0.0",
     "torchvision>=0.15.0",

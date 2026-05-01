@@ -307,6 +307,32 @@ class TestBaseSimulator:
             BaseSimulator()
 
 
+class TestSceneBuilderVtkCaching:
+    def test_get_cached_vtk_path(self):
+        """SceneBuilder should cache .vtk paths."""
+        builder = SceneBuilder()
+        cache_key = "box_0.1_0.1_0.1_test"
+        path1 = builder._get_cached_vtk_path(
+            cache_key,
+            lambda: (np.zeros((8, 3)), np.zeros((5, 4), dtype=int)),
+        )
+        assert path1.suffix == ".vtk"
+        assert path1.exists()
+        # Second call returns cached path
+        path2 = builder._get_cached_vtk_path(
+            cache_key,
+            lambda: (np.zeros((8, 3)), np.zeros((5, 4), dtype=int)),
+        )
+        assert path1 == path2
+
+    def test_cleanup_clears_vtk_cache(self):
+        """cleanup() must clear _vtk_meshes."""
+        builder = SceneBuilder()
+        builder._vtk_meshes["test"] = Path("/tmp/test.vtk")
+        builder.cleanup()
+        assert "test" not in builder._vtk_meshes
+
+
 class TestSceneBuilderCleanup:
     """Tests for SceneBuilder cleanup behavior."""
 
