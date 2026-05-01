@@ -6,9 +6,9 @@ This roadmap stabilizes the Surg-RL surgical-robotics RL training system (v0.1.0
 
 ## Phases
 
-- [ ] **Phase 1: Critical Bug Fixes** — Fix 8 documented critical bugs before any new features
-- [ ] **Phase 2: Action Space + Gripper** — Complete unimplemented action types and gripper actuation
-- [ ] **Phase 3: Simulator Robustness** — Performance optimization, state management, and caching
+- [x] **Phase 1: Critical Bug Fixes** — Fix 8 documented critical bugs before any new features
+- [x] **Phase 2: Action Space + Gripper** — Complete unimplemented action types and gripper actuation
+- [x] **Phase 3: Simulator Robustness** — Performance optimization, state management, and caching
 - [ ] **Phase 4: Task Geometry + Real Assets** — Bind task geometry to observations and load real mesh files
 - [ ] **Phase 5: Experiment Tracking + Infrastructure** — W&B/MLflow, Docker, CI/CD pipelines
 
@@ -104,7 +104,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Critical Bug Fixes | 3/3 | Complete | 2026-04-29 |
-| 2. Action Space + Gripper | 0/3 | Not started | - |
-| 3. Simulator Robustness | 0/2 | Not started | - |
+| 2. Action Space + Gripper | 3/3 | Complete | 2026-04-29 |
+| 3. Simulator Robustness | 2/2 | Complete | 2026-04-30 |
 | 4. Task Geometry + Assets | 0/2 | Not started | - |
 | 5. Infrastructure | 0/2 | Not started | - |

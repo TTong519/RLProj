@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-04-29)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** Phase 2 complete — proceeding to Phase 3
+**Current focus:** Phase 3 complete — proceeding to Phase 4
 
 ## Current Position
 
 Phase: 3 of 5 (Simulator Robustness)
-Plan: 0 of 2 planned
-Status: Ready to execute
-Last activity: 2026-04-30 — Phase 3 planned; 4 requirements mapped (PERF-01..PERF-04)
+Plan: 2 of 2 complete
+Status: Complete
+Last activity: 2026-04-30 — Wave 2 (state save/restore + eval env caching) merged; 579 tests passed
 
-Progress: [██████████████░░░░░░░░] 40%
+Progress: [████████████████░░░░░░] 60%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: ~15 minutes
-- Total execution time: ~1.5 hours
+- Total plans completed: 8
+- Average duration: ~13 minutes
+- Total execution time: ~2 hours
 
 **By Phase:**
 
@@ -29,41 +29,47 @@ Progress: [██████████████░░░░░░░░] 4
 |-------|-------|-------|----------|
 | 1. Critical Bug Fixes | 3/3 | 3 | ~10 min |
 | 2. Action Space + Gripper | 3/3 | 3 | ~20 min |
+| 3. Simulator Robustness | 2/2 | 2 | ~18 min |
 
 **Recent Trend:**
-- Last plans: 02-01 (JOINT_TORQUES), 02-02/03 (IK + gripper + validation), 02 wrap-up
-- Trend: parallel subagents for IK implementations, zero regressions across 567 tests
+- Last plans: 03-01 (mesh caching + vectorization), 03-02 (state serialization + VecEnv reuse)
+- Trend: sequential executor agents for stable backend work, zero regressions across 579 tests (up from 567 baseline)
 
-## Phase 2 Summary
+## Phase 3 Summary
 
 ### What was built
 
-1. **JOINT_TORQUES (ACT-01)** — Implemented in both backends:
-   - `ActionBuilder` no longer raises `NotImplementedError` for torque
-   - MuJoCo: informational `set_action_mode("torque")`; ctrl write path unchanged (motor actuators)
-   - PyBullet: `set_action_mode("torque")` disables default motors via `VELOCITY_CONTROL` force=0, then uses `TORQUE_CONTROL` in `_apply_action`
-   - `SurgicalEnv` auto-propagates torque mode on init
+1. **Soft-body mesh caching (PERF-01)**:
+   - `PyBulletSimulator._mesh_cache: dict[str, Path]` keyed by tissue params
+   - Cache hit skips `.vtk` regeneration; reset <100ms on suturing scene
+   - Cache cleared on `load_scene()` and `close()` to prevent staleness
 
-2. **ENDEFFECTOR_POSE / ENDEFFECTOR_DELTA (ACT-02/03)** — IK-based control:
-   - PyBullet: `_compute_ik()` via `calculateInverseKinematics` + `_apply_action_ik()` with pose/delta routing
-   - MuJoCo: `_compute_ik()` with 1-DOF direct mapping + multi-DOF Jacobian-based damped least-squares IK + pose/delta routing in `_apply_action`
-   - `set_action_mode()` propagates pose/delta from `SurgicalEnv` to simulators
+2. **Vectorized mesh generation (PERF-02)**:
+   - `generate_box_tet_mesh` vectorized with `np.indices + np.stack + reshape`, ~10x faster at high resolution
+   - `generate_cylinder_tet_mesh` vertex loop vectorized with `np.stack([cos, sin, z])`
+   - Sphere subdivision kept iterative (correctness over speed after Rule 1 bug fix)
+   - Optional `pyvista` delegation for meshes >5000 tets; falls back gracefully
+   - SceneBuilder extended with `_vtk_meshes` dict and `_get_cached_vtk_path()`
 
-3. **Gripper (ACT-04)** — Auto-detection + end-to-end:
-   - `SurgicalEnv._default_action_config()` queries simulator `_control_map` for `is_gripper`, or falls back to scene `robot.end_effectors`
-   - `num_joints` = total_controls - gripper_count when gripper present
-   - Tests verify explicit gripper config, MuJoCo/PyBullet step with gripper, and auto-detection from scene
+3. **Cross-backend state save/restore (PERF-03)**:
+   - PyBullet `get_state()` captures soft-body node positions via `getMeshData()` into `State.custom["soft_body_nodes"]`
+   - PyBullet `set_state()` restores joint positions/velocities via `resetJointState` and soft-body nodes via `resetMeshData()`
+   - MuJoCo round-trip fidelity verified: qpos/qvel identical within 1e-6
+   - PyBullet round-trip: qpos/qvel within 1e-6, body_positions within 1e-3 (recomputed by forward kinematics)
 
-4. **Validation (ACT-05)** — Load-time guards:
-   - Empty `unsupported_types = ()` allow-list since all ActionTypes are now implemented
-   - Guard is ready for future unsupported types without structural changes
-   - Tests verify ENDEFFECTOR_POSE and ENDEFFECTOR_DELTA do not raise on init
+4. **Persistent eval env caching (PERF-04)**:
+   - `TrainingManager.evaluate()` caches eval env on `self._eval_env`
+   - `_build_eval_env_key()` hashes all config fields that affect env construction
+   - Config mismatch triggers disposal of stale env and creation of new one
+   - `close()` properly disposes cached eval env
 
 ### Commits
 
-- `3ebbe9f` — ACT-01: JOINT_TORQUES
-- `ea032de` — ACT-04/05: gripper + validation
-- `6a6f924` — ACT-02/03: end-effector IK in MuJoCo + updated validation
-- `(parallel)` — ec681ab, 01e10bf: PyBullet IK via subagent
+- `17308c4` — 03-01 T1: soft-body mesh caching
+- `0c02352` — 03-01 T2: vectorize mesh generation + SceneBuilder caching
+- `22ccc5b` — 03-01 SUMMARY
+- `f6f2624` — 03-02 T1: PyBullet soft-body/joint state save/restore
+- `4efffb1` — 03-02 T2: TrainingManager eval env caching
+- `c9ad176` — 03-02 SUMMARY
 
 *Updated: 2026-04-30*
