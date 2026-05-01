@@ -10,8 +10,11 @@ import pytest
 
 from surg_rl.scene_definition import (
     Metadata,
+    RobotConfig,
+    RobotType,
     SceneDefinition,
     SimulatorType,
+    SoftBodyPhysics,
     TissueConfig,
     TissueMeshDefinition,
     TissueType,
@@ -1282,3 +1285,120 @@ class TestPyBulletSoftBodyLoad:
         # Step a few times
         for _ in range(10):
             sim._pb.stepSimulation(physicsClientId=sim._physics_client)
+
+
+class TestStateSaveRestore:
+    """Tests for cross-backend state save/restore (PERF-03)."""
+
+    def test_mujoco_state_roundtrip(self, suturing_scene):
+        """PERF-03: MuJoCo get_state → set_state must restore qpos/qvel exactly."""
+        sim = MuJoCoSimulator()
+        sim.load_scene(suturing_scene)
+        sim.reset()
+        # Step a few times to get non-zero state
+        for _ in range(5):
+            sim.step(np.zeros(sim.get_num_controls()))
+
+        state_before = sim.get_state()
+        obs_before = sim._get_observation()
+
+        # Perturb state slightly
+        sim._data.qpos[0] += 0.1
+
+        # Restore
+        sim.set_state(state_before)
+        state_after = sim.get_state()
+        obs_after = sim._get_observation()
+
+        assert np.allclose(state_after.qpos, state_before.qpos, atol=1e-6)
+        assert np.allclose(state_after.qvel, state_before.qvel, atol=1e-6)
+        if obs_before.robot_state is not None and obs_after.robot_state is not None:
+            assert np.allclose(obs_after.robot_state, obs_before.robot_state, atol=1e-3)
+
+    def test_pybullet_state_roundtrip(self, suturing_scene):
+        """PERF-03: PyBullet get_state → set_state must restore joint and body state."""
+        sim = PyBulletSimulator()
+        sim.load_scene(suturing_scene)
+        sim.reset()
+        n = sim.get_num_controls()
+        # Step with non-zero action to move joints away from zero
+        for _ in range(10):
+            sim.step(np.ones(n) * 0.1)
+
+        state_before = sim.get_state()
+        obs_before = sim._get_observation()
+        assert state_before.qpos is not None and len(state_before.qpos) > 0
+        assert not np.allclose(state_before.qpos, 0.0, atol=1e-3), "qpos must be non-zero for a meaningful test"
+
+        # Perturb body positions and joint states
+        for name in sim._body_ids:
+            sim._pb.resetBasePositionAndOrientation(
+                sim._body_ids[name], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0],
+                physicsClientId=sim._physics_client,
+            )
+        for robot_name, joint_dict in sim._joint_ids.items():
+            if robot_name not in sim._body_ids:
+                continue
+            body_id = sim._body_ids[robot_name]
+            for joint_idx in joint_dict.values():
+                sim._pb.resetJointState(
+                    body_id, joint_idx, targetValue=0.5, targetVelocity=0.0,
+                    physicsClientId=sim._physics_client,
+                )
+
+        # Restore
+        sim.set_state(state_before)
+        state_after = sim.get_state()
+        obs_after = sim._get_observation()
+
+        assert np.allclose(state_after.qpos, state_before.qpos, atol=1e-6)
+        assert np.allclose(state_after.qvel, state_before.qvel, atol=1e-6)
+        for name in state_before.body_positions:
+            assert np.allclose(state_after.body_positions[name], state_before.body_positions[name], atol=1e-3)
+
+
+class TestSoftBodyStateRoundtrip:
+    """Tests for soft-body state save/restore in PyBullet (PERF-03)."""
+
+    @pytest.mark.xfail(sys.platform in ("darwin",) or os.environ.get("CI") == "true", reason="PyBullet soft body fragile on macOS/CI")
+    def test_pybullet_soft_body_state_roundtrip(self):
+        """PERF-03: Soft body node positions must survive get_state → set_state."""
+        scene = SceneDefinition(
+            metadata={"name": "soft_state"},
+            robots=[],
+            tissues=[
+                TissueConfig(
+                    name="soft_tissue",
+                    geometry=TissueMeshDefinition(primitive="box", dimensions=(0.1, 0.1, 0.01)),
+                    soft_body=True,
+                    physics=SoftBodyPhysics(),
+                )
+            ],
+            instruments=[],
+        )
+        sim = PyBulletSimulator()
+        sim.load_scene(scene)
+        sim.reset()
+        # Let gravity deform the soft body
+        for _ in range(50):
+            sim.step(np.zeros(1))
+
+        state_before = sim.get_state()
+        assert "soft_body_nodes" in state_before.custom
+        assert "soft_tissue" in state_before.custom["soft_body_nodes"]
+
+        # Reset simulation (destroys soft body state)
+        sim._pb.resetSimulation(physicsClientId=sim._physics_client)
+        sim.load_scene(scene)
+
+        # Restore saved state
+        sim.set_state(state_before)
+
+        # Verify nodes were restored by checking getMeshData
+        soft_id = sim._soft_body_ids["soft_tissue"]
+        data = sim._pb.getMeshData(soft_id, physicsClientId=sim._physics_client)
+        restored_vertices = np.array(data[1])
+        original_vertices = state_before.custom["soft_body_nodes"]["soft_tissue"]
+
+        assert len(restored_vertices) == len(original_vertices)
+        assert np.allclose(restored_vertices, original_vertices, atol=1e-3)

@@ -878,12 +878,24 @@ class PyBulletSimulator(BaseSimulator):
         qpos = np.concatenate(qpos_list) if qpos_list else None
         qvel = np.concatenate(qvel_list) if qvel_list else None
 
+        # Capture soft-body node positions
+        soft_body_nodes = {}
+        for tissue_name, soft_id in self._soft_body_ids.items():
+            try:
+                data = self._pb.getMeshData(soft_id, physicsClientId=self._physics_client)
+                if len(data) >= 2 and len(data[1]) > 0:
+                    vertices = np.array(data[1], dtype=np.float32)  # (N, 3)
+                    soft_body_nodes[tissue_name] = vertices
+            except Exception:
+                pass  # getMeshData may fail on some PyBullet versions
+
         return State(
             time=self._simulation_time,
             qpos=qpos,
             qvel=qvel,
             body_positions=body_positions,
             body_orientations=body_orientations,
+            custom={"soft_body_nodes": soft_body_nodes} if soft_body_nodes else {},
         )
 
     def get_joint_states(self) -> dict[str, dict[str, np.ndarray]]:
@@ -922,6 +934,7 @@ class PyBulletSimulator(BaseSimulator):
 
         self._simulation_time = state.time
 
+        # Restore body positions/orientations
         for name, pos in state.body_positions.items():
             if name in self._body_ids:
                 orn = state.body_orientations.get(name, [0, 0, 0, 1])
@@ -931,6 +944,41 @@ class PyBulletSimulator(BaseSimulator):
                     orn.tolist() if hasattr(orn, "tolist") else orn,
                     physicsClientId=self._physics_client,
                 )
+
+        # Restore joint states — iterate in same order as get_state() builds qpos
+        if state.qpos is not None and state.qvel is not None:
+            idx = 0
+            for robot_name in sorted(self._joint_ids.keys()):
+                if robot_name not in self._body_ids:
+                    continue
+                body_id = self._body_ids[robot_name]
+                joint_dict = self._joint_ids[robot_name]
+                for joint_name in sorted(joint_dict.keys()):
+                    joint_idx = joint_dict[joint_name]
+                    if idx < len(state.qpos):
+                        self._pb.resetJointState(
+                            body_id,
+                            joint_idx,
+                            targetValue=float(state.qpos[idx]),
+                            targetVelocity=float(state.qvel[idx]) if idx < len(state.qvel) else 0.0,
+                            physicsClientId=self._physics_client,
+                        )
+                    idx += 1
+
+        # Restore soft body node positions
+        soft_body_nodes = state.custom.get("soft_body_nodes", {})
+        for tissue_name, node_positions in soft_body_nodes.items():
+            if tissue_name not in self._soft_body_ids:
+                continue
+            soft_id = self._soft_body_ids[tissue_name]
+            try:
+                self._pb.resetMeshData(
+                    soft_id,
+                    node_positions.flatten().tolist(),
+                    physicsClientId=self._physics_client,
+                )
+            except Exception:
+                logger.warning(f"Failed to restore soft body mesh data for {tissue_name}")
 
     def set_body_property(self, body_name: str, property_name: str, value: float) -> bool:
         """Set a named property on a body (mass or friction).
