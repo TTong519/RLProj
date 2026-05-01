@@ -9,10 +9,10 @@ See: .planning/PROJECT.md (updated 2026-04-29)
 
 ## Current Position
 
-Phase: 3 of 5 (Simulator Robustness)
-Plan: 2 of 2 complete
-Status: Verified — all UAT passed, ready for Phase 4
-Last activity: 2026-04-30 — Phase 3 UAT complete (6/6 passed, 0 issues); ready to advance
+Phase: 4 of 5 (Task Geometry + Real Assets)
+Plan: 0 of 2 planned
+Status: Ready to discuss
+Last activity: 2026-04-30 — Phase 3 verified complete (6/6 UAT passed, 0 issues); advancing to Phase 4
 
 Progress: [████████████████░░░░░░] 60%
 
@@ -71,5 +71,7 @@ Progress: [████████████████░░░░░░] 6
 - `f6f2624` — 03-02 T1: PyBullet soft-body/joint state save/restore
 - `4efffb1` — 03-02 T2: TrainingManager eval env caching
 - `c9ad176` — 03-02 SUMMARY
+- `58fa2b6` — 03-UAT: 6/6 passed, 0 issues
+- `8091ef2` — Phase 3 verified, ready for Phase 4
 
 *Updated: 2026-04-30*
