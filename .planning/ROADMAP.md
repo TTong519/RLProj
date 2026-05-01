@@ -79,8 +79,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: Bind task geometry (needle, entry, exit, incision) to observation pipeline
-- [ ] 04-02: Add real mesh/URDF loading to SceneBuilder with fallback logging
+- [x] 04-01: Bind task geometry (needle, entry, exit, incision) to observation pipeline
+- [x] 04-02: Add real mesh/URDF loading to SceneBuilder with fallback logging
 
 ### Phase 5: Experiment Tracking + Infrastructure
 **Goal**: Research teams can track experiments, reproduce runs, and deploy training to cloud infrastructure.
