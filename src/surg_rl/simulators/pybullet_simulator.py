@@ -68,6 +68,7 @@ class PyBulletSimulator(BaseSimulator):
         self._torque_control_joints: dict[tuple[int, int], bool] = {}  # (body_id, joint_idx) -> enabled
         self._endeffector_target_pos: np.ndarray | None = None
         self._endeffector_target_quat: np.ndarray | None = None
+        self._mesh_cache: dict[str, Path] = {}
 
     def _check_pybullet(self) -> None:
         """Check if PyBullet is available."""
@@ -157,6 +158,7 @@ class PyBulletSimulator(BaseSimulator):
             self._initial_positions.clear()
             self._initial_orientations.clear()
             self._soft_body_ids.clear()
+            self._mesh_cache.clear()
 
         # Configure physics
         physics = getattr(scene_definition, "physics", None)
@@ -466,10 +468,14 @@ class PyBulletSimulator(BaseSimulator):
 
     def _get_vtk_mesh_path(self, tissue: Any) -> Path:
         """Generate or return cached .vtk tetrahedral mesh for a soft body tissue."""
-
         dims = getattr(tissue.geometry, "dimensions", None) or (0.1, 0.1, 0.01)
         radius = getattr(tissue.geometry, "radius", None)
         primitive = getattr(tissue.geometry, "primitive", None)
+
+        # Build stable cache key
+        cache_key = f"{tissue.name}_{primitive}_{tuple(dims)}_{radius}"
+        if cache_key in self._mesh_cache:
+            return self._mesh_cache[cache_key]
 
         if primitive == "sphere":
             r = radius or min(dims) / 2
@@ -489,6 +495,8 @@ class PyBulletSimulator(BaseSimulator):
             if not mesh_path.exists():
                 verts, tets = generate_box_tet_mesh(tuple(dims), resolution=4)
                 write_vtk_unstructured_grid(mesh_path, verts, tets)
+
+        self._mesh_cache[cache_key] = mesh_path
         return mesh_path
 
     def _load_soft_body_tissue(self, tissue: Any) -> None:
@@ -1110,6 +1118,7 @@ class PyBulletSimulator(BaseSimulator):
         self._body_ids.clear()
         self._joint_ids.clear()
         self._loaded = False
+        self._mesh_cache.clear()
         self.scene_builder.cleanup()
 
     def _build_control_map(self) -> None:

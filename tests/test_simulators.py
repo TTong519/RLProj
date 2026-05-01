@@ -979,6 +979,145 @@ class TestCameraNameRendering:
         assert rgb is not None
 
 
+class TestSoftBodyMeshCaching:
+    """Tests for soft-body mesh caching (PERF-01)."""
+
+    @pytest.mark.xfail(
+        sys.platform in ("darwin",) or os.environ.get("CI") == "true",
+        reason="PyBullet soft body fragile on macOS/CI",
+    )
+    def test_soft_body_reset_under_100ms(self):
+        """PERF-01: Soft-body reset must complete in <100ms on second reset."""
+        from surg_rl.scene_definition.schema import (
+            SceneDefinition,
+            SoftBodyPhysics,
+            TissueConfig,
+            TissueMeshDefinition,
+        )
+
+        scene = SceneDefinition(
+            metadata={"name": "perf_test"},
+            robots=[],
+            tissues=[
+                TissueConfig(
+                    name="soft_tissue",
+                    geometry=TissueMeshDefinition(
+                        primitive="box", dimensions=(0.1, 0.1, 0.01)
+                    ),
+                    soft_body=True,
+                    physics=SoftBodyPhysics(),
+                )
+            ],
+            instruments=[],
+        )
+        sim = PyBulletSimulator()
+        sim.load_scene(scene)
+        sim.reset()  # first reset primes cache
+        import time
+
+        start = time.perf_counter()
+        sim.reset()  # second reset should use cache
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        assert elapsed_ms < 100.0, (
+            f"Soft-body reset took {elapsed_ms:.1f}ms, expected <100ms"
+        )
+        sim.close()
+
+    def test_mesh_cache_hit_avoids_regeneration(self):
+        """_get_vtk_mesh_path must cache mesh data."""
+        sim = PyBulletSimulator()
+        sim._physics_client = 0
+        sim._pb = MagicMock()
+        import tempfile
+
+        tmpdir = Path(tempfile.mkdtemp())
+        sim.scene_builder = MagicMock()
+        sim.scene_builder.temp_dir = tmpdir
+
+        from surg_rl.scene_definition.schema import TissueConfig, TissueMeshDefinition
+
+        tissue = TissueConfig(
+            name="test_tissue",
+            geometry=TissueMeshDefinition(
+                primitive="box", dimensions=(0.1, 0.1, 0.01)
+            ),
+        )
+
+        with patch(
+            "surg_rl.simulators.pybullet_simulator.generate_box_tet_mesh"
+        ) as mock_gen:
+            mock_gen.return_value = (
+                np.zeros((8, 3)),
+                np.zeros((5, 4), dtype=int),
+            )
+            path1 = sim._get_vtk_mesh_path(tissue)
+            assert mock_gen.call_count == 1
+            path2 = sim._get_vtk_mesh_path(tissue)
+            assert mock_gen.call_count == 1  # cache hit
+            assert path1 == path2
+
+    def test_mesh_cache_different_keys(self):
+        """Different tissue parameters must produce different cache keys."""
+        import tempfile
+
+        sim = PyBulletSimulator()
+        sim._physics_client = 0
+        sim._pb = MagicMock()
+        tmpdir = Path(tempfile.mkdtemp())
+        sim.scene_builder = MagicMock()
+        sim.scene_builder.temp_dir = tmpdir
+
+        from surg_rl.scene_definition.schema import TissueConfig, TissueMeshDefinition
+
+        tissue_a = TissueConfig(
+            name="tissue_a",
+            geometry=TissueMeshDefinition(
+                primitive="box", dimensions=(0.1, 0.1, 0.01)
+            ),
+        )
+        tissue_b = TissueConfig(
+            name="tissue_b",
+            geometry=TissueMeshDefinition(
+                primitive="box", dimensions=(0.2, 0.2, 0.02)
+            ),
+        )
+
+        with patch(
+            "surg_rl.simulators.pybullet_simulator.generate_box_tet_mesh"
+        ) as mock_gen:
+            mock_gen.return_value = (
+                np.zeros((8, 3)),
+                np.zeros((5, 4), dtype=int),
+            )
+            path_a = sim._get_vtk_mesh_path(tissue_a)
+            path_b = sim._get_vtk_mesh_path(tissue_b)
+            assert mock_gen.call_count == 2
+            assert path_a != path_b
+
+    def test_mesh_cache_cleared_on_close(self):
+        """Cache must be cleared when simulator is closed."""
+        sim = PyBulletSimulator()
+        sim._mesh_cache["key"] = Path("/tmp/test.vtk")
+        sim.close()
+        assert "key" not in sim._mesh_cache
+
+    def test_mesh_cache_cleared_on_load_scene(self):
+        """Cache must be cleared when a new scene is loaded."""
+        sim = PyBulletSimulator()
+        sim._mesh_cache["key"] = Path("/tmp/test.vtk")
+        sim._pb = MagicMock()
+        sim._physics_client = 0
+        sim._check_pybullet = MagicMock()
+
+        from surg_rl.scene_definition.schema import Metadata, SceneDefinition
+
+        scene = SceneDefinition.model_construct(
+            metadata=Metadata(name="new_scene"), physics=None, tissues=[]
+        )
+        sim.load_scene(scene)
+        assert "key" not in sim._mesh_cache
+
+
 class TestPyBulletSoftBodyLoad:
     """Soft body loading tests for PyBullet."""
 
