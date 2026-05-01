@@ -19,10 +19,10 @@
 ### Action Space
 
 - [ ] **ACT-01**: `JOINT_TORQUES` action type is fully implemented and tested in both simulators
-- [ ] **ACT-02**: `ENDEFFECTOR_POSE` action type is fully implemented and tested in both simulators
-- [ ] **ACT-03**: `ENDEFFECTOR_DELTA` action type is fully implemented and tested in both simulators
-- [ ] **ACT-04**: Gripper actuation (open/close) works in both MuJoCo and PyBullet backends
-- [ ] **ACT-05**: Invalid or unimplemented `ActionType` values are rejected at scene load time with a clear error message
+- [x] **ACT-02**: `ENDEFFECTOR_POSE` action type is fully implemented and tested in both simulators
+- [x] **ACT-03**: `ENDEFFECTOR_DELTA` action type is fully implemented and tested in both simulators
+- [x] **ACT-04**: Gripper actuation (open/close) works in both MuJoCo and PyBullet backends
+- [x] **ACT-05**: Unsupported `ActionType` values are rejected at scene load time with a clear error message
 
 ### Simulator Robustness
 

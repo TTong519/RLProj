@@ -48,9 +48,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01: Implement `JOINT_TORQUES` action type in both backends
-- [ ] 02-02: Implement `ENDEFFECTOR_POSE` and `ENDEFFECTOR_DELTA` action types in both backends
-- [ ] 02-03: Implement gripper actuation and add config-time action validation
+- [x] 02-01: Implement `JOINT_TORQUES` action type in both backends
+- [x] 02-02: Implement `ENDEFFECTOR_POSE` and `ENDEFFECTOR_DELTA` action types in both backends
+- [x] 02-03: Implement gripper actuation and add config-time action validation
 
 ### Phase 3: Simulator Robustness
 **Goal**: Simulator reset is fast, state restore is equivalent across backends, and mesh generation is vectorized.
@@ -64,8 +64,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: Optimize soft-body reset and mesh performance
-- [ ] 03-02: Unify state save/restore across backends and fix VecEnv evaluation reuse
+- [x] 03-01: Optimize soft-body reset and mesh performance
+- [x] 03-02: Unify state save/restore across backends and fix VecEnv evaluation reuse
 
 ### Phase 4: Task Geometry + Real Assets
 **Goal**: Task observations are populated from scene objectives and real mesh files can be loaded.

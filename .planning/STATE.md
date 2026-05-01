@@ -5,69 +5,65 @@
 See: .planning/PROJECT.md (updated 2026-04-29)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** Phase 1 complete — proceeding to Phase 2
+**Current focus:** Phase 2 complete — proceeding to Phase 3
 
 ## Current Position
 
-Phase: 1 of 5 (Critical Bug Fixes)
-Plan: 3 of 3 complete
-Status: Complete
-Last activity: 2026-04-29 — Phase 1 executed; 10 requirements satisfied
+Phase: 3 of 5 (Simulator Robustness)
+Plan: 0 of 2 planned
+Status: Ready to execute
+Last activity: 2026-04-30 — Phase 3 planned; 4 requirements mapped (PERF-01..PERF-04)
 
-Progress: [██████████░░] 20%
+Progress: [██████████████░░░░░░░░] 40%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: ~10 minutes
-- Total execution time: ~0.5 hours
+- Total plans completed: 6
+- Average duration: ~15 minutes
+- Total execution time: ~1.5 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Critical Bug Fixes | 3/3 | 3 | ~10 min |
+| 2. Action Space + Gripper | 3/3 | 3 | ~20 min |
 
 **Recent Trend:**
-- Last 3 plans: 01-01 (verify), 01-02 (fix), 01-03 (fix)
-- Trend: increasing velocity, zero regressions
+- Last plans: 02-01 (JOINT_TORQUES), 02-02/03 (IK + gripper + validation), 02 wrap-up
+- Trend: parallel subagents for IK implementations, zero regressions across 567 tests
 
-*Updated after each plan completion*
+## Phase 2 Summary
 
-## Accumulated Context
+### What was built
 
-### Decisions
+1. **JOINT_TORQUES (ACT-01)** — Implemented in both backends:
+   - `ActionBuilder` no longer raises `NotImplementedError` for torque
+   - MuJoCo: informational `set_action_mode("torque")`; ctrl write path unchanged (motor actuators)
+   - PyBullet: `set_action_mode("torque")` disables default motors via `VELOCITY_CONTROL` force=0, then uses `TORQUE_CONTROL` in `_apply_action`
+   - `SurgicalEnv` auto-propagates torque mode on init
 
-- [Init]: Stabilization-first roadmap — fix critical bugs before new features
-- [Phase 1]: BUG-01..03 already fixed in source; verified by regression tests
-- [Phase 1]: BUG-04 required RewardConfig refactor from dataclass → Pydantic BaseModel; accepted
-- [Phase 1]: BUG-06 mischaracterized as "no-op"; actual bug was "dynamics params silently dropped"
-- [Phase 1]: SEC-01 validator uses pattern matching (case-insensitive substring) rather than exact match
+2. **ENDEFFECTOR_POSE / ENDEFFECTOR_DELTA (ACT-02/03)** — IK-based control:
+   - PyBullet: `_compute_ik()` via `calculateInverseKinematics` + `_apply_action_ik()` with pose/delta routing
+   - MuJoCo: `_compute_ik()` with 1-DOF direct mapping + multi-DOF Jacobian-based damped least-squares IK + pose/delta routing in `_apply_action`
+   - `set_action_mode()` propagates pose/delta from `SurgicalEnv` to simulators
 
-### Pending Todos
+3. **Gripper (ACT-04)** — Auto-detection + end-to-end:
+   - `SurgicalEnv._default_action_config()` queries simulator `_control_map` for `is_gripper`, or falls back to scene `robot.end_effectors`
+   - `num_joints` = total_controls - gripper_count when gripper present
+   - Tests verify explicit gripper config, MuJoCo/PyBullet step with gripper, and auto-detection from scene
 
-- [Phase 2] Plan action space + gripper implementation (ACT-01..05)
+4. **Validation (ACT-05)** — Load-time guards:
+   - Empty `unsupported_types = ()` allow-list since all ActionTypes are now implemented
+   - Guard is ready for future unsupported types without structural changes
+   - Tests verify ENDEFFECTOR_POSE and ENDEFFECTOR_DELTA do not raise on init
 
-### Blockers/Concerns
+### Commits
 
-- PyBullet soft-body state reset may require undocumented API calls (Phase 3 spike flagged in research)
-- URDF/DAE loading in MuJoCo has subtle coordinate frame issues (Phase 4 research flag)
+- `3ebbe9f` — ACT-01: JOINT_TORQUES
+- `ea032de` — ACT-04/05: gripper + validation
+- `6a6f924` — ACT-02/03: end-effector IK in MuJoCo + updated validation
+- `(parallel)` — ec681ab, 01e10bf: PyBullet IK via subagent
 
-## Deferred Items
-
-Items acknowledged and carried forward from previous milestone close:
-
-| Category | Item | Status | Deferred At |
-|----------|------|--------|-------------|
-| Feature | Multi-agent scenes | v2 | 2026-04-29 |
-| Feature | ROS2 integration | v2 | 2026-04-29 |
-| Feature | Cloud training (Ray) | v2 | 2026-04-29 |
-| Feature | W&B/MLflow callbacks | v1.x | 2026-04-29 |
-| Feature | Docker support | v1.x | 2026-04-29 |
-
-## Session Continuity
-
-Last session: 2026-04-29
-Stopped at: Phase 1 complete
-Resume file: None
+*Updated: 2026-04-30*
