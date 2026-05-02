@@ -1,0 +1,38 @@
+# Git and planning artifacts
+.git/
+.github/
+.planning/
+
+# Build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Logs and outputs
+logs/
+models/
+checkpoints/
+mlruns/
+wandb/
+
+# Local env
+.env
+.env.example
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage
+
+# OS
+.DS_Store
