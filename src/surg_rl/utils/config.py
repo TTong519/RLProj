@@ -219,6 +219,12 @@ class Settings(BaseSettings):
         description="Enable domain randomization",
     )
 
+    # GPU / hardware backend
+    gpu_backend: str = Field(
+        default="auto",
+        description="Hardware backend for rendering/compute: auto, cuda, rocm, metal, intel, cpu",
+    )
+
     physics_randomization: bool = Field(
         default=True,
         description="Randomize physics parameters",

@@ -21,6 +21,17 @@ class SimulatorType(str, Enum):
     PYBULLET = "pybullet"
 
 
+class HardwareBackend(str, Enum):
+    """Hardware compute/render backend."""
+
+    auto = "auto"
+    cuda = "cuda"
+    rocm = "rocm"
+    metal = "metal"
+    intel = "intel"
+    cpu = "cpu"
+
+
 class RobotType(str, Enum):
     """Types of surgical robots."""
 

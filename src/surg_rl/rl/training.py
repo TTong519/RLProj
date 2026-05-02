@@ -14,6 +14,7 @@ from typing import Any
 import gymnasium as gym
 import numpy as np
 
+from surg_rl.scene_definition.schema import HardwareBackend
 from surg_rl.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -119,6 +120,7 @@ class TrainingConfig:
     use_mlflow: bool = False
     experiment_name: str | None = None
     wandb_project: str | None = None
+    backend: HardwareBackend = HardwareBackend.auto
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -126,6 +128,8 @@ class TrainingConfig:
         for k, v in self.__dict__.items():
             if k == "algorithm":
                 result[k] = v.to_dict()
+            elif k == "backend":
+                result[k] = v.value
             elif v is not None:
                 result[k] = v
         return result

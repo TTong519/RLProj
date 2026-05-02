@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 from pathlib import Path
 
 import typer
@@ -9,6 +10,7 @@ from rich.console import Console
 from rich.table import Table
 
 from surg_rl import __version__
+from surg_rl.scene_definition.schema import HardwareBackend
 from surg_rl.scene_generation import TextParser, VisionParser, get_template
 from surg_rl.utils.config import get_settings
 from surg_rl.utils.logging import get_logger, setup_logging
@@ -37,9 +39,39 @@ def main():
 
 
 @app.command()
-def version() -> None:
+def version(verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed system info including GPU availability")) -> None:
     """Show version information."""
+    from surg_rl.scene_definition.schema import HardwareBackend
+    from surg_rl.utils.gpu import (
+        detect_backends,
+        get_cuda_version,
+        get_rocm_version,
+        select_backend,
+    )
     console.print(f"[bold blue]Surg-RL[/bold blue] version: [green]{__version__}[/green]")
+    if verbose:
+        backends = detect_backends()
+        table = Table(title="GPU Availability")
+        table.add_column("Backend", style="cyan")
+        table.add_column("Available", style="green")
+        table.add_column("Version / Info", style="yellow")
+        for backend in [HardwareBackend.cuda, HardwareBackend.rocm, HardwareBackend.metal, HardwareBackend.intel, HardwareBackend.cpu]:
+            available = backend in backends
+            version_info = "N/A"
+            if backend == HardwareBackend.cuda and available:
+                version_info = get_cuda_version() or "N/A"
+            elif backend == HardwareBackend.rocm and available:
+                version_info = get_rocm_version() or "N/A"
+            elif backend == HardwareBackend.metal and available:
+                version_info = "Apple Silicon" if "arm" in os.uname().machine.lower() else "Intel Mac"
+            elif backend == HardwareBackend.intel and available:
+                version_info = "oneAPI / XPU"
+            elif backend == HardwareBackend.cpu:
+                version_info = "Always available"
+            table.add_row(backend.value, "Yes" if available else "No", version_info)
+        console.print(table)
+        default_backend = select_backend(HardwareBackend.auto)
+        console.print(f"Default backend: {default_backend.value}")
 
 
 @app.command()
@@ -254,6 +286,9 @@ def train(
     mlflow: bool = typer.Option(False, "--mlflow", help="Enable MLflow logging"),
     experiment_name: str | None = typer.Option(None, "--experiment-name", "-e", help="Experiment name for tracking"),
     wandb_project: str | None = typer.Option(None, "--wandb-project", help="W\u0026B project name (default: surg-rl)"),
+    backend: str = typer.Option(
+        "auto", "--backend", help="Hardware backend: auto, cuda, rocm, metal, intel, cpu"
+    ),
 ) -> None:
     """Train an RL agent on a surgical scene.
 
@@ -279,6 +314,8 @@ def train(
             batch_size=batch_size,
         )
 
+        backend_enum = HardwareBackend(backend)
+
         config = TrainingConfig(
             scene_path=scene,
             algorithm=algo_config,
@@ -298,6 +335,7 @@ def train(
             use_mlflow=mlflow,
             experiment_name=experiment_name,
             wandb_project=wandb_project,
+            backend=backend_enum,
         )
 
         manager = TrainingManager(config)
