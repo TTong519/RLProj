@@ -6,13 +6,33 @@
 
 ## v1 Requirements
 
-### GPU Acceleration (GPU)
+### Hardware Acceleration (GPU)
 
+**CUDA (NVIDIA):**
 - [ ] **GPU-01**: System detects CUDA availability and advertises it in `surg-rl version --verbose`
 - [ ] **GPU-02**: MuJoCo simulator uses `mujoco.Renderer(..., gl_context)` with GPU backend when available
 - [ ] **GPU-03**: PyBullet simulator accepts `gpu_accelerated=True` flag and warns gracefully if unavailable
 - [ ] **GPU-04**: Docker image includes `nvidia-docker` runtime variant and build arg for CUDA base image
 - [ ] **GPU-05**: `TrainingConfig` has `gpu_accelerated: bool = False` flag wired to simulator construction
+
+**Intel oneAPI / XPU:**
+- [ ] **GPU-06**: System detects Intel oneAPI / XPU availability (`sycl-ls`, `dpctl`, or `torch.xpu`) and advertises it
+- [ ] **GPU-07**: MuJoCo falls back to OSMesa/CPU on Intel if no GPU context is available; oneAPI path is documented even if not implemented
+- [ ] **GPU-08**: `TrainingConfig` backend selector supports `"intel"` as a valid enum value with graceful CPU fallback
+
+**AMD ROCm / HIP:**
+- [ ] **GPU-09**: System detects AMD ROCm (`rocminfo`, `torch.cuda` with HIP visible) and advertises it
+- [ ] **GPU-10**: PyBullet accepts `backend="rocm"` and maps to ROCm-compatible OpenGL / EGL; warns if unavailable
+- [ ] **GPU-11**: Docker image includes build arg for ROCm base image (`rocm/dev-ubuntu-22.04`)
+
+**Apple Metal:**
+- [ ] **GPU-12**: System detects Apple Metal (`torch.backends.mps.is_available()` or `metal` GPU family) on macOS and advertises it
+- [ ] **GPU-13**: MuJoCo on macOS uses Metal-backed `mjrContext` when available; falls back to NS/OpenGL
+- [ ] **GPU-14**: `TrainingConfig` backend selector supports `"metal"` as a valid enum value
+
+**Unified Backend:**
+- [ ] **GPU-15**: `HardwareBackend` enum covers `auto`, `cuda`, `rocm`, `metal`, `intel`, `cpu`; `"auto"` tries all in priority order
+- [ ] **GPU-16**: Backend selection is logged at INFO level so users know which path is active
 
 ### Real-time Rendering (RENDER)
 
@@ -48,6 +68,11 @@
 - **DEP-02**: Multi-platform Docker builds (linux/amd64 + linux/arm64) via `docker buildx`
 - **DEP-03**: Helm chart for cloud-native surg-rl deployment with auto-scaling
 
+### Advanced Acceleration
+
+- **ACC-01**: DirectML backend for Windows training (deferred; Windows not primary target)
+- **ACC-02**: Vulkan compute backend for cross-platform GPU (deferred; niche use case)
+
 ## Out of Scope
 
 | Feature | Reason |
@@ -66,6 +91,17 @@
 | GPU-03 | Phase 6 | Pending |
 | GPU-04 | Phase 6 | Pending |
 | GPU-05 | Phase 6 | Pending |
+| GPU-06 | Phase 6 | Pending |
+| GPU-07 | Phase 6 | Pending |
+| GPU-08 | Phase 6 | Pending |
+| GPU-09 | Phase 6 | Pending |
+| GPU-10 | Phase 6 | Pending |
+| GPU-11 | Phase 6 | Pending |
+| GPU-12 | Phase 6 | Pending |
+| GPU-13 | Phase 6 | Pending |
+| GPU-14 | Phase 6 | Pending |
+| GPU-15 | Phase 6 | Pending |
+| GPU-16 | Phase 6 | Pending |
 | RENDER-01 | Phase 7 | Pending |
 | RENDER-02 | Phase 7 | Pending |
 | RENDER-03 | Phase 7 | Pending |
@@ -85,8 +121,8 @@
 | ROS2-06 | Phase 9 | Pending |
 
 **Coverage:**
-- v1 requirements: 22 total
-- Mapped to phases: 22
+- v1 requirements: 33 total
+- Mapped to phases: 33
 - Unmapped: 0 ✓
 
 ---

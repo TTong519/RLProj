@@ -2,26 +2,46 @@
 
 **Milestone:** v0.2.0 — Scaling, Rendering & Real Robot  
 **Goal:** Scale beyond single-GPU training, add real-time 3D rendering, and bridge to real hardware  
-**Phases:** 4 (6–9) **Requirements:** 22 (v1)  
-**Estimated effort:** 3–4 hours
+**Phases:** 4 (6–9) **Requirements:** 33 (v1)  
+**Estimated effort:** 4–5 hours
 
 ---
 
 ## Phases
 
-### Phase 6: GPU Acceleration (6 plans)
+### Phase 6: Universal Hardware Acceleration (10 plans)
 
-**Goal:** Detect CUDA, enable GPU renderers, and make the Docker image GPU-ready.
+**Goal:** Detect and leverage CUDA, Intel oneAPI, AMD ROCm, and Apple Metal for rendering and compute; provide a unified backend selector.
 
-**Requirements mapped:** GPU-01 through GPU-05
+**Requirements mapped:** GPU-01 through GPU-16
 
 **Success criteria:**
+
+*NVIDIA (CUDA):*
 1. `surg-rl version --verbose` displays GPU availability (CUDA version, renderer type)
-2. MuJoCo `mujoco.MjrContext` or `mujoco.Renderer` uses GPU context without crashes
+2. MuJoCo `mujoco.Renderer(..., gl_context)` uses GPU context without crashes when CUDA is present
 3. PyBullet warns with a single log line when `gpu_accelerated=True` but no GPU is present
 4. `docker build --build-arg CUDA_BASE=nvidia/cuda:12.2.0-runtime-ubuntu22.04` produces a GPU-enabled image
-5. `TrainingConfig(gpu_accelerated=True)` is accepted and propagated to simulator constructors
-6. Tests verify graceful degradation when CUDA is absent (no hard dependency on GPU)
+
+*Intel (oneAPI / XPU):*
+5. `surg-rl version --verbose` displays Intel XPU availability when `sycl-ls` or `dpctl` is present
+6. `TrainingConfig(backend="intel")` is accepted and falls back to CPU gracefully if oneAPI is missing
+7. MuJoCo uses OSMesa/CPU fallback on Intel if no GPU context available; oneAPI path is documented
+
+*AMD (ROCm / HIP):*
+8. `surg-rl version --verbose` displays ROCm availability when `rocminfo` or HIP is present
+9. PyBullet accepts `backend="rocm"` and maps to ROCm-compatible OpenGL/EGL; warns if unavailable
+10. `docker build --build-arg ROCM_BASE=rocm/dev-ubuntu-22.04` produces a ROCm-enabled image
+
+*Apple (Metal):*
+11. `surg-rl version --verbose` displays Metal availability on macOS via `torch.backends.mps.is_available()`
+12. MuJoCo on macOS uses Metal-backed `mjrContext` when available; falls back to NS/OpenGL
+
+*Unified backend:*
+13. `HardwareBackend` enum covers `auto`, `cuda`, `rocm`, `metal`, `intel`, `cpu`; `"auto"` tries all in priority order
+14. Backend selection is logged at INFO level so users know which path is active
+15. `TrainingConfig` accepts `backend: HardwareBackend = HardwareBackend.auto` with per-platform propagation
+16. Tests cover graceful degradation on all platforms (no hard dependency on any GPU)
 
 ### Phase 7: Real-time Rendering (6 plans)
 
@@ -71,11 +91,22 @@
 
 | Requirement | Phase | Goal |
 |-------------|-------|------|
-| GPU-01 | 6 | version --verbose shows GPU |
-| GPU-02 | 6 | MuJoCo GPU renderer |
+| GPU-01 | 6 | CUDA detection in version --verbose |
+| GPU-02 | 6 | MuJoCo CUDA GPU renderer |
 | GPU-03 | 6 | PyBullet GPU flag + warn |
 | GPU-04 | 6 | nvidia-docker variant |
-| GPU-05 | 6 | TrainingConfig flag |
+| GPU-05 | 6 | TrainingConfig gpu flag |
+| GPU-06 | 6 | Intel oneAPI / XPU detection |
+| GPU-07 | 6 | MuJoCo Intel fallback documented |
+| GPU-08 | 6 | TrainingConfig backend selector "intel" |
+| GPU-09 | 6 | AMD ROCm / HIP detection |
+| GPU-10 | 6 | PyBullet ROCm OpenGL/EGL |
+| GPU-11 | 6 | ROCm Docker variant |
+| GPU-12 | 6 | Apple Metal detection |
+| GPU-13 | 6 | MuJoCo Metal on macOS |
+| GPU-14 | 6 | TrainingConfig backend "metal" |
+| GPU-15 | 6 | HardwareBackend enum (auto/cuda/rocm/metal/intel/cpu) |
+| GPU-16 | 6 | Backend selection logged at INFO |
 | RENDER-01 | 7 | Non-blocking human render |
 | RENDER-02 | 7 | <5ms step() overhead |
 | RENDER-03 | 7 | 30 FPS throttle |
@@ -94,7 +125,7 @@
 | ROS2-05 | 9 | ros2-bridge CLI command |
 | ROS2-06 | 9 | [ros2] optional deps |
 
-**Coverage:** 22 requirements → 4 phases. All mapped ✓
+**Coverage:** 33 requirements → 4 phases. All mapped ✓
 
 ---
 

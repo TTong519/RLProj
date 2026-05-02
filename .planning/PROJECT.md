@@ -123,7 +123,8 @@ The `.planning/codebase/` map serves as the brownfield discovery record for all 
 - **Assets**: Procedural `.obj` and `.vtk` fallbacks; real URDF/OBJ supported when available
 - **Test stability**: PyBullet soft-body tests xfail on darwin/CI; known issue not to remove
 - **Security**: API keys masked in logs (last 4 chars shown); placeholder keys rejected at validation
-- **GPU**: CUDA optional; system works without GPU (graceful degradation)
+- **GPU**: CUDA/ROCm/Metal/oneAPI optional; system works without GPU (graceful degradation)
+- **macOS**: Metal support for MuJoCo rendering; ROS2 not available (Linux-only)
 - **ROS2**: Linux-only by design; macOS bridge code detects platform and warns
 
 ## Key Decisions
