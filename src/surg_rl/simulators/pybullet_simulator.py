@@ -206,11 +206,13 @@ class PyBulletSimulator(BaseSimulator):
         """Load a robot into the simulation."""
         # Try to load URDF or use primitive
         if robot.urdf_path:
-            resolved = self.scene_builder.resolve_asset_path(robot.urdf_path)
-            if resolved:
+            urdf_resolved = self.scene_builder.load_urdf_asset(
+                robot.urdf_path, robot.name
+            )
+            if urdf_resolved is not None:
                 try:
                     body_id = self._pb.loadURDF(
-                        str(resolved),
+                        str(urdf_resolved),
                         basePosition=[
                             robot.base_pose.position.x,
                             robot.base_pose.position.y,
@@ -229,6 +231,9 @@ class PyBulletSimulator(BaseSimulator):
                     return
                 except Exception as e:
                     logger.warning(f"Failed to load robot URDF: {e}. Using primitive.")
+            else:
+                # Fall back to primitive robot builder
+                pass
 
         # Primitive fallback: create a base + 1-DOF revolute joint (+ optional gripper)
         base_collision = self._pb.createCollisionShape(
@@ -366,7 +371,20 @@ class PyBulletSimulator(BaseSimulator):
         if getattr(tissue, "soft_body", False):
             self._load_soft_body_tissue(tissue)
             return
-        # Get geometry
+        # Resolve mesh or primitive fallback
+        mesh_path = None
+        if tissue.geometry is not None and getattr(tissue.geometry, "mesh", None):
+            mesh_path = tissue.geometry.mesh.path
+        resolved, is_primitive = self.scene_builder.get_mesh_or_primitive(
+            mesh_path=mesh_path,
+            primitive=tissue.geometry.primitive if tissue.geometry is not None else None,
+            dimensions=tissue.geometry.dimensions or (0.1, 0.1, 0.01)
+            if tissue.geometry is not None
+            else (0.1, 0.1, 0.01),
+            name=tissue.name,
+            radius=getattr(tissue.geometry, "radius", None) if tissue.geometry is not None else None,
+        )
+        # Determine primitive parameters for collision shape
         primitive = tissue.geometry.primitive if tissue.geometry is not None else None
         if primitive == "box":
             dims = tissue.geometry.dimensions or (0.1, 0.1, 0.01)
@@ -381,7 +399,6 @@ class PyBulletSimulator(BaseSimulator):
             dims = tissue.geometry.dimensions or (0.05, 0.05, 0.1)
             half_extents = [dims[2] / 2, dims[0] / 2]  # height, radius
         else:
-            # Default to box
             dims = (
                 tissue.geometry.dimensions or (0.1, 0.1, 0.01)
                 if tissue.geometry is not None
@@ -390,7 +407,7 @@ class PyBulletSimulator(BaseSimulator):
             shape_type = self._pb.GEOM_BOX
             half_extents = [d / 2 for d in dims]
 
-        # Create shapes - only pass the relevant parameters for each shape type
+        # Create collision shape (always primitive for stability)
         if shape_type == self._pb.GEOM_BOX:
             collision_shape = self._pb.createCollisionShape(
                 shape_type,
@@ -404,42 +421,74 @@ class PyBulletSimulator(BaseSimulator):
                 physicsClientId=self._physics_client,
             )
         elif shape_type == self._pb.GEOM_CYLINDER:
-            # For cylinder: half_extents = [height/2, radius]
             collision_shape = self._pb.createCollisionShape(
                 shape_type,
-                radius=half_extents[1],  # radius
-                height=half_extents[0] * 2,  # full height
+                radius=half_extents[1],
+                height=half_extents[0] * 2,
                 physicsClientId=self._physics_client,
             )
 
-        # Get color
-        color = [0.95, 0.85, 0.8, 1.0]  # Default skin color
+        # Create visual shape
+        color = [0.95, 0.85, 0.8, 1.0]
         if hasattr(tissue, "color") and tissue.color is not None:
             color = [tissue.color.r, tissue.color.g, tissue.color.b, tissue.color.a]
 
-        # Create visual shape - only pass the relevant parameters for each shape type
-        if shape_type == self._pb.GEOM_BOX:
-            visual_shape = self._pb.createVisualShape(
-                shape_type,
-                halfExtents=half_extents,
-                rgbaColor=color,
-                physicsClientId=self._physics_client,
+        if not is_primitive and resolved is not None:
+            # Use real mesh for visual shape
+            scale = (
+                getattr(tissue.geometry.mesh, "scale", (1.0, 1.0, 1.0))
+                if tissue.geometry is not None and getattr(tissue.geometry, "mesh", None)
+                else (1.0, 1.0, 1.0)
             )
-        elif shape_type == self._pb.GEOM_SPHERE:
-            visual_shape = self._pb.createVisualShape(
-                shape_type,
-                radius=half_extents[0],
-                rgbaColor=color,
-                physicsClientId=self._physics_client,
-            )
-        elif shape_type == self._pb.GEOM_CYLINDER:
-            visual_shape = self._pb.createVisualShape(
-                shape_type,
-                radius=half_extents[1],
-                length=half_extents[0] * 2,  # PyBullet uses 'length' for cylinders
-                rgbaColor=color,
-                physicsClientId=self._physics_client,
-            )
+            visual_shape = self._load_mesh_visual_shape(resolved, scale=scale)
+            if visual_shape == -1:
+                # Fallback to primitive visual
+                if shape_type == self._pb.GEOM_BOX:
+                    visual_shape = self._pb.createVisualShape(
+                        shape_type,
+                        halfExtents=half_extents,
+                        rgbaColor=color,
+                        physicsClientId=self._physics_client,
+                    )
+                elif shape_type == self._pb.GEOM_SPHERE:
+                    visual_shape = self._pb.createVisualShape(
+                        shape_type,
+                        radius=half_extents[0],
+                        rgbaColor=color,
+                        physicsClientId=self._physics_client,
+                    )
+                elif shape_type == self._pb.GEOM_CYLINDER:
+                    visual_shape = self._pb.createVisualShape(
+                        shape_type,
+                        radius=half_extents[1],
+                        length=half_extents[0] * 2,
+                        rgbaColor=color,
+                        physicsClientId=self._physics_client,
+                    )
+        else:
+            # Primitive visual shape
+            if shape_type == self._pb.GEOM_BOX:
+                visual_shape = self._pb.createVisualShape(
+                    shape_type,
+                    halfExtents=half_extents,
+                    rgbaColor=color,
+                    physicsClientId=self._physics_client,
+                )
+            elif shape_type == self._pb.GEOM_SPHERE:
+                visual_shape = self._pb.createVisualShape(
+                    shape_type,
+                    radius=half_extents[0],
+                    rgbaColor=color,
+                    physicsClientId=self._physics_client,
+                )
+            elif shape_type == self._pb.GEOM_CYLINDER:
+                visual_shape = self._pb.createVisualShape(
+                    shape_type,
+                    radius=half_extents[1],
+                    length=half_extents[0] * 2,
+                    rgbaColor=color,
+                    physicsClientId=self._physics_client,
+                )
 
         pose = tissue.pose
         if pose is None or not hasattr(pose, "position"):
@@ -455,16 +504,29 @@ class PyBulletSimulator(BaseSimulator):
             )
 
         body_id = self._pb.createMultiBody(
-            baseMass=0.0,  # Static (attached to ground in scene)
+            baseMass=0.0,
             baseCollisionShapeIndex=collision_shape,
             baseVisualShapeIndex=visual_shape,
             basePosition=list(position),
             physicsClientId=self._physics_client,
         )
         self._body_ids[tissue.name] = body_id
-        # Store initial position for reset
         self._initial_positions[tissue.name] = list(position)
         self._initial_orientations[tissue.name] = list(orientation)
+
+    def _load_mesh_visual_shape(self, mesh_path: Path, scale: tuple[float, float, float] = (1.0, 1.0, 1.0)) -> int:
+        """Create a visual shape from a mesh file (OBJ/DAE). Returns shape ID."""
+        try:
+            visual_shape_id = self._pb.createVisualShape(
+                shapeType=self._pb.GEOM_MESH,
+                fileName=str(mesh_path),
+                meshScale=scale,
+                physicsClientId=self._physics_client,
+            )
+            return visual_shape_id
+        except Exception as e:
+            logger.warning(f"Failed to create visual shape for mesh {mesh_path}: {e}. Falling back to primitive.")
+            return -1
 
     def _get_vtk_mesh_path(self, tissue: Any) -> Path:
         """Generate or return cached .vtk tetrahedral mesh for a soft body tissue."""
