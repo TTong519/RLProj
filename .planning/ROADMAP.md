@@ -82,6 +82,22 @@ Plans:
 - [x] 04-01: Bind task geometry (needle, entry, exit, incision) to observation pipeline
 - [x] 04-02: Add real mesh/URDF loading to SceneBuilder with fallback logging
 
+### Phase 5: Experiment Tracking + Infrastructure
+**Goal**: Training runs are tracked in W&B or MLflow, the project is containerized, and CI/CD validates every change.
+**Depends on**: Phase 4
+**Requirements**: [INFRA-01, INFRA-02, INFRA-03, INFRA-04]
+**Success Criteria** (what must be TRUE):
+  1. `surg-rl train --wandb` logs episode rewards, lengths, FPS, curriculum stage, and randomization params to W&B
+  2. `surg-rl train --mlflow` logs the same metrics to MLflow
+  3. `docker build -t surg-rl .` produces a runnable image with `surg-rl version` working
+  4. Every PR triggers CI running lint, format check, typecheck, and tests on Python 3.10/3.11/3.12
+  5. Pushing a `v*` tag triggers a PyPI release via GitHub Actions
+**Plans**: 2 plans
+
+Plans:
+- [ ] 05-01: Add optional W&B/MLflow experiment tracking to training pipeline
+- [ ] 05-02: Add Docker image and GitHub Actions CI/CD pipelines
+
 ## Progress
 
 **Execution Order:**
