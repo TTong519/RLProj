@@ -2,111 +2,18 @@
 
 ## Overview
 
-This roadmap stabilizes the Surg-RL surgical-robotics RL training system (v0.1.0) by fixing 8 critical bugs, completing the action space, hardening simulator performance, and extending task geometry and real asset support. It is a correctness-first, stabilization-focused plan: no new features until the foundation is solid.
+- **v0.1.0 Stabilization** (Complete, 2026-04-29 → 2026-05-02) — [Archive](milestones/v0.1.0-ROADMAP.md)
 
-## Phases
+## Current Milestone: v0.2.0
 
-- [x] **Phase 1: Critical Bug Fixes** — Fix 8 documented critical bugs before any new features
-- [x] **Phase 2: Action Space + Gripper** — Complete unimplemented action types and gripper actuation
-- [x] **Phase 3: Simulator Robustness** — Performance optimization, state management, and caching
-- [x] **Phase 4: Task Geometry + Real Assets** — Bind task geometry to observations and load real mesh files
-- [x] **Phase 5: Experiment Tracking + Infrastructure** — W&B/MLflow, Docker, CI/CD pipelines
+**Not yet started.** Run `/gsd-new-milestone` to begin planning.
 
-## Phase Details
+## Backlog
 
-### Phase 1: Critical Bug Fixes
-**Goal**: All 8 documented critical bugs are fixed, tested, and committed. The simulation layer is correct before any feature work proceeds.
-**Depends on**: Nothing (first phase)
-**Requirements**: [BUG-01, BUG-02, BUG-03, BUG-04, BUG-05, BUG-06, BUG-07, BUG-08, SEC-01, SEC-02]
-**Success Criteria** (what must be TRUE):
-  1. Primitive robots in PyBullet have correct orientation (verified by test)
-  2. Episode reset leaves all joint states at initial values (verified by test)
-  3. Scene loads without crashing when `physics` is `None` (verified by test)
-  4. Negative penalty configs are rejected at validation time; collision penalty rewards are always non-positive (verified by test)
-  5. Vision prompts produce valid JSON strings when logged (verified by test)
-  6. Curriculum stage parameter overrides actually change simulation parameters (verified by test)
-  7. `LightConfig` validator does not mutate `data` dict in place (verified by test)
-  8. `evaluate()` succeeds with both `DummyVecEnv(n_envs=1)` and `SubprocVecEnv(n_envs=2)` (verified by test)
-  9. `.env.example` contains no placeholder key; `Settings` rejects placeholder values (verified by test)
-  10. API key is masked in all log output (verified by test)
-**Plans**: 3 plans
+- Ray/RLlib distributed training
+- Kubernetes deployment manifests
+- Multi-platform Docker builds (arm64)
+- ROS2 integration for real-hardware validation
 
-Plans:
-- [x] 01-01: Verify simulator correctness bugs are already fixed (quaternion order, joint reset, physics=None crash)
-- [x] 01-02: Fix reward sign contract, curriculum dynamics overrides, and LightConfig mutation
-- [x] 01-03: Fix evaluation and security bugs (VecEnv API, API key exposure)
-
-### Phase 2: Action Space + Gripper
-**Goal**: All action types are implemented and the gripper works in both backends. Demos show animated robot movement.
-**Depends on**: Phase 1
-**Requirements**: [ACT-01, ACT-02, ACT-03, ACT-04, ACT-05]
-**Success Criteria** (what must be TRUE):
-  1. `surg-rl train` can train with `JOINT_TORQUES`, `ENDEFFECTOR_POSE`, and `ENDEFFECTOR_DELTA` action types
-  2. Gripper opens and closes in demos for both MuJoCo and PyBullet
-  3. Invalid `ActionType` values are rejected at `SceneLoader.load()` time with a helpful error message
-  4. Training callbacks show gripper state in TensorBoard logs
-**Plans**: 3 plans
-
-Plans:
-- [x] 02-01: Implement `JOINT_TORQUES` action type in both backends
-- [x] 02-02: Implement `ENDEFFECTOR_POSE` and `ENDEFFECTOR_DELTA` action types in both backends
-- [x] 02-03: Implement gripper actuation and add config-time action validation
-
-### Phase 3: Simulator Robustness
-**Goal**: Simulator reset is fast, state restore is equivalent across backends, and mesh generation is vectorized.
-**Depends on**: Phase 1
-**Requirements**: [PERF-01, PERF-02, PERF-03, PERF-04]
-**Success Criteria** (what must be TRUE):
-  1. Soft-body episode reset is <100ms (measured on suturing scene)
-  2. Procedural mesh generation for 64³ cells completes in <1s
-  3. `get_state()` → `set_state()` produces identical observation as initial `reset()` in both backends
-  4. `evaluate()` reuses existing vectorized envs; no new env creation per call
-**Plans**: 2 plans
-
-Plans:
-- [x] 03-01: Optimize soft-body reset and mesh performance
-- [x] 03-02: Unify state save/restore across backends and fix VecEnv evaluation reuse
-
-### Phase 4: Task Geometry + Real Assets
-**Goal**: Task observations are populated from scene objectives and real mesh files can be loaded.
-**Depends on**: Phase 2, Phase 3
-**Requirements**: [TASK-01, TASK-02, TASK-03, TASK-04]
-**Success Criteria** (what must be TRUE):
-  1. Suturing scene observation contains `needle_pos` within 1e-3 of objective-specified geometry
-  2. Entry/exit point observations match task objective geometry when specified
-  3. Scene with external URDF/DAE/OBJ loads successfully (test with sample URDF)
-  4. Fallback warning is logged once per missing asset, not per frame
-**Plans**: 2 plans
-
-Plans:
-- [x] 04-01: Bind task geometry (needle, entry, exit, incision) to observation pipeline
-- [x] 04-02: Add real mesh/URDF loading to SceneBuilder with fallback logging
-
-### Phase 5: Experiment Tracking + Infrastructure
-**Goal**: Training runs are tracked in W&B or MLflow, the project is containerized, and CI/CD validates every change.
-**Depends on**: Phase 4
-**Requirements**: [INFRA-01, INFRA-02, INFRA-03, INFRA-04]
-**Success Criteria** (what must be TRUE):
-  1. `surg-rl train --wandb` logs episode rewards, lengths, FPS, curriculum stage, and randomization params to W&B
-  2. `surg-rl train --mlflow` logs the same metrics to MLflow
-  3. `docker build -t surg-rl .` produces a runnable image with `surg-rl version` working
-  4. Every PR triggers CI running lint, format check, typecheck, and tests on Python 3.10/3.11/3.12
-  5. Pushing a `v*` tag triggers a PyPI release via GitHub Actions
-**Plans**: 2 plans
-
-Plans:
-- [x] 05-01: Add optional W&B/MLflow experiment tracking to training pipeline
-- [x] 05-02: Add Docker image and GitHub Actions CI/CD pipelines
-
-## Progress
-
-**Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
-
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. Critical Bug Fixes | 3/3 | Complete | 2026-04-29 |
-| 2. Action Space + Gripper | 3/3 | Complete | 2026-04-29 |
-| 3. Simulator Robustness | 2/2 | Complete | 2026-04-30 |
-| 4. Task Geometry + Assets | 2/2 | Complete | 2026-05-02 |
-| 5. Infrastructure | 2/2 | Complete | 2026-05-02 |
+---
+*Roadmap last updated: 2026-05-02*

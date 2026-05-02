@@ -10,7 +10,7 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 
 ## Requirements
 
-### Validated
+### Validated (v0.1.0)
 
 - ✓ Scene definition schema (Pydantic v2) — supports robots, tissues, instruments, physics, tasks, domain randomization
 - ✓ Scene loader with JSON/YAML parsing, LRU cache, and asset validation
@@ -23,19 +23,26 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 - ✓ Gymnasium-compatible `SurgicalEnv` with observation/action/reward builders
 - ✓ SB3 training pipeline wired for 5 algorithms with callbacks and TensorBoard logging
 - ✓ Typer CLI (`surg-rl`) with version, config, setup, generate, train, evaluate commands
-- ✓ 487 passing tests across 13 test modules with ~92% coverage
-- ✓ Documentation (Getting Started, API Reference, Scene Format, Architecture, Dynamics API, Testing)
+- ✓ **8 critical bugs fixed** — quaternion order, joint reset, physics=None, reward sign, curriculum dynamics, LightConfig mutation, API key exposure, VecEnv evaluate
+- ✓ **All 7 ActionTypes implemented** — JOINT_POSITIONS, JOINT_VELOCITIES, JOINT_TORQUES, ENDEFFECTOR_POSE, ENDEFFECTOR_DELTA, DISCRETE, GRIPPER
+- ✓ **Gripper auto-detection** in both MuJoCo and PyBullet backends
+- ✓ **Soft-body mesh caching** (<100ms reset) and vectorized mesh generation
+- ✓ **Cross-backend state save/restore** (qpos/qvel within 1e-6)
+- ✓ **Persistent eval env caching** in TrainingManager
+- ✓ **Task geometry binding** — needle_pos, entry_point, exit_point from target_body
+- ✓ **Real asset loading** — URDF/OBJ with deduplicated fallback warnings
+- ✓ **Experiment tracking** — optional W&B/MLflow callbacks with controller-aware logging
+- ✓ **CI/CD** — GitHub Actions CI (matrix 3.10/3.11/3.12) + PyPI release pipeline
+- ✓ **Containerization** — multi-stage Dockerfile
+- ✓ 607 passing tests across 15+ test modules
 
-### Active
+### Active (v0.2.0)
 
-- [ ] Implement real robot joint control (objects currently static in demos)
-- [ ] Implement gripper actuation for both backends
-- [ ] Implement unimplemented action types: `JOINT_TORQUES`, `ENDEFFECTOR_POSE`, `ENDEFFECTOR_DELTA`
-- [ ] Fix 8 critical bugs captured in unexecuted fix plans (quaternion order, joint reset, physics=None, collision penalty, vision prompt JSON, curriculum apply_parameters, LightConfig validator, VecEnv evaluate)
-- [ ] Add real asset meshes/URDFs alongside current primitive fallbacks
-- [ ] Bind task geometry from objectives to observation fields (needle_pos, entry_point, exit_point, incision_progress)
-- [ ] Add real-time rendering during RL training (currently synchronous and blocks training loop)
-- [ ] Improve vectorized evaluation reuse (currently creates fresh env each call)
+- [ ] Ray/RLlib distributed training support
+- [ ] ROS2 integration for real-hardware validation
+- [ ] Kubernetes deployment manifests
+- [ ] Multi-platform Docker builds (arm64)
+- [ ] Real-time rendering during RL training (currently synchronous)
 
 ### Out of Scope
 
@@ -46,16 +53,16 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 
 ## Context
 
-This repository was rapidly prototyped as an alpha build. It has comprehensive abstractions but several critical bugs remain documented in unexecuted fix plans under `docs/superpowers/plans/`. The codebase is well-tested (487 passing tests) but has known gaps: 8 critical bugs, unimplemented action types, and missing real asset files. PyBullet soft-body support is functional on macOS but marked as xfail for CI runners.
+This repository was rapidly prototyped as an alpha build and has now completed its v0.1.0 stabilization milestone. All 8 critical bugs are fixed, all action types are implemented, simulator performance is hardened with caching and vectorization, task geometry is bound to observations, real assets load with fallback, and the project has CI/CD + containerization.
 
-The `.planning/codebase/` map was created 2026-04-29 and serves as the brownfield discovery record for all existing architecture, stack, conventions, and concerns.
+The `.planning/codebase/` map serves as the brownfield discovery record for all existing architecture, stack, conventions, and concerns.
 
 ## Constraints
 
 - **Tech stack**: Python ≥3.10, MuJoCo / PyBullet, Gymnasium, Stable-Baselines3, Pydantic v2, Typer, Rich
-- **Assets**: No real mesh/URDF files exist in `assets/` — we use procedural `.obj` and `.vtk` fallbacks
+- **Assets**: Procedural `.obj` and `.vtk` fallbacks; real URDF/OBJ supported when available
 - **Test stability**: PyBullet soft-body tests xfail on darwin/CI; known issue not to remove
-- **API key exposure**: `.env.example` has placeholder key; no masking in logs
+- **Security**: API keys masked in logs (last 4 chars shown); placeholder keys rejected at validation
 
 ## Key Decisions
 
@@ -63,27 +70,23 @@ The `.planning/codebase/` map was created 2026-04-29 and serves as the brownfiel
 |----------|-----------|---------|
 | Pydantic v2 as system schema | Strong typing, validation, and serialization across JSON/YAML configs | ✓ Good — single source of truth |
 | Dual simulator backends (MuJoCo + PyBullet) | MuJoCo for performance, PyBullet for soft-body deformable physics | ✓ Good — flexibility at cost of maintenance |
-| Procedural primitive fallbacks instead of real assets | Lightweight repo, avoids licensing and distribution of surgical meshes | ⚠️ Revisit — visual fidelity limits production use |
+| Procedural primitive fallbacks instead of real assets | Lightweight repo, avoids licensing and distribution of surgical meshes | ✓ Good — real asset loading added with graceful fallback |
 | LLM/VLM-based scene generation | Natural language input reduces barrier to scene creation | ✓ Good — reduces config boilerplate |
 | No site-wide install (editable only) | Matches research-tool convention where users modify source | ✓ Good — prevents stale-site issues |
 | Backend detection via duck typing (`hasattr`) | Avoids explicit simulator-type enums in controller layer | ⚠️ Revisit — fragile, breaks with internal API changes |
+| Optional dependencies for tracking (wandb/mlflow) | Keeps core install lightweight; tracking only when needed | ✓ Good — `[tracking]` extra works well |
+| Multi-stage Dockerfile | System deps in base, build in middle, runtime lean | ✓ Good — image is ~200MB smaller than single-stage |
 
-## Evolution
+## Milestones
 
-This document evolves at phase transitions and milestone boundaries.
+- **v0.1.0 Stabilization** (2026-04-29 → 2026-05-02) — [Archive](milestones/v0.1.0-ROADMAP.md)
+  - 5 phases, 12 plans, 43 commits, 607 tests, 33/33 UAT passed
 
-**After each phase transition** (via `/gsd-transition`):
-1. Requirements invalidated? → Move to Out of Scope with reason
-2. Requirements validated? → Move to Validated with phase reference
-3. New requirements emerged? → Add to Active
-4. Decisions to log? → Add to Key Decisions
-5. "What This Is" still accurate? → Update if drifted
+## Next Milestone Goals (v0.2.0)
 
-**After each milestone** (via `/gsd-complete-milestone`):
-1. Full review of all sections
-2. Core Value check — still the right priority?
-3. Audit Out of Scope — reasons still valid?
-4. Update Context with current state
+1. Distributed training with Ray/RLlib for multi-GPU scaling
+2. ROS2 bridge for real-robot validation
+3. Cloud deployment with Kubernetes
 
 ---
-*Last updated: 2026-04-29 after initialization*
+*Last updated: 2026-05-02 after v0.1.0 milestone completion*
