@@ -250,6 +250,10 @@ def train(
     ),
     max_episode_steps: int = typer.Option(1000, "--max-steps", help="Max steps per episode"),
     verbose: int = typer.Option(1, "--verbose", "-v", help="Verbosity level (0, 1, 2)"),
+    wandb: bool = typer.Option(False, "--wandb", help="Enable Weights \u0026 Biases logging"),
+    mlflow: bool = typer.Option(False, "--mlflow", help="Enable MLflow logging"),
+    experiment_name: str | None = typer.Option(None, "--experiment-name", "-e", help="Experiment name for tracking"),
+    wandb_project: str | None = typer.Option(None, "--wandb-project", help="W\u0026B project name (default: surg-rl)"),
 ) -> None:
     """Train an RL agent on a surgical scene.
 
@@ -290,6 +294,10 @@ def train(
             use_curriculum=curriculum,
             use_adaptive_difficulty=adaptive,
             verbose=verbose,
+            use_wandb=wandb,
+            use_mlflow=mlflow,
+            experiment_name=experiment_name,
+            wandb_project=wandb_project,
         )
 
         manager = TrainingManager(config)

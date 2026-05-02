@@ -115,6 +115,10 @@ class TrainingConfig:
     use_curriculum: bool = False
     use_adaptive_difficulty: bool = False
     enable_tensorboard: bool = False
+    use_wandb: bool = False
+    use_mlflow: bool = False
+    experiment_name: str | None = None
+    wandb_project: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
