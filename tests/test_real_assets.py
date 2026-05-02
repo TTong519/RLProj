@@ -131,3 +131,93 @@ class TestMuJoCoMeshAssets:
         # Warning should have been logged exactly once
         warning_calls = [c for c in mock_logger.warning.call_args_list]
         assert len(warning_calls) == 1, f"Expected 1 warning, got {len(warning_calls)}"
+
+
+class TestPyBulletRealAssetIntegration:
+    @pytest.mark.skipif(
+        pytest.importorskip("pybullet", exc_type=ImportError) is None,
+        reason="PyBullet not installed",
+    )
+    def test_pybullet_loads_sample_urdf(self, tmp_path):
+        """PyBulletSimulator should load a real URDF without crashing."""
+        import sys
+        import pybullet as p
+        from surg_rl.scene_definition.schema import (
+            Metadata,
+            SceneDefinition,
+            RobotConfig,
+            Pose,
+            Position,
+            Orientation,
+        )
+        from surg_rl.simulators.pybullet_simulator import PyBulletSimulator
+
+        urdf_path = tmp_path / "sample_robot.urdf"
+        urdf_path.write_text(
+            '<?xml version="1.0"?>\n'
+            '<robot name="sample_robot">\n'
+            '  <link name="base">\n'
+            '    <visual><geometry><box size="0.1 0.1 0.1"/></geometry></visual>\n'
+            '    <collision><geometry><box size="0.1 0.1 0.1"/></geometry></collision>\n'
+            '  </link>\n'
+            '</robot>\n'
+        )
+        scene = SceneDefinition(
+            metadata=Metadata(name="urdf_scene"),
+            robots=[
+                RobotConfig(
+                    name="sample_robot",
+                    urdf_path=str(urdf_path),
+                    links=[{"name": "base"}],
+                    base_pose=Pose(
+                        position=Position(x=0, y=0, z=0.5),
+                        orientation=Orientation(w=1, x=0, y=0, z=0),
+                    ),
+                )
+            ],
+        )
+        sim = PyBulletSimulator(render_mode="DIRECT")
+        try:
+            sim.load_scene(scene)
+            assert "sample_robot" in sim._body_ids
+            body_id = sim._body_ids["sample_robot"]
+            assert body_id >= 0
+        finally:
+            sim.close()
+
+    def test_scene_builder_creates_mjcf_with_mesh(self, tmp_path):
+        """create_mjcf should include mesh asset when tissue has real mesh."""
+        from surg_rl.scene_definition.schema import (
+            Metadata,
+            SceneDefinition,
+            TissueConfig,
+            TissueMeshDefinition,
+            MeshAsset,
+        )
+
+        obj_path = tmp_path / "sample_tissue.obj"
+        obj_path.write_text("v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n")
+        builder = SceneBuilder(assets_dir=str(tmp_path))
+        scene = SceneDefinition(
+            metadata=Metadata(name="mesh_scene"),
+            tissues=[
+                TissueConfig(
+                    name="tissue",
+                    geometry=TissueMeshDefinition(
+                        mesh=MeshAsset(path="sample_tissue.obj"),
+                        primitive="box",
+                        dimensions=(0.1, 0.1, 0.01),
+                    ),
+                )
+            ],
+        )
+        mjcf = builder.create_mjcf(scene, output_path=tmp_path / "scene.xml")
+        assert mjcf.exists()
+        content = mjcf.read_text()
+        import xml.etree.ElementTree as ET
+
+        root = ET.fromstring(content)
+        mesh_elems = root.findall(".//mesh")
+        assert any(m.get("name") == "tissue_mesh" for m in mesh_elems)
+        geom_elems = root.findall(".//geom")
+        assert any(g.get("type") == "mesh" and g.get("mesh") == "tissue_mesh" for g in geom_elems)
