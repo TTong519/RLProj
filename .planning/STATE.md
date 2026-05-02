@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-04-29)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** Phase 5 planning complete — ready to execute
+**Current focus:** Phase 5 complete — entire v0.1.0 stabilization roadmap finished
 
 ## Current Position
 
-Phase: 5 of 5 (Experiment Tracking + Infrastructure)
-Plan: 0 of 2 planned (plans revised and validated)
-Status: Ready to execute
-Last activity: 2026-05-02 — Phase 5 plans revised after code review, 5 issues fixed
+Phase: 5 of 5 (COMPLETE)
+Plan: 2/2 complete
+Status: All phases complete — v0.1.0 stabilization roadmap finished
+Last activity: 2026-05-02 — Phase 5 execution and verification complete
 
-Progress: [████████████████████░░] 80%
+Progress: [██████████████████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8
+- Total plans completed: 10
 - Average duration: ~13 minutes
-- Total execution time: ~2 hours
+- Total execution time: ~2 hours 15 minutes
 
 **By Phase:**
 
@@ -31,56 +31,69 @@ Progress: [████████████████████░░] 8
 | 2. Action Space + Gripper | 3/3 | 3 | ~20 min |
 | 3. Simulator Robustness | 2/2 | 2 | ~18 min |
 | 4. Task Geometry + Assets | 2/2 | 2 | ~15 min |
+| 5. Infrastructure | 2/2 | 2 | ~12 min |
 
-## Phase 4 Summary
+## Phase 5 Summary
 
 ### What was built
 
-1. **Task geometry observation wiring (TASK-01, TASK-02)**:
-   - `TaskObjective.target_body: str | None` — additive schema extension
-   - `_resolve_task_observations()` in PyBullet + MuJoCo simulators
-   - Objective.name → observation field mapping via `_obs_field_for_name()`
-   - Unified `incision_progress` computed as completion ratio from success_criteria text
-   - None guards on fallbacks prevent overwriting explicitly-set values
+1. **W&B/MLflow experiment tracking (INFRA-01, INFRA-02)**:
+   - `[tracking]` optional dependency group with `wandb>=0.16.0` and `mlflow>=2.10.0`
+   - `Settings.wandb_api_key` and `Settings.mlflow_tracking_uri` fields
+   - `TrainingConfig` flags: `use_wandb`, `use_mlflow`, `experiment_name`, `wandb_project`
+   - CLI flags: `--wandb`, `--mlflow`, `--experiment-name`, `--wandb-project`
+   - `WandbCallback` and `MLflowCallback` with lazy imports, controller-aware logging
+   - Metrics: episode reward/length, FPS, elapsed, curriculum stage, difficulty, physics/visual/dynamics randomization params
 
-2. **Real asset loading (TASK-03, TASK-04)**:
-   - `SceneBuilder._missing_assets: set[str]` for deduplicated single-shot warnings
-   - `SceneBuilder.load_urdf_asset()` → returns `Path | None`
-   - PyBullet: real URDF loading via `p.loadURDF`, OBJ visual mesh via `createVisualShape(GEOM_MESH)`
-   - MuJoCo: MJCF `<mesh>` asset + `type="mesh"` geom for tissue/instrument geometry
-   - Always falls back to procedural primitives when assets are missing
+2. **Docker + CI/CD (INFRA-03, INFRA-04)**:
+   - Multi-stage Dockerfile (base/build/runtime) with system GL/Mesa/X11 libs for MuJoCo/PyBullet
+   - `.dockerignore` with comprehensive exclusions (secrets, logs, outputs, IDE)
+   - GitHub Actions CI: matrix across Python 3.10/3.11/3.12 with ruff/black/mypy/pytest
+   - GitHub Actions Release: PyPI publish on `v*` tag via `pypa/gh-action-pypi-publish`
+   - `tests/test_cli.py`: version and config command tests
 
 ### Commits
 
-- `5506276` — 04-01 T1: add target_body field to TaskObjective schema
-- `b9d3387` — 04-01 T2: implement target_body observation resolution in both backends
-- `2b7f1a6` — 04-01 SUMMARY
-- `c96fa1f` — 04-02 T1: add failing tests for asset fallback
-- `a11813a` — 04-02 T2: add _missing_assets tracking and load_urdf_asset helper
-- `9b8ec81` — 04-02 T3: wire real URDF and mesh loading into PyBullet simulator
-- `64b7b9b` — 04-02 T4: wire real mesh loading into MuJoCo MJCF generation
-- `084d8ec` — 04-02 T5: add integration tests for real URDF and mesh loading
-- `42f9dc7` — 04-02 SUMMARY
-- `cb7e228` — 04-REVIEW: code review — clean, 0 findings, 600 tests pass
+- `65f4932` — 05-01 T1: add [tracking] optional dependency group
+- `9bbad01` — 05-01 T2: add wandb_api_key and mlflow_tracking_uri to Settings
+- `85f87bc` — 05-01 T3: add tracking flags to TrainingConfig and CLI
+- `6bc44b2` — 05-01 T4: implement WandbCallback and MLflowCallback
+- `7848fbe` — 05-01 T5: wire callbacks into TrainingManager
+- `a03bd52` — 05-01 T6: add tests for callbacks
+- `9bfcca2` — 05-02 T1: add Dockerfile, GitHub Actions CI/CD, and CLI tests
+- `b79b61f` — 05 SUMMARY: execution summaries
+- `54b00fc` — 05 REVIEW: code review — clean, 0 findings
 
 ### Verification
-- 600 tests passed (up from 579 baseline)
+- 607 tests passed (up from 600 baseline at Phase 4 end)
 - 0 failures, 0 regressions
 - 2 xfailed (expected), 4 xpassed (known macOS soft-body issue)
-- 21 new tests added: 12 task_geometry + 9 real_assets
+- 16 new tests: 14 tracking callbacks + 2 CLI
 
-## Phase 5 Planning Status
+## Project Completion Status
 
-**Revisions applied after code review:**
+### All 5 Phases Complete ✅
 
-| Issue | Plan | Fix |
-|-------|------|-----|
-| CLI typer.Option invalid syntax | 05-01 | Changed `str \| typer.Option(...)` to `str \| None = typer.Option(...)` |
-| wandb_api_key added but unused | 05-01 | Wired into `WandbCallback.__init__` and `wandb.init(key=...)` |
-| Missing curriculum/randomization logging | 05-01 | Added controller state logging to both callbacks (reusing TensorBoardCallback pattern) |
-| Test: sys.modules manipulation unreliable | 05-01 | Added `test_log_metrics_with_controller` using MagicMock; kept import-skip test for coverage but documented limitation |
-| Dockerfile: COPY file to itself | 05-02 | Fixed `COPY pyproject.toml pytest.ini pytest.ini` to `COPY pyproject.toml pytest.ini ./` |
+| Phase | Status | Key Deliverables |
+|-------|--------|------------------|
+| 1. Critical Bug Fixes | ✅ Complete | 8 bugs fixed, 9 success criteria verified |
+| 2. Action Space + Gripper | ✅ Complete | All action types implemented, gripper in both backends |
+| 3. Simulator Robustness | ✅ Complete | Mesh caching, vectorization, cross-backend state save/restore |
+| 4. Task Geometry + Assets | ✅ Complete | target_body observation wiring, real URDF/OBJ loading |
+| 5. Infrastructure | ✅ Complete | W&B/MLflow tracking, Docker, CI/CD, PyPI release pipeline |
 
-**Ready for execution.**
+### What "v0.1.0 Stabilization" Means
+
+- **Simulation layer is correct**: All documented critical bugs fixed, state save/restore verified across backends
+- **Action space is complete**: Joint torques, end-effector pose/delta, and gripper actuation all work
+- **Performance is acceptable**: Soft-body reset <100ms, mesh generation vectorized, eval env cached
+- **Observations are populated**: Task geometry bound via target_body, real assets load with fallback
+- **Research workflow is supported**: Experiment tracking via W&B/MLflow, containerized deployment, automated CI/CD
+
+### Next Steps (beyond v0.1.0)
+
+1. **Run `/gsd-verify-work`** — Validate all 5 phases against original requirements
+2. **Run `/gsd-complete-milestone`** — Archive milestone and prepare for v0.2.0 planning
+3. **Consider**: Ray/RLlib distributed training (deferred from Phase 5), advanced rendering, real robot integration
 
 *Updated: 2026-05-02*

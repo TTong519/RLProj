@@ -10,7 +10,7 @@ This roadmap stabilizes the Surg-RL surgical-robotics RL training system (v0.1.0
 - [x] **Phase 2: Action Space + Gripper** — Complete unimplemented action types and gripper actuation
 - [x] **Phase 3: Simulator Robustness** — Performance optimization, state management, and caching
 - [x] **Phase 4: Task Geometry + Real Assets** — Bind task geometry to observations and load real mesh files
-- [ ] **Phase 5: Experiment Tracking + Infrastructure** — W&B/MLflow, Docker, CI/CD pipelines
+- [x] **Phase 5: Experiment Tracking + Infrastructure** — W&B/MLflow, Docker, CI/CD pipelines
 
 ## Phase Details
 
@@ -95,8 +95,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: Add optional W&B/MLflow experiment tracking to training pipeline
-- [ ] 05-02: Add Docker image and GitHub Actions CI/CD pipelines
+- [x] 05-01: Add optional W&B/MLflow experiment tracking to training pipeline
+- [x] 05-02: Add Docker image and GitHub Actions CI/CD pipelines
 
 ## Progress
 
@@ -109,4 +109,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Action Space + Gripper | 3/3 | Complete | 2026-04-29 |
 | 3. Simulator Robustness | 2/2 | Complete | 2026-04-30 |
 | 4. Task Geometry + Assets | 2/2 | Complete | 2026-05-02 |
-| 5. Infrastructure | 0/2 | Not started | - |
+| 5. Infrastructure | 2/2 | Complete | 2026-05-02 |
