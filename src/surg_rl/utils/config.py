@@ -141,6 +141,17 @@ class Settings(BaseSettings):
         description="Maximum tokens for LLM responses",
     )
 
+    # Experiment tracking settings
+    wandb_api_key: str | None = Field(
+        default=None,
+        description="Weights & Biases API key",
+    )
+
+    mlflow_tracking_uri: str | None = Field(
+        default=None,
+        description="MLflow tracking server URI",
+    )
+
     # VLM Configuration for visual scene generation
     vlm_model: str = Field(
         default="gpt-4-vision-preview",
