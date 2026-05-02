@@ -7,6 +7,8 @@ from typing import Any
 
 import numpy as np
 
+from surg_rl.scene_definition.schema import HardwareBackend
+from surg_rl.utils.gpu import select_backend
 from surg_rl.utils.logging import get_logger
 
 from .base_simulator import BaseSimulator, Observation, State, StepResult
@@ -30,6 +32,7 @@ class MuJoCoSimulator(BaseSimulator):
         render_width: int = 640,
         render_height: int = 480,
         assets_dir: str | Path | None = None,
+        backend: HardwareBackend | None = None,
     ):
         """Initialize MuJoCo simulator.
 
@@ -39,12 +42,14 @@ class MuJoCoSimulator(BaseSimulator):
             render_width: Width of rendered images.
             render_height: Height of rendered images.
             assets_dir: Directory containing asset files.
+            backend: Hardware backend hint.
         """
         super().__init__(
             timestep=timestep,
             frame_skip=frame_skip,
             render_width=render_width,
             render_height=render_height,
+            backend=backend,
         )
         self.assets_dir = Path(assets_dir) if assets_dir else None
         self.scene_builder = SceneBuilder(assets_dir=assets_dir)
@@ -61,6 +66,11 @@ class MuJoCoSimulator(BaseSimulator):
         self._end_effector_target_pos: np.ndarray | None = None
         self._end_effector_target_quat: np.ndarray | None = None
         self._ik_result_joints: dict[str, np.ndarray] = {}
+        # Resolve backend (defaults to auto)
+        if backend is None:
+            backend = HardwareBackend.auto
+        self._active_backend = select_backend(backend)
+        logger.info("MuJoCo simulator: selected backend=%s", self._active_backend.value)
 
     def _check_mujoco(self) -> None:
         """Check if MuJoCo is available."""

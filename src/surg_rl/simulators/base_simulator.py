@@ -151,6 +151,7 @@ class BaseSimulator(ABC):
         frame_skip: int = 1,
         render_width: int = 640,
         render_height: int = 480,
+        backend: "HardwareBackend" = None,  # type: ignore
     ):
         """Initialize the simulator.
 
@@ -159,6 +160,7 @@ class BaseSimulator(ABC):
             frame_skip: Number of simulation steps per action.
             render_width: Width of rendered images.
             render_height: Height of rendered images.
+            backend: Hardware backend hint (e.g. cuda, cpu).
         """
         self.timestep = timestep
         self.frame_skip = frame_skip
@@ -168,6 +170,7 @@ class BaseSimulator(ABC):
         self._scene = None
         self._loaded = False
         self._simulation_time = 0.0
+        self._backend = backend
 
     @property
     def scene(self) -> Any:

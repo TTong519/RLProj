@@ -5,6 +5,8 @@ from typing import Any
 
 import numpy as np
 
+from surg_rl.scene_definition.schema import HardwareBackend
+from surg_rl.utils.gpu import select_backend
 from surg_rl.utils.logging import get_logger
 from surg_rl.utils.mesh_generation import (
     generate_box_tet_mesh,
@@ -35,6 +37,7 @@ class PyBulletSimulator(BaseSimulator):
         render_height: int = 480,
         assets_dir: str | Path | None = None,
         render_mode: str = "DIRECT",
+        backend: HardwareBackend | None = None,
     ):
         """Initialize PyBullet simulator.
 
@@ -45,12 +48,14 @@ class PyBulletSimulator(BaseSimulator):
             render_height: Height of rendered images.
             assets_dir: Directory containing asset files.
             render_mode: PyBullet connection mode ('DIRECT', 'GUI').
+            backend: Hardware backend hint.
         """
         super().__init__(
             timestep=timestep,
             frame_skip=frame_skip,
             render_width=render_width,
             render_height=render_height,
+            backend=backend,
         )
         self.assets_dir = Path(assets_dir) if assets_dir else None
         self.scene_builder = SceneBuilder(assets_dir=assets_dir)
@@ -69,6 +74,19 @@ class PyBulletSimulator(BaseSimulator):
         self._endeffector_target_pos: np.ndarray | None = None
         self._endeffector_target_quat: np.ndarray | None = None
         self._mesh_cache: dict[str, Path] = {}
+
+        # Resolve backend (defaults to auto)
+        if backend is None:
+            backend = HardwareBackend.auto
+        self._active_backend = select_backend(backend)
+        logger.info("PyBullet simulator: selected backend=%s", self._active_backend.value)
+
+        # GPU warning in DIRECT mode
+        if render_mode == "DIRECT" and self._active_backend in (HardwareBackend.cuda, HardwareBackend.rocm):
+            logger.warning(
+                "PyBullet DIRECT mode does not support explicit GPU acceleration. "
+                "GPU rendering requires GUI mode with display connected to GPU."
+            )
 
     def _check_pybullet(self) -> None:
         """Check if PyBullet is available."""
