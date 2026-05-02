@@ -515,7 +515,7 @@ f 5 4 8
                 # TODO: full URDF-in-MuJoCo support requires conversion or direct loading.
                 return
             else:
-                logger.warning(f"Robot URDF not found: {robot.urdf_path}. Using primitive.")
+                self._log_missing_asset(robot.urdf_path, robot.name)
 
         # Create body for robot
         worldbody = mujoco.find("worldbody")
@@ -652,31 +652,43 @@ f 5 4 8
                     plugin="mujoco.elasticity.cable",
                 )
         else:
-            # Rigid body tissue
-            geom_type = tissue.geometry.primitive or "box"
-            if geom_type == "box":
-                dims = tissue.geometry.dimensions or (0.1, 0.1, 0.01)
-                size = f"{dims[0]/2} {dims[1]/2} {dims[2]/2}"
-                ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="box", size=size)
-            elif geom_type == "sphere":
-                r = tissue.geometry.radius or 0.05
-                ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="sphere", size=str(r))
-            elif geom_type == "cylinder":
-                dims = tissue.geometry.dimensions or (0.05, 0.1)
-                r = dims[0] / 2 if len(dims) > 0 else 0.025
-                h = dims[1] / 2 if len(dims) > 1 else 0.05
-                ET.SubElement(
-                    body, "geom", name=f"{tissue.name}_geom", type="cylinder", size=f"{r} {h}"
-                )
-            else:
-                # Default to box
-                dims = tissue.geometry.dimensions or (0.1, 0.1, 0.01)
-                size = f"{dims[0]/2} {dims[1]/2} {dims[2]/2}"
-                ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="box", size=size)
+            # Rigid body tissue — prefer real mesh if available, fall back to primitive
+            mesh_asset = getattr(tissue.geometry, "mesh", None)
+            if mesh_asset and getattr(mesh_asset, "path", None):
+                resolved = self.resolve_asset_path(mesh_asset.path)
+                if resolved and resolved.exists():
+                    mesh_name = f"{tissue.name}_mesh"
+                    ET.SubElement(asset, "mesh", name=mesh_name, file=str(resolved))
+                    ET.SubElement(
+                        body, "geom", name=f"{tissue.name}_geom", type="mesh", mesh=mesh_name
+                    )
+                else:
+                    self._log_missing_asset(mesh_asset.path, tissue.name)
+                    # Fall through to primitive fallback below
+                    mesh_asset = None
+            if not mesh_asset or not getattr(mesh_asset, "path", None):
+                geom_type = tissue.geometry.primitive or "box"
+                if geom_type == "box":
+                    dims = tissue.geometry.dimensions or (0.1, 0.1, 0.01)
+                    size = f"{dims[0]/2} {dims[1]/2} {dims[2]/2}"
+                    ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="box", size=size)
+                elif geom_type == "sphere":
+                    r = tissue.geometry.radius or 0.05
+                    ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="sphere", size=str(r))
+                elif geom_type == "cylinder":
+                    dims = tissue.geometry.dimensions or (0.05, 0.1)
+                    r = dims[0] / 2 if len(dims) > 0 else 0.025
+                    h = dims[1] / 2 if len(dims) > 1 else 0.05
+                    ET.SubElement(
+                        body, "geom", name=f"{tissue.name}_geom", type="cylinder", size=f"{r} {h}"
+                    )
+                else:
+                    dims = tissue.geometry.dimensions or (0.1, 0.1, 0.01)
+                    size = f"{dims[0]/2} {dims[1]/2} {dims[2]/2}"
+                    ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="box", size=size)
 
             # Add physics properties
             if tissue.physics and tissue.physics.stiffness:
-                # Soft body properties (simplified)
                 pass  # MuJoCo soft bodies require more complex setup
 
     def _add_instrument_to_mjcf(
@@ -698,10 +710,24 @@ f 5 4 8
             pos = "0 0 0"
         body.set("pos", pos)
 
-        # Add geometry based on type
-        ET.SubElement(
-            body, "geom", name=f"{instrument.name}_geom", type="box", size="0.01 0.01 0.05"
-        )
+        # Prefer real mesh if available
+        mesh_asset = getattr(instrument, "mesh", None)
+        if mesh_asset and getattr(mesh_asset, "path", None):
+            resolved = self.resolve_asset_path(mesh_asset.path)
+            if resolved and resolved.exists():
+                mesh_name = f"{instrument.name}_mesh"
+                ET.SubElement(asset, "mesh", name=mesh_name, file=str(resolved))
+                ET.SubElement(
+                    body, "geom", name=f"{instrument.name}_geom", type="mesh", mesh=mesh_name
+                )
+            else:
+                self._log_missing_asset(mesh_asset.path, instrument.name)
+                mesh_asset = None
+        if not mesh_asset or not getattr(mesh_asset, "path", None):
+            # Fallback to primitive box
+            ET.SubElement(
+                body, "geom", name=f"{instrument.name}_geom", type="box", size="0.01 0.01 0.05"
+            )
 
         # Note: Instrument is static for now (no control implemented yet)
         # To make it dynamic, add: <freejoint name="instrument_root"/>

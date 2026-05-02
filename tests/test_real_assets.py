@@ -60,3 +60,74 @@ class TestAssetFallback:
         assert hasattr(builder, "load_urdf_asset"), "SceneBuilder missing load_urdf_asset"
         resolved = builder.load_urdf_asset("missing.urdf", "robot")
         assert resolved is None
+
+
+class TestMuJoCoMeshAssets:
+    def test_mujoco_mesh_in_mjcf(self, tmp_path):
+        """MJCF generation should include <mesh> asset for real mesh files."""
+        mesh_file = tmp_path / "tissue_mesh.obj"
+        mesh_file.write_text("v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n")
+        builder = SceneBuilder(assets_dir=str(tmp_path))
+
+        from surg_rl.scene_definition.schema import (
+            Metadata,
+            SceneDefinition,
+            TissueConfig,
+            TissueMeshDefinition,
+            MeshAsset,
+        )
+
+        scene = SceneDefinition(
+            metadata=Metadata(name="mesh_scene"),
+            tissues=[
+                TissueConfig(
+                    name="liver",
+                    geometry=TissueMeshDefinition(
+                        mesh=MeshAsset(path="tissue_mesh.obj"),
+                        primitive="box",
+                        dimensions=(0.1, 0.1, 0.01),
+                    ),
+                )
+            ],
+        )
+        mjcf = builder.create_mjcf(scene, output_path=tmp_path / "scene.xml")
+        content = mjcf.read_text()
+        assert '<mesh name="liver_mesh"' in content
+        assert 'file="' in content
+        assert 'type="mesh"' in content
+
+    def test_mujoco_missing_mesh_fallback(self, tmp_path):
+        """Missing mesh should fall back to primitive and log one warning."""
+        builder = SceneBuilder(assets_dir=str(tmp_path))
+
+        from surg_rl.scene_definition.schema import (
+            Metadata,
+            SceneDefinition,
+            TissueConfig,
+            TissueMeshDefinition,
+            MeshAsset,
+        )
+
+        scene = SceneDefinition(
+            metadata=Metadata(name="missing_mesh_scene"),
+            tissues=[
+                TissueConfig(
+                    name="liver",
+                    geometry=TissueMeshDefinition(
+                        mesh=MeshAsset(path="nonexistent.obj"),
+                        primitive="box",
+                        dimensions=(0.1, 0.1, 0.01),
+                    ),
+                )
+            ],
+        )
+        with patch("surg_rl.simulators.scene_builder.logger") as mock_logger:
+            mjcf = builder.create_mjcf(scene, output_path=tmp_path / "scene.xml")
+        content = mjcf.read_text()
+        # Should NOT contain mesh asset
+        assert '<mesh name="liver_mesh"' not in content
+        # Should contain primitive geometry
+        assert 'type="box"' in content
+        # Warning should have been logged exactly once
+        warning_calls = [c for c in mock_logger.warning.call_args_list]
+        assert len(warning_calls) == 1, f"Expected 1 warning, got {len(warning_calls)}"
