@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-04-29)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** Phase 4 complete — proceeding to Phase 5
+**Current focus:** Phase 5 planning complete — ready to execute
 
 ## Current Position
 
 Phase: 5 of 5 (Experiment Tracking + Infrastructure)
-Plan: 0 of 2 planned
-Status: Ready to execute — planning complete
-Last activity: 2026-05-01 — Phase 5 plans created (05-01 + 05-02)
+Plan: 0 of 2 planned (plans revised and validated)
+Status: Ready to execute
+Last activity: 2026-05-02 — Phase 5 plans revised after code review, 5 issues fixed
 
 Progress: [████████████████████░░] 80%
 
@@ -30,44 +30,57 @@ Progress: [████████████████████░░] 8
 | 1. Critical Bug Fixes | 3/3 | 3 | ~10 min |
 | 2. Action Space + Gripper | 3/3 | 3 | ~20 min |
 | 3. Simulator Robustness | 2/2 | 2 | ~18 min |
+| 4. Task Geometry + Assets | 2/2 | 2 | ~15 min |
 
-## Phase 3 Summary
+## Phase 4 Summary
 
 ### What was built
 
-1. **Soft-body mesh caching (PERF-01)**:
-   - `PyBulletSimulator._mesh_cache: dict[str, Path]` keyed by tissue params
-   - Cache hit skips `.vtk` regeneration; reset <100ms on suturing scene
-   - Cache cleared on `load_scene()` and `close()` to prevent staleness
+1. **Task geometry observation wiring (TASK-01, TASK-02)**:
+   - `TaskObjective.target_body: str | None` — additive schema extension
+   - `_resolve_task_observations()` in PyBullet + MuJoCo simulators
+   - Objective.name → observation field mapping via `_obs_field_for_name()`
+   - Unified `incision_progress` computed as completion ratio from success_criteria text
+   - None guards on fallbacks prevent overwriting explicitly-set values
 
-2. **Vectorized mesh generation (PERF-02)**:
-   - `generate_box_tet_mesh` vectorized with `np.indices + np.stack + reshape`, ~10x faster at high resolution
-   - `generate_cylinder_tet_mesh` vertex loop vectorized with `np.stack([cos, sin, z])`
-   - Sphere subdivision kept iterative (correctness over speed after Rule 1 bug fix)
-   - Optional `pyvista` delegation for meshes >5000 tets; falls back gracefully
-   - SceneBuilder extended with `_vtk_meshes` dict and `_get_cached_vtk_path()`
-
-3. **Cross-backend state save/restore (PERF-03)**:
-   - PyBullet `get_state()` captures soft-body node positions via `getMeshData()` into `State.custom["soft_body_nodes"]`
-   - PyBullet `set_state()` restores joint positions/velocities via `resetJointState` and soft-body nodes via `resetMeshData()`
-   - MuJoCo round-trip fidelity verified: qpos/qvel identical within 1e-6
-   - PyBullet round-trip: qpos/qvel within 1e-6, body_positions within 1e-3 (recomputed by forward kinematics)
-
-4. **Persistent eval env caching (PERF-04)**:
-   - `TrainingManager.evaluate()` caches eval env on `self._eval_env`
-   - `_build_eval_env_key()` hashes all config fields that affect env construction
-   - Config mismatch triggers disposal of stale env and creation of new one
-   - `close()` properly disposes cached eval env
+2. **Real asset loading (TASK-03, TASK-04)**:
+   - `SceneBuilder._missing_assets: set[str]` for deduplicated single-shot warnings
+   - `SceneBuilder.load_urdf_asset()` → returns `Path | None`
+   - PyBullet: real URDF loading via `p.loadURDF`, OBJ visual mesh via `createVisualShape(GEOM_MESH)`
+   - MuJoCo: MJCF `<mesh>` asset + `type="mesh"` geom for tissue/instrument geometry
+   - Always falls back to procedural primitives when assets are missing
 
 ### Commits
 
-- `17308c4` — 03-01 T1: soft-body mesh caching
-- `0c02352` — 03-01 T2: vectorize mesh generation + SceneBuilder caching
-- `22ccc5b` — 03-01 SUMMARY
-- `f6f2624` — 03-02 T1: PyBullet soft-body/joint state save/restore
-- `4efffb1` — 03-02 T2: TrainingManager eval env caching
-- `c9ad176` — 03-02 SUMMARY
-- `58fa2b6` — 03-UAT: 6/6 passed, 0 issues
-- `8091ef2` — Phase 3 verified, ready for Phase 4
+- `5506276` — 04-01 T1: add target_body field to TaskObjective schema
+- `b9d3387` — 04-01 T2: implement target_body observation resolution in both backends
+- `2b7f1a6` — 04-01 SUMMARY
+- `c96fa1f` — 04-02 T1: add failing tests for asset fallback
+- `a11813a` — 04-02 T2: add _missing_assets tracking and load_urdf_asset helper
+- `9b8ec81` — 04-02 T3: wire real URDF and mesh loading into PyBullet simulator
+- `64b7b9b` — 04-02 T4: wire real mesh loading into MuJoCo MJCF generation
+- `084d8ec` — 04-02 T5: add integration tests for real URDF and mesh loading
+- `42f9dc7` — 04-02 SUMMARY
+- `cb7e228` — 04-REVIEW: code review — clean, 0 findings, 600 tests pass
 
-*Updated: 2026-04-30*
+### Verification
+- 600 tests passed (up from 579 baseline)
+- 0 failures, 0 regressions
+- 2 xfailed (expected), 4 xpassed (known macOS soft-body issue)
+- 21 new tests added: 12 task_geometry + 9 real_assets
+
+## Phase 5 Planning Status
+
+**Revisions applied after code review:**
+
+| Issue | Plan | Fix |
+|-------|------|-----|
+| CLI typer.Option invalid syntax | 05-01 | Changed `str \| typer.Option(...)` to `str \| None = typer.Option(...)` |
+| wandb_api_key added but unused | 05-01 | Wired into `WandbCallback.__init__` and `wandb.init(key=...)` |
+| Missing curriculum/randomization logging | 05-01 | Added controller state logging to both callbacks (reusing TensorBoardCallback pattern) |
+| Test: sys.modules manipulation unreliable | 05-01 | Added `test_log_metrics_with_controller` using MagicMock; kept import-skip test for coverage but documented limitation |
+| Dockerfile: COPY file to itself | 05-02 | Fixed `COPY pyproject.toml pytest.ini pytest.ini` to `COPY pyproject.toml pytest.ini ./` |
+
+**Ready for execution.**
+
+*Updated: 2026-05-02*
