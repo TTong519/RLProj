@@ -828,40 +828,7 @@ class MuJoCoSimulator(BaseSimulator):
                     break
 
         # Populate task-specific observations from scene task definition
-        if self._scene is not None and getattr(self._scene, "task", None) is not None:
-            task = self._scene.task
-            # Attempt to find needle position from an instrument or robot EE
-            if self._scene.instruments:
-                # Use first instrument's body pose as needle position proxy
-                instrument_name = self._scene.instruments[0].name
-                pose = self.get_body_pose(instrument_name)
-                if pose is not None:
-                    obs.needle_pos = pose[0]
-            # Parse objectives for entry_point / exit_point if present
-            if hasattr(task, "objectives") and task.objectives:
-                objective_names = {obj.name for obj in task.objectives}
-                entry_point = None
-                exit_point = None
-                # Look for known suturing landmarks in scene entities
-                # Heuristic: search tissues for names containing entry/exit
-                for tissue in getattr(self._scene, "tissues", []):
-                    tissue_name = tissue.name.lower()
-                    t_pose = self.get_body_pose(tissue.name)
-                    if t_pose is not None:
-                        if "entry" in tissue_name:
-                            entry_point = t_pose[0]
-                        elif "exit" in tissue_name:
-                            exit_point = t_pose[0]
-                if "entry_point" in objective_names and entry_point is not None:
-                    obs.entry_point = entry_point
-                if "exit_point" in objective_names and exit_point is not None:
-                    obs.exit_point = exit_point
-                # Minimal progress stub: fraction of objectives mentioning completeness
-                total = len(task.objectives)
-                completed = sum(
-                    1 for obj in task.objectives if "complete" in obj.success_criteria.lower()
-                )
-                obs.incision_progress = completed / total if total > 0 else 0.0
+        self._resolve_task_observations(obs)
 
         # New observation fields (H7 wiring)
         obs.thread_tension = np.array([0.0])
@@ -889,6 +856,63 @@ class MuJoCoSimulator(BaseSimulator):
                 pass
 
         return obs
+
+    def _resolve_task_observations(self, obs: Observation) -> None:
+        """Populate task observation fields from scene task objectives."""
+        if not (self._scene and getattr(self._scene, "task", None)):
+            return
+        task = self._scene.task
+        if not (hasattr(task, "objectives") and task.objectives):
+            return
+
+        def _obs_field_for_name(name: str) -> str | None:
+            name_lower = name.lower()
+            if "needle" in name_lower:
+                return "needle_pos"
+            if "entry" in name_lower:
+                return "entry_point"
+            if "exit" in name_lower:
+                return "exit_point"
+            return None
+
+        # Explicit target_body resolution (preferred)
+        for objective in task.objectives:
+            target_body = getattr(objective, "target_body", None)
+            if not target_body:
+                continue
+            field = _obs_field_for_name(objective.name)
+            if field is None:
+                continue
+            pose = self.get_body_pose(target_body)
+            if pose is None:
+                continue
+            setattr(obs, field, pose[0])
+
+        # Fallback: if no target_body and no needle_pos yet, use instrument heuristic
+        if obs.needle_pos is None and self._scene.instruments:
+            instrument_name = self._scene.instruments[0].name
+            pose = self.get_body_pose(instrument_name)
+            if pose is not None:
+                obs.needle_pos = pose[0]
+
+        # Fallback: heuristic tissue name matching for entry/exit
+        if obs.entry_point is None or obs.exit_point is None:
+            for tissue in getattr(self._scene, "tissues", []):
+                tissue_name = tissue.name.lower()
+                t_pose = self.get_body_pose(tissue.name)
+                if t_pose is not None:
+                    if "entry" in tissue_name and obs.entry_point is None:
+                        obs.entry_point = t_pose[0]
+                    elif "exit" in tissue_name and obs.exit_point is None:
+                        obs.exit_point = t_pose[0]
+
+        # Incision progress: completion ratio
+        total = len(task.objectives)
+        completed = sum(
+            1 for obj in task.objectives
+            if "complete" in obj.success_criteria.lower()
+        )
+        obs.incision_progress = completed / total if total > 0 else 0.0
 
     def _compute_reward(self) -> float:
         """Compute reward (placeholder for task-specific rewards).

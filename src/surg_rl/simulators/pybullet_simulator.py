@@ -1449,24 +1449,7 @@ class PyBulletSimulator(BaseSimulator):
                 obs.robot_state = np.concatenate(all_positions)
 
         # Populate task-related observation fields if a task is defined
-        if self._scene and self._scene.task and self._scene.task.objectives and self._body_ids:
-            # TODO: Extract geometry from objectives once schema is finalized.
-            for name, body_id in self._body_ids.items():
-                if name in ("needle",):
-                    pos, _ = self._pb.getBasePositionAndOrientation(
-                        body_id, physicsClientId=self._physics_client
-                    )
-                    obs.needle_pos = np.array(pos)
-                if name in ("entry_point",):
-                    pos, _ = self._pb.getBasePositionAndOrientation(
-                        body_id, physicsClientId=self._physics_client
-                    )
-                    obs.entry_point = np.array(pos)
-                if name in ("exit_point",):
-                    pos, _ = self._pb.getBasePositionAndOrientation(
-                        body_id, physicsClientId=self._physics_client
-                    )
-                    obs.exit_point = np.array(pos)
+        self._resolve_task_observations(obs)
 
         # Collision detection: check contact points between any two bodies
         for i, body_a in enumerate(self._body_ids.values()):
@@ -1508,6 +1491,64 @@ class PyBulletSimulator(BaseSimulator):
                 pass
 
         return obs
+
+    def _resolve_task_observations(self, obs: Observation) -> None:
+        """Populate task observation fields from scene task objectives."""
+        if not (self._scene and self._scene.task and self._scene.task.objectives):
+            return
+
+        def _obs_field_for_name(name: str) -> str | None:
+            name_lower = name.lower()
+            if "needle" in name_lower:
+                return "needle_pos"
+            if "entry" in name_lower:
+                return "entry_point"
+            if "exit" in name_lower:
+                return "exit_point"
+            return None
+
+        # Explicit target_body resolution (preferred)
+        for objective in self._scene.task.objectives:
+            target_body = getattr(objective, "target_body", None)
+            if not target_body:
+                continue
+            field = _obs_field_for_name(objective.name)
+            if field is None:
+                continue
+            if target_body not in self._body_ids:
+                continue
+            pos, _ = self._pb.getBasePositionAndOrientation(
+                self._body_ids[target_body],
+                physicsClientId=self._physics_client,
+            )
+            setattr(obs, field, np.array(pos))
+
+        # Fallback: heuristic body name matching when no target_body or field still empty
+        if self._body_ids:
+            for name, body_id in self._body_ids.items():
+                if name in ("needle",) and obs.needle_pos is None:
+                    pos, _ = self._pb.getBasePositionAndOrientation(
+                        body_id, physicsClientId=self._physics_client
+                    )
+                    obs.needle_pos = np.array(pos)
+                if name in ("entry_point",) and obs.entry_point is None:
+                    pos, _ = self._pb.getBasePositionAndOrientation(
+                        body_id, physicsClientId=self._physics_client
+                    )
+                    obs.entry_point = np.array(pos)
+                if name in ("exit_point",) and obs.exit_point is None:
+                    pos, _ = self._pb.getBasePositionAndOrientation(
+                        body_id, physicsClientId=self._physics_client
+                    )
+                    obs.exit_point = np.array(pos)
+
+        # Compute incision progress from objectives completion ratio
+        total = len(self._scene.task.objectives)
+        completed = sum(
+            1 for obj in self._scene.task.objectives
+            if "complete" in obj.success_criteria.lower()
+        )
+        obs.incision_progress = completed / total if total > 0 else 0.0
 
     def _compute_reward(self) -> float:
         """Compute reward."""
