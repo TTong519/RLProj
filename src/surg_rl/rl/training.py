@@ -405,6 +405,33 @@ class TrainingManager:
             )
             callbacks.append(tb_callback)
 
+        # W&B callback
+        if self.config.use_wandb:
+            from .callbacks import WandbCallback
+            from surg_rl.utils.config import get_settings
+
+            wandb_callback = WandbCallback(
+                project_name=self.config.wandb_project,
+                experiment_name=self.config.experiment_name,
+                wandb_api_key=get_settings().wandb_api_key,
+                controller=getattr(self._env, "controller", None),
+                verbose=self.config.verbose,
+            )
+            callbacks.append(wandb_callback)
+
+        # MLflow callback
+        if self.config.use_mlflow:
+            from .callbacks import MLflowCallback
+            from surg_rl.utils.config import get_settings
+
+            mlflow_callback = MLflowCallback(
+                experiment_name=self.config.experiment_name,
+                tracking_uri=get_settings().mlflow_tracking_uri,
+                controller=getattr(self._env, "controller", None),
+                verbose=self.config.verbose,
+            )
+            callbacks.append(mlflow_callback)
+
         # Combine callbacks
         from stable_baselines3.common.callbacks import CallbackList
 
