@@ -16,9 +16,9 @@
 **Requirements mapped:** GPU-01 through GPU-16
 
 **Plans:**
-- [ ] 06-01-PLAN.md — HardwareBackend enum, gpu.py detection module, TrainingConfig/Settings/CLI wiring
-- [ ] 06-02-PLAN.md — Wire backend into simulators (MuJoCo + PyBullet) and version --verbose GPU table
-- [ ] 06-03-PLAN.md — Dockerfiles (CUDA + ROCm) and comprehensive unit/integration tests
+- [x] 06-01-PLAN.md — HardwareBackend enum, gpu.py detection module, TrainingConfig/Settings/CLI wiring
+- [x] 06-02-PLAN.md — Wire backend into simulators (MuJoCo + PyBullet) and version --verbose GPU table
+- [x] 06-03-PLAN.md — Dockerfiles (CUDA + ROCm) and comprehensive unit/integration tests
 
 **Success criteria:**
 
@@ -48,25 +48,16 @@
 15. `TrainingConfig` accepts `backend: HardwareBackend = HardwareBackend.auto` with per-platform propagation
 16. Tests cover graceful degradation on all platforms (no hard dependency on any GPU)
 
-### Phase 7: Real-time Rendering (6 plans)
+### Phase 7: Real-time Rendering (3 plans)
 
 **Goal:** Add live, non-blocking 3D rendering during RL training without interfering with the training loop.
 
 **Requirements mapped:** RENDER-01 through RENDER-05
 
-**Success criteria:**
-1. `env.reset(render_mode="human")` opens a window that survives subsequent `reset()` calls
-2. `env.step()` returns in <5ms regardless of render state (measured on MuJoCo soft-body scene)
-3. Render FPS is throttled; CPU/GPU utilization does not spike unbounded
-4. `surg-rl train --render-human` opens a viewer that shows the current scene live
-5. `env.close()` and `SIGINT` (Ctrl+C) terminate the viewer without segfaults or zombie windows
-6. `render_mode="rgb_array"` still returns correct NumPy arrays when not in human mode
-
-### Phase 8: Distributed Training with Ray/RLlib (6 plans)
-
-**Goal:** Enable multi-GPU and multi-node training via Ray Tune + RLlib while keeping SB3 as the default path.
-
-**Requirements mapped:** DIST-01 through DIST-06
+**Plans:**
+- [x] 07-01-PLAN.md — BaseSimulator viewer contract, RenderThread, MuJoCo/PyBullet viewer backends, _create_simulator wiring
+- [x] 07-02-PLAN.md — SurgicalEnv eager viewer start, SIGINT/atexit, headless fallback, TrainingConfig wiring
+- [x] 07-03-PLAN.md — CLI --render-human/--render-fps flags, comprehensive test suite
 
 **Success criteria:**
 1. `SurgicalEnv` is registerable as a custom RLlib environment with proper `env_config` support
