@@ -852,6 +852,10 @@ class TaskObjective(BaseModel):
     description: str = Field(description="Objective description")
     success_criteria: str = Field(description="Success criteria description")
     failure_criteria: str | None = Field(default=None, description="Failure criteria")
+    target_body: str | None = Field(
+        default=None,
+        description="Name of the body in the simulation that provides the geometry for this objective (e.g. needle_body, entry_marker). If None, simulators use heuristic fallback.",
+    )
     weight: float = Field(default=1.0, ge=0.0, description="Objective weight")
 
 
