@@ -16,6 +16,13 @@ from surg_rl.scene_definition.schema import HardwareBackend
 from surg_rl.utils.gpu import detect_backends, get_cuda_version, get_rocm_version, select_backend
 
 
+@pytest.fixture(autouse=True)
+def _clear_gpu_cache():
+    """Clear LRU cache so each test sees fresh _has_* results."""
+    detect_backends.cache_clear()
+    yield
+
+
 # ---------------------------------------------------------------------------
 # Detection on real hardware (must not crash)
 # ---------------------------------------------------------------------------
