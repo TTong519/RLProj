@@ -723,6 +723,12 @@ class TestBaseSimulatorDel:
             def get_joint_states(self):
                 return {}
 
+            def start_viewer(self, target_fps=30.0):
+                return False
+
+            def stop_viewer(self):
+                pass
+
         sim = BrokenSimulator()
         # __del__ should not raise
         sim.__del__()

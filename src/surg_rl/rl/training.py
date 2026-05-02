@@ -113,6 +113,8 @@ class TrainingConfig:
     verbose: int = 1
     max_episode_steps: int = 1000
     simulator: str = "mujoco"
+    render_mode: str | None = None
+    render_fps: float = 30.0
     use_curriculum: bool = False
     use_adaptive_difficulty: bool = False
     enable_tensorboard: bool = False

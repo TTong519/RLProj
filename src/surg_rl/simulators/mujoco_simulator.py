@@ -2,6 +2,8 @@
 
 import contextlib
 import os
+import platform
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +15,7 @@ from surg_rl.utils.logging import get_logger
 
 from .base_simulator import BaseSimulator, Observation, State, StepResult
 from .scene_builder import SceneBuilder
+from ..render_thread import RenderThread
 
 logger = get_logger(__name__)
 
@@ -33,6 +36,7 @@ class MuJoCoSimulator(BaseSimulator):
         render_height: int = 480,
         assets_dir: str | Path | None = None,
         backend: HardwareBackend | None = None,
+        render_mode: str = "rgb_array",
     ):
         """Initialize MuJoCo simulator.
 
@@ -43,6 +47,7 @@ class MuJoCoSimulator(BaseSimulator):
             render_height: Height of rendered images.
             assets_dir: Directory containing asset files.
             backend: Hardware backend hint.
+            render_mode: Rendering mode ("rgb_array", "human", etc.).
         """
         super().__init__(
             timestep=timestep,
@@ -50,6 +55,7 @@ class MuJoCoSimulator(BaseSimulator):
             render_width=render_width,
             render_height=render_height,
             backend=backend,
+            render_mode=render_mode,
         )
         self.assets_dir = Path(assets_dir) if assets_dir else None
         self.scene_builder = SceneBuilder(assets_dir=assets_dir)
@@ -58,6 +64,7 @@ class MuJoCoSimulator(BaseSimulator):
         self._data = None
         self._viewer = None
         self._renderer = None
+        self._render_thread = None
         self._mjcf_path: Path | None = None
         self._renderer_available: bool | None = None
         self._control_map: list[dict[str, Any]] = []
@@ -483,8 +490,7 @@ class MuJoCoSimulator(BaseSimulator):
 
     def close(self) -> None:
         """Clean up simulator resources."""
-        if self._viewer is not None:
-            self._viewer = None
+        self.stop_viewer()
 
         if self._renderer is not None:
             with contextlib.suppress(Exception):
@@ -1078,22 +1084,25 @@ class MuJoCoSimulator(BaseSimulator):
         except (ValueError, KeyError):
             return False
 
-    def start_viewer(self):
-        """Start an interactive viewer for the simulation.
+    # ------------------------------------------------------------------ #
+    #  Viewer methods (non-blocking passive viewer + background thread)
+    # ------------------------------------------------------------------ #
 
-        This method launches a passive viewer that can be used for
-        real-time visualization. Must be called before the simulation loop.
+    def start_viewer(self, target_fps: float = 30.0) -> bool:
+        """Start MuJoCo passive viewer in a background render thread.
 
-        Example:
-            sim.load_scene(scene)
-            sim.start_viewer()
-            for i in range(1000):
-                sim.step(action)
-                sim.render(mode='human')
-            sim.close()
+        On macOS, raises RuntimeError if ``mjpython`` is not detected in
+        ``sys.executable`` (Cocoa GL requires fork-safe interpreter).
+
+        Args:
+            target_fps: Desired refresh rate for the viewer.
 
         Returns:
-            bool: True if viewer started successfully, False otherwise.
+            True if the viewer started (or was already running).
+            False if the display is unavailable (headless).
+
+        Raises:
+            RuntimeError: On macOS without ``mjpython``.
         """
         if not self._loaded:
             raise RuntimeError("Scene not loaded. Call load_scene() first.")
@@ -1102,11 +1111,37 @@ class MuJoCoSimulator(BaseSimulator):
             logger.warning("Cannot start viewer: no display available")
             return False
 
-        if self._viewer is None:
-            try:
-                self._viewer = self._mujoco.viewer.launch_passive(self._model, self._data)
-                return True
-            except Exception as e:
-                logger.warning(f"Failed to start viewer: {e}")
-                return False
-        return True
+        if platform.system() == "Darwin":
+            if "mjpython" not in sys.executable:
+                raise RuntimeError(
+                    "MuJoCo passive viewer requires 'mjpython' on macOS. "
+                    "Run: mjpython -m surg_rl.cli train ..."
+                )
+
+        if self._viewer is not None:
+            return True
+
+        try:
+            self._viewer = self._mujoco.viewer.launch_passive(self._model, self._data)
+            self._render_thread = RenderThread(self._viewer, target_fps=target_fps)
+            self._render_thread.start()
+            logger.info("MuJoCo viewer started at %.1f FPS", target_fps)
+            return True
+        except Exception as e:
+            logger.warning("Failed to start viewer: %s", e)
+            return False
+
+    def stop_viewer(self) -> None:
+        """Stop the background render thread and release the viewer."""
+        if self._render_thread is not None:
+            self._render_thread.stop()
+            self._render_thread = None
+        self._viewer = None
+
+    def close(self) -> None:
+        """Clean up simulator resources."""
+        self.stop_viewer()
+        self._renderer = None
+        self._model = None
+        self._data = None
+        self._loaded = False

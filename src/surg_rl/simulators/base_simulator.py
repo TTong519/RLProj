@@ -152,6 +152,7 @@ class BaseSimulator(ABC):
         render_width: int = 640,
         render_height: int = 480,
         backend: "HardwareBackend" = None,  # type: ignore
+        render_mode: str = "rgb_array",
     ):
         """Initialize the simulator.
 
@@ -161,10 +162,11 @@ class BaseSimulator(ABC):
             render_width: Width of rendered images.
             render_height: Height of rendered images.
             backend: Hardware backend hint (e.g. cuda, cpu).
+            render_mode: Rendering mode ("rgb_array", "human", "depth_array").
         """
         self.timestep = timestep
         self.frame_skip = frame_skip
-        self.render_mode = "rgb_array"
+        self.render_mode = render_mode
         self.render_width = render_width
         self.render_height = render_height
         self._scene = None
@@ -261,6 +263,20 @@ class BaseSimulator(ABC):
     @abstractmethod
     def close(self) -> None:
         """Clean up simulator resources."""
+        pass
+
+    @abstractmethod
+    def start_viewer(self, target_fps: float = 30.0) -> bool:
+        """Start a non-blocking 3D viewer if a display is available.
+
+        Returns True if viewer started (or already running), False if
+        headless/no display.
+        """
+        pass
+
+    @abstractmethod
+    def stop_viewer(self) -> None:
+        """Stop the viewer and cleanup resources."""
         pass
 
     @abstractmethod

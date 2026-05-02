@@ -289,6 +289,14 @@ def train(
     backend: str = typer.Option(
         "auto", "--backend", help="Hardware backend: auto, cuda, rocm, metal, intel, cpu"
     ),
+    render_human: bool = typer.Option(
+        False, "--render-human",
+        help="Open a live 3D viewer during training (requires display)"
+    ),
+    render_fps: float = typer.Option(
+        30.0, "--render-fps",
+        help="Target FPS for the live viewer (default: 30)"
+    ),
 ) -> None:
     """Train an RL agent on a surgical scene.
 

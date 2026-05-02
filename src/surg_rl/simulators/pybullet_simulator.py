@@ -56,6 +56,7 @@ class PyBulletSimulator(BaseSimulator):
             render_width=render_width,
             render_height=render_height,
             backend=backend,
+            render_mode=render_mode,
         )
         self.assets_dir = Path(assets_dir) if assets_dir else None
         self.scene_builder = SceneBuilder(assets_dir=assets_dir)
@@ -1652,3 +1653,21 @@ class PyBulletSimulator(BaseSimulator):
             if self._simulation_time >= max_time:
                 return True
         return False
+
+    # ------------------------------------------------------------------ #
+    #  Viewer methods (PyBullet – GUI is set at construction time)
+    # ------------------------------------------------------------------ #
+
+    def start_viewer(self, target_fps: float = 30.0) -> bool:
+        """Return True if already in GUI mode; warn otherwise."""
+        if self.render_mode == "GUI":
+            return True
+        logger.warning(
+            "PyBullet human render requires GUI mode (render_mode='GUI'). "
+            "DIRECT mode has no viewer."
+        )
+        return False
+
+    def stop_viewer(self) -> None:
+        """No-op for PyBullet – GUI mode manages its own lifecycle."""
+        pass

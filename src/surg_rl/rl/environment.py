@@ -72,6 +72,7 @@ class SurgicalEnvConfig:
     frame_skip: int = 1
     max_episode_steps: int = 1000
     render_mode: str | None = None
+    render_fps: float = 30.0
     reward_config: RewardConfig | None = None
     observation_config: ObservationConfig | None = None
     action_config: ActionConfig | None = None
@@ -194,6 +195,31 @@ class SurgicalEnv(gym.Env):
         self._target_pos: np.ndarray | None = None
         self._target_quat: np.ndarray | None = None
 
+        # Eager viewer start (D-01)
+        if self.render_mode == "human":
+            try:
+                viewer_started = self._simulator.start_viewer(
+                    target_fps=getattr(self.config, "render_fps", 30.0)
+                )
+            except RuntimeError as exc:
+                # macOS without mjpython – treat as headless fallback
+                logger.warning(
+                    "Human render unavailable: %s. "
+                    "Training will continue without viewer.",
+                    exc,
+                )
+                self.render_mode = None
+            else:
+                if not viewer_started:
+                    logger.warning(
+                        "Human render requested but display unavailable. "
+                        "Training will continue without viewer."
+                    )
+                    self.render_mode = None  # headless fallback per D-03
+
+        # Signal handlers (D-05)
+        self._setup_signal_handlers()
+
     def _load_scene(self) -> SceneDefinition:
         """Load the scene definition.
 
@@ -216,15 +242,20 @@ class SurgicalEnv(gym.Env):
         Returns:
             Simulator instance.
         """
+        sim_render_mode = self.render_mode or "rgb_array"
         if self.config.simulator_type == "mujoco":
             return MuJoCoSimulator(
                 timestep=self.config.timestep,
                 frame_skip=self.config.frame_skip,
+                render_mode=sim_render_mode,
             )
         elif self.config.simulator_type == "pybullet":
+            # PyBullet must know at construction whether to use GUI
+            pb_mode = "GUI" if self.render_mode == "human" else "DIRECT"
             return PyBulletSimulator(
                 timestep=self.config.timestep,
                 frame_skip=self.config.frame_skip,
+                render_mode=pb_mode,
             )
         else:
             raise ValueError(
@@ -474,17 +505,37 @@ class SurgicalEnv(gym.Env):
         """
         if self.render_mode == "rgb_array":
             return self._simulator.render(mode="rgb_array")
-        elif self.render_mode == "human":
-            self._simulator.render(mode="human")
-            return None
+        # human mode: rendering handled asynchronously by RenderThread in simulator
         return None
 
     def close(self) -> None:
         """Clean up environment resources."""
         if self._simulator is not None:
+            if hasattr(self._simulator, "stop_viewer"):
+                self._simulator.stop_viewer()
             self._simulator.close()
         if self._controller is not None:
             self._controller.stop()
+
+    def _setup_signal_handlers(self) -> None:
+        """Register SIGINT and atexit so the viewer cleans up on Ctrl+C."""
+        import atexit
+        import signal
+
+        if getattr(self, "_handlers_registered", False):
+            return
+
+        def _handle_sigint(signum, frame) -> None:
+            self.close()
+            raise KeyboardInterrupt
+
+        try:
+            signal.signal(signal.SIGINT, _handle_sigint)
+        except ValueError:
+            pass  # Not on main thread (e.g., SubprocVecEnv)
+
+        atexit.register(self.close)
+        self._handlers_registered = True
 
     def _build_info(
         self,
