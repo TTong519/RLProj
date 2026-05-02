@@ -11,8 +11,8 @@ See: .planning/PROJECT.md (updated 2026-04-29)
 
 Phase: 4 of 5 (Task Geometry + Real Assets)
 Plan: 2 of 2 planned
-Status: Ready to execute
-Last activity: 2026-05-01 — Phase 4 plans created (04-01: task geometry observation binding, 04-02: real asset loading with fallback)
+Status: Executing — Wave 1 of 1
+Last activity: 2026-05-01 — Phase 4 execution started (Wave 1: 04-01 + 04-02)
 
 Progress: [████████████████░░░░░░] 60%
 
