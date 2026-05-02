@@ -68,6 +68,7 @@ class SceneBuilder:
         self.temp_dir = Path(self._temp_dir_obj.name)
         self._primitive_meshes: dict[str, Path] = {}
         self._vtk_meshes: dict[str, Path] = {}
+        self._missing_assets: set[str] = set()
 
     def _get_cached_vtk_path(self, cache_key: str, generator_fn, *args, **kwargs) -> Path:
         """Get a cached .vtk path or generate it via *generator_fn*."""
@@ -107,6 +108,16 @@ class SceneBuilder:
             return path.resolve()
 
         return None
+
+    def _log_missing_asset(self, asset_path: str, entity_name: str) -> None:
+        """Log a single warning for a missing asset. Duplicate warnings are suppressed."""
+        if asset_path in self._missing_assets:
+            return
+        self._missing_assets.add(asset_path)
+        logger.warning(
+            f"Asset missing for '{entity_name}': {asset_path}. "
+            f"Using primitive fallback."
+        )
 
     def _get_primitive_color(
         self,
@@ -363,7 +374,7 @@ f 5 4 8
             elif not self.use_primitive_fallback:
                 raise AssetMissingError(mesh_path, "mesh")
             else:
-                logger.warning(f"Mesh file not found: {mesh_path}. Using primitive fallback.")
+                self._log_missing_asset(mesh_path, name)
 
         # Create primitive
         if not self.use_primitive_fallback:
@@ -381,6 +392,20 @@ f 5 4 8
 
         logger.info(f"Created primitive mesh: {mesh_file}")
         return mesh_file, True
+
+    def load_urdf_asset(self, urdf_path: str, entity_name: str) -> Path | None:
+        """Resolve a URDF asset path. Returns resolved Path if found, None if missing.
+
+        On missing: logs single warning (deduplicated) and returns None.
+        Caller decides fallback (primitive builder or raise).
+        """
+        resolved = self.resolve_asset_path(urdf_path)
+        if resolved:
+            return resolved
+        self._log_missing_asset(urdf_path, entity_name)
+        if not self.use_primitive_fallback:
+            raise AssetMissingError(urdf_path, "urdf")
+        return None
 
     def create_mjcf(
         self,
