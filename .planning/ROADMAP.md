@@ -82,20 +82,6 @@ Plans:
 - [x] 04-01: Bind task geometry (needle, entry, exit, incision) to observation pipeline
 - [x] 04-02: Add real mesh/URDF loading to SceneBuilder with fallback logging
 
-### Phase 5: Experiment Tracking + Infrastructure
-**Goal**: Research teams can track experiments, reproduce runs, and deploy training to cloud infrastructure.
-**Depends on**: Phase 4
-**Requirements**: [NOTF-01, NOTF-02, NOTF-03]
-**Success Criteria** (what must be TRUE):
-  1. `TrainingManager` supports optional Weights & Biases/MLflow callback
-  2. Dockerfile builds the package with all optional extras
-  3. GitHub Actions workflow runs `pytest`, `ruff`, `black --check`, and `mypy` on every PR
-**Plans**: 2 plans
-
-Plans:
-- [ ] 05-01: Add W&B/MLflow callbacks and Docker support
-- [ ] 05-02: Set up GitHub Actions CI/CD with lint, test, and type-check gates
-
 ## Progress
 
 **Execution Order:**
@@ -106,5 +92,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Critical Bug Fixes | 3/3 | Complete | 2026-04-29 |
 | 2. Action Space + Gripper | 3/3 | Complete | 2026-04-29 |
 | 3. Simulator Robustness | 2/2 | Complete | 2026-04-30 |
-| 4. Task Geometry + Assets | 0/2 | Not started | - |
+| 4. Task Geometry + Assets | 2/2 | Complete | 2026-05-02 |
 | 5. Infrastructure | 0/2 | Not started | - |

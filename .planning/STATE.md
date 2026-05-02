@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-04-29)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** Phase 3 complete — proceeding to Phase 4
+**Current focus:** Phase 4 complete — proceeding to Phase 5
 
 ## Current Position
 
 Phase: 4 of 5 (Task Geometry + Real Assets)
 Plan: 2 of 2 planned
-Status: Executing — Wave 1 of 1
-Last activity: 2026-05-01 — Phase 4 execution started (Wave 1: 04-01 + 04-02)
+Status: Complete — Wave 1 of 1
+Last activity: 2026-05-02 — Phase 4 execution completed (04-01 + 04-02)
 
-Progress: [████████████████░░░░░░] 60%
+Progress: [████████████████████░░] 80%
 
 ## Performance Metrics
 
