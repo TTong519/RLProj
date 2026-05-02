@@ -9,11 +9,16 @@
 
 ## Phases
 
-### Phase 6: Universal Hardware Acceleration (10 plans)
+### Phase 6: Universal Hardware Acceleration (3 plans)
 
 **Goal:** Detect and leverage CUDA, Intel oneAPI, AMD ROCm, and Apple Metal for rendering and compute; provide a unified backend selector.
 
 **Requirements mapped:** GPU-01 through GPU-16
+
+**Plans:**
+- [ ] 06-01-PLAN.md — HardwareBackend enum, gpu.py detection module, TrainingConfig/Settings/CLI wiring
+- [ ] 06-02-PLAN.md — Wire backend into simulators (MuJoCo + PyBullet) and version --verbose GPU table
+- [ ] 06-03-PLAN.md — Dockerfiles (CUDA + ROCm) and comprehensive unit/integration tests
 
 **Success criteria:**
 
