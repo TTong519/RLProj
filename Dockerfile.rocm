@@ -1,0 +1,43 @@
+# Dockerfile for AMD ROCm support
+# Build: docker build -f Dockerfile.rocm -t surg-rl:rocm .
+# Run:   docker run --device /dev/kfd --device /dev/dri surg-rl:rocm version --verbose
+
+FROM rocm/dev-ubuntu-22.04
+
+# Prevent interactive apt prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# System dependencies (same as CPU Dockerfile — use validated package names for Ubuntu 22.04)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
+    libglu1-mesa \
+    libglew2.2 \
+    libx11-6 \
+    libglib2.0-0 \
+    rocminfo \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install Python 3.11 (ROCm base image has Python but may be 3.10)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-venv \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/python3.11 /usr/bin/python
+
+# Copy dependency definitions first for layer caching
+COPY pyproject.toml pytest.ini ./
+
+# Install package with dev and tracking extras
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -e ".[dev,tracking]"
+
+COPY . .
+
+ENV PYTHONPATH=/app/src
+ENV PYTHONUNBUFFERED=1
+
+ENTRYPOINT ["python", "-m", "surg_rl.cli"]
+CMD ["version", "--verbose"]

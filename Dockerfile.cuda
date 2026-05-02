@@ -1,0 +1,42 @@
+# Dockerfile for NVIDIA GPU (CUDA) support
+# Build: docker build -f Dockerfile.cuda -t surg-rl:cuda .
+# Run:   docker run --gpus all surg-rl:cuda version --verbose
+
+FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04
+
+# Prevent interactive apt prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# System dependencies (same as CPU Dockerfile — use validated package names for Ubuntu 22.04)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
+    libglu1-mesa \
+    libglew2.2 \
+    libx11-6 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install Python 3.11 (not present in nvidia/cuda runtime by default)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-venv \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/python3.11 /usr/bin/python
+
+# Copy dependency definitions first for layer caching
+COPY pyproject.toml pytest.ini ./
+
+# Install package with dev and tracking extras
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -e ".[dev,tracking]"
+
+COPY . .
+
+ENV PYTHONPATH=/app/src
+ENV PYTHONUNBUFFERED=1
+
+ENTRYPOINT ["python", "-m", "surg_rl.cli"]
+CMD ["version", "--verbose"]
