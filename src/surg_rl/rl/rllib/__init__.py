@@ -29,13 +29,28 @@ def _check_rllib():
 
 from .config import RllibConfig
 from .env_wrapper import make_surgical_env, register_surgical_env
-from .train import train_rllib
-from .tune_integration import build_tune_search_space, run_tune_experiment
-from .checkpoint_utils import (
-    inspect_rllib_checkpoint,
-    inspect_sb3_checkpoint,
-    compare_checkpoints,
-)
+
+try:
+    from .train import train_rllib
+except ImportError:
+    train_rllib = None  # type: ignore[assignment,misc]
+
+try:
+    from .tune_integration import build_tune_search_space, run_tune_experiment
+except ImportError:
+    build_tune_search_space = None  # type: ignore[assignment,misc]
+    run_tune_experiment = None  # type: ignore[assignment,misc]
+
+try:
+    from .checkpoint_utils import (
+        inspect_rllib_checkpoint,
+        inspect_sb3_checkpoint,
+        compare_checkpoints,
+    )
+except ImportError:
+    inspect_rllib_checkpoint = None  # type: ignore[assignment,misc]
+    inspect_sb3_checkpoint = None  # type: ignore[assignment,misc]
+    compare_checkpoints = None  # type: ignore[assignment,misc]
 
 __all__ = [
     "RllibConfig",

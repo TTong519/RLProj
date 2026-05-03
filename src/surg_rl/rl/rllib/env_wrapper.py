@@ -19,15 +19,22 @@ def make_surgical_env(env_config: dict | None = None) -> SurgicalEnv:
 
     Args:
         env_config: Keyword arguments forwarded to :class:`SurgicalEnvConfig`.
-            Nested dataclass fields (``reward_config``, etc.) should be
-            pre-instantiated or omitted.
+            Nested dataclass fields (``reward_config``, etc.) are
+            auto-converted from ``dict``.
 
     Returns:
         A new :class:`SurgicalEnv` instance.
     """
     env_config = env_config or {}
     env_config["render_mode"] = None
-    return SurgicalEnv(SurgicalEnvConfig(**env_config))
+
+    # Convert nested reward_config dict -> RewardConfig dataclass
+    if "reward_config" in env_config and isinstance(env_config["reward_config"], dict):
+        from surg_rl.rl.rewards import RewardConfig
+        env_config["reward_config"] = RewardConfig(**env_config["reward_config"])
+
+    cfg = SurgicalEnvConfig(**env_config)
+    return SurgicalEnv(cfg)
 
 
 def register_surgical_env(name: str = "surg-rl") -> None:

@@ -1,0 +1,85 @@
+"""Tests for RLlib training entrypoint (08-02) — unit level.
+
+DIST-02, DIST-03.  Integration tests requiring real Ray are skipped when
+``ray`` is not installed.
+"""
+
+from __future__ import annotations
+
+from unittest.mock import patch
+
+import pytest
+
+
+# --------------------------------------------------------------------------- #
+# GPU auto-configuration (already partially covered in test_rllib_env_registration)
+# --------------------------------------------------------------------------- #
+
+def test_multi_gpu_two_gpus():
+    """Two GPUs → two remote learners, one GPU each."""
+    from unittest.mock import MagicMock
+    import torch
+    from surg_rl.rl.training import TrainingConfig
+    from surg_rl.rl.rllib.config import RllibConfig
+
+    with patch.object(torch.cuda, "device_count", return_value=2):
+        rc = RllibConfig.from_training_config(TrainingConfig(), env_config={})
+    assert rc.num_learners == 2
+    assert rc.num_gpus_per_learner == 1.0
+
+
+def test_single_gpu_local_learner():
+    """One GPU → local learner for better throughput."""
+    import torch
+    from surg_rl.rl.training import TrainingConfig
+    from surg_rl.rl.rllib.config import RllibConfig
+
+    with patch.object(torch.cuda, "device_count", return_value=1):
+        rc = RllibConfig.from_training_config(TrainingConfig(), env_config={})
+    assert rc.num_learners == 0
+    assert rc.num_gpus_per_learner == 1.0
+
+
+def test_cpu_only_zero_gpus():
+    """No GPU → CPU learners."""
+    import torch
+    from surg_rl.rl.training import TrainingConfig
+    from surg_rl.rl.rllib.config import RllibConfig
+
+    with patch.object(torch.cuda, "device_count", return_value=0):
+        rc = RllibConfig.from_training_config(TrainingConfig(), env_config={})
+    assert rc.num_learners == 0
+    assert rc.num_gpus_per_learner == 0.0
+
+
+# --------------------------------------------------------------------------- #
+# Ray is installed checks — skip if ray not available
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.skipif(
+    __import__("importlib").util.find_spec("ray") is None,
+    reason="ray[rllib] not installed",
+)
+def test_train_rllib_rllib_config_builds():
+    """``build_rllib_config`` returns an RLlib object when Ray is available."""
+    from surg_rl.rl.rllib.config import RllibConfig
+
+    rc = RllibConfig(algorithm="PPO")
+    cfg = rc.build_rllib_config()
+    assert cfg is not None
+    # Is a PPOConfig instance
+    assert "PPO" in type(cfg).__name__
+
+
+@pytest.mark.skipif(
+    __import__("importlib").util.find_spec("ray") is None,
+    reason="ray[rllib] not installed",
+)
+def test_train_rllib_rllib_sac_builds():
+    """``build_rllib_config`` works for SAC too."""
+    from surg_rl.rl.rllib.config import RllibConfig
+
+    rc = RllibConfig(algorithm="SAC")
+    cfg = rc.build_rllib_config()
+    assert cfg is not None
+    assert "SAC" in type(cfg).__name__
