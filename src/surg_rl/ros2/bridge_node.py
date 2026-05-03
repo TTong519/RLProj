@@ -66,7 +66,7 @@ if not _HAS_ROS2:
             self._qos_profile = qos_profile
             self._on_nan_inf = on_nan_inf
             self._on_dimension_mismatch = on_dimension_mismatch
-            self._command_queue = command_queue or queue.Queue(maxsize=1)
+            self._command_queue = command_queue or multiprocessing.Queue(maxsize=1)
             logger.debug(
                 "Dummy Ros2BridgeNode created (ROS2 not available). "
                 "Publisher: %s, Subscriber: %s",
@@ -175,7 +175,7 @@ else:
             self._qos_profile = qos_profile
             self._on_nan_inf = on_nan_inf
             self._on_dimension_mismatch = on_dimension_mismatch
-            self._command_queue = command_queue or queue.Queue(maxsize=1)
+            self._command_queue = command_queue or multiprocessing.Queue(maxsize=1)
 
             from rclpy.qos import qos_profile_sensor_data
 
