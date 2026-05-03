@@ -1,344 +1,251 @@
+<!-- generated-by: gsd-doc-writer -->
 # Architecture Overview
 
-This document describes the architecture of Surg-RL.
+Surg-RL is a layered surgical robotics RL training system. It follows a **strict data-flow pipeline** from scene definition through physics simulation to RL training, using the **Strategy pattern** for swappable simulator backends. Every layer consumes the same `SceneDefinition` Pydantic v2 schema, ensuring a single source of truth.
 
-## System Architecture
+## System Layers
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         User Interface Layer                        │
-│                     (CLI + Python API)                            │
-└─────────────────────────────────────────────────────────────────────┘
-                                │
-┌───────────────────────────────┴───────────────────────────────────┐
-│                    Scene Generation Layer                          │
-│  ┌─────────────┐  ┌──────────────┐  ┌─────────────────────┐       │
-│  │ Text Parser │  │ Vision Parser│  │ Scene Composer      │       │
-│  │             │  │              │  │                     │       │
-│  │ LLM-based   │  │ VLM-based    │  │ Physics + Geometry  │       │
-│  │ extraction  │  │ analysis     │  │ + Constraints       │       │
-│  └─────────────┘  └──────────────┘  └─────────────────────┘       │
-│         │                              │                           │
-│    OpenAI/Anthropic               Image Input                      │
-│    or Ollama (local)                                                │
-└───────────────────────────────────────────────────────────────────────┘
-                                │
-┌───────────────────────────────┴───────────────────────────────────┐
-│                    Scene Definition Layer                          │
-│  - JSON/YAML scene files                                          │
-│  - Pydantic models (schema.py)                                    │
-│  - Scene loader with validation                                   │
-│  - Domain randomization configuration                             │
-└───────────────────────────────────────────────────────────────────────┘
-                                │
-┌───────────────────────────────┴───────────────────────────────────┐
-│                    Simulator Abstraction Layer                     │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │              BaseSimulator Interface                      │   │
-│  │  - load_scene() - reset() - step() - render()             │   │
-│  │  - get_state() - set_state() - apply_action()             │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-│         │                              │                           │
-│    ┌────┴────┐                    ┌────┴────┐                      │
-│    │ MuJoCo │                    │ PyBullet│                      │
-│    │ Backend│                    │ Backend │                      │
-│    └────────┘                    └────────┘                        │
-└───────────────────────────────────────────────────────────────────────┘
-                                │
-┌───────────────────────────────┴───────────────────────────────────┐
-│              Dynamic Environment Controller (NEW)                   │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │              EnvironmentController                            │   │
-│  │  - ParameterRandomizer (physics, visual, dynamics)            │   │
-│  │  - CurriculumScheduler (Easy → Medium → Hard → Expert)       │   │
-│  │  - AdaptiveDifficultyController (performance-based)            │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-│                                                                    │
-│  Features:                                                         │
-│  - Domain randomization (physics, visual, dynamics)               │
-│  - Curriculum learning with auto-advancement                       │
-│  - Adaptive difficulty based on performance                         │
-│  - Reproducible parameter sampling                                  │
-│  - Callback system for episode events                              │
-└───────────────────────────────────────────────────────────────────────┘
-                                │
-┌───────────────────────────────┴───────────────────────────────────┐
-│              RL Training Pipeline                                    │
-│  - Stable-Baselines3 integration (PPO, SAC, TD3, DDPG, A2C)       │
-│  - Custom reward functions for surgical tasks                      │
-│  - Observation and action space definitions                        │
-│  - Training monitoring and logging                                 │
-└───────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                   USER INTERFACE                                  │
+│    CLI (Typer: surg-rl)  │  Python API  │  Demos (demos/)       │
+└──────────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────┴────────────────────────────────────┐
+│                   SCENE GENERATION (optional)                     │
+│  TextParser (LLM)  │  VisionParser (VLM)  │  TEMPLATE_REGISTRY   │
+│  ──────────────────────────────────────────────────────────────  │
+│  OpenAI / Anthropic / Ollama  │  scene_composer.py              │
+└──────────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────┴────────────────────────────────────┐
+│                   SCENE DEFINITION                                │
+│  SceneDefinition (Pydantic v2)  │  SceneLoader (JSON/YAML +      │
+│  robots / tissues / instruments / physics / tasks / DR config    │
+└──────────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────┴────────────────────────────────────┐
+│                   SIMULATOR ABSTRACTION (Strategy)                │
+│  BaseSimulator (ABC)                                              │
+│  ├── MuJoCoSimulator  ──  SceneBuilder → MJCF XML → MuJoCo 3.x  │
+│  └── PyBulletSimulator ──  direct primitive API + soft-body       │
+│                                                                   │
+│  Data carriers: Observation, State, StepResult                   │
+└──────────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────┴────────────────────────────────────┐
+│                   DYNAMICS CONTROL                                │
+│  EnvironmentController (orchestrator)                              │
+│  ├── ParameterRandomizer   (domain randomization)                 │
+│  ├── CurriculumScheduler   (Easy → Medium → Hard → Expert)        │
+│  └── AdaptiveDifficultyController  (performance-driven scaling)    │
+└──────────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────┴────────────────────────────────────┐
+│                   RL LAYER                                        │
+│  SurgicalEnv (Gymnasium)                                         │
+│  ├── ObservationBuilder  (Dict / Box spaces, 20+ observation      │
+│  │                       types, normalization, noise injection)   │
+│  ├── ActionBuilder       (joint pos/vel/torque, EE pose/delta,    │
+│  │                       gripper, discrete; scaling modes)        │
+│  ├── BaseRewardFunction  (9 built-in reward types + composite)    │
+│  └── task_termination    (backend-agnostic success detection)     │
+│                                                                   │
+│  TrainingManager → SB3 (PPO, SAC, TD3, DDPG, A2C) + callbacks    │
+│                                                                   │
+│  Optional: Ray/RLlib distributed training                          │
+└──────────────────────────────────────────────────────────────────┘
 ```
-
-## Component Overview
-
-### 1. Scene Generation Layer
-
-**Purpose:** Convert natural language or images into structured scene definitions.
-
-**Components:**
-- `TextParser`: Uses LLMs (OpenAI, Anthropic, Ollama) to parse text descriptions
-- `VisionParser`: Uses VLMs to analyze images and generate scenes
-- `SceneComposer`: Combines multiple inputs into complete scenes
-- `templates.py`: Pre-defined scene templates for common tasks
-
-**Key Features:**
-- Multi-provider support (OpenAI, Anthropic, Ollama)
-- Async and sync APIs
-- Context-aware scene modification
-- JSON extraction from LLM responses
-
-### 2. Scene Definition Layer
-
-**Purpose:** Define and validate surgical robotics scenes.
-
-**Components:**
-- `schema.py`: Comprehensive Pydantic models for all scene elements
-- `loader.py`: File loading with caching and validation
-
-**Key Features:**
-- Strong typing with Pydantic v2
-- JSON and YAML support
-- Comprehensive validation
-- Automatic primitive fallbacks
-
-### 3. Simulator Abstraction Layer
-
-**Purpose:** Provide unified interface for physics simulation.
-
-**Components:**
-- `BaseSimulator`: Abstract base class defining the interface
-- `MuJoCoSimulator`: MuJoCo backend implementation
-- `PyBulletSimulator`: PyBullet backend implementation
-- `SceneBuilder`: Scene-to-simulator format conversion
-
-**Key Features:**
-- Unified API for both simulators
-- State save/restore
-- Rendering support
-- Primitive fallbacks for missing assets
-
-### 4. Dynamic Environment Controller
-
-**Purpose:** Provide dynamic environment modification for RL training.
-
-**Components:**
-- `BaseController`: Abstract base class with lifecycle management
-- `ParameterRandomizer`: Domain randomization for physics/visual/dynamics
-- `CurriculumScheduler`: Progressive learning stages (Easy → Medium → Hard → Expert)
-- `AdaptiveDifficultyController`: Performance-based difficulty adjustment
-- `EnvironmentController`: Main controller integrating all components
-
-**Key Features:**
-- Domain randomization configurable via scene definitions
-- 4-stage curriculum with automatic advancement
-- Multiple difficulty adaptation strategies (proportional, linear, exponential)
-- Reproducible parameter sampling with seeds
-- Callback system for episode events
-- Integration with scene definitions via `from_scene()` factory method
-
-**Usage Example:**
-```python
-from surg_rl.dynamics import EnvironmentController
-from surg_rl.scene_definition import SceneLoader
-
-# Create from scene
-scene = SceneLoader().load("scenes/suturing.json")
-controller = EnvironmentController.from_scene(
-    scene,
-    use_curriculum=True,
-    use_adaptive=True
-)
-
-# Training loop
-controller.start()
-for episode in range(1000):
-    params = controller.reset(seed=episode)
-    
-    # Apply parameters to simulator
-    # physics: mass_ratio, friction, gravity
-    # visual: color offsets, lighting
-    # dynamics: action_noise, observation_noise
-    
-    # Run episode...
-    info = controller.episode_end(
-        {"reward": reward, "success": success},
-        simulator
-    )
-```
-
-### 5. CLI Layer
-
-**Purpose:** Command-line interface for common tasks.
-
-**Commands:**
-- `surg-rl version`: Show version
-- `surg-rl config`: Display configuration
-- `surg-rl setup`: Create directories
-- `surg-rl generate`: Generate scenes from text/image/template
-- `surg-rl train`: Train RL agents (PPO, SAC, TD3, DDPG, A2C)
-- `surg-rl evaluate`: Evaluate trained agents
 
 ## Data Flow
 
-```
-User Input (Text/Image/Template)
-         │
-         ▼
-┌─────────────────────┐
-│   Scene Generation  │
-│   (TextParser/      │
-│    VisionParser/     │
-│    Templates)       │
-└─────────────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│  Scene Definition  │
-│  (SceneDefinition   │
-│   Pydantic Model)   │
-└─────────────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│   Scene Loader      │
-│   (Validation &     │
-│    Caching)         │
-└─────────────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│   Scene Builder     │
-│   (Asset Loading &  │
-│    Primitive Gen)   │
-└─────────────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│   Simulator         │
-│   (MuJoCo/PyBullet) │
-└─────────────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│   Environment       │
-│   Controller        │
-│   (Randomization/   │
-│    Curriculum)      │
-└─────────────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│   RL Training       │
-│   (Complete)        │
-└─────────────────────┘
-```
+1. **Scene creation**: User provides text/image/template → `TextParser` / `VisionParser` / `get_template()` → `SceneDefinition` → saved as JSON or YAML.
+2. **Scene loading**: `SceneLoader.load(path)` validates against Pydantic v2 schema, caches with LRU, checks asset references.
+3. **Simulator loading**: `simulator.load_scene(scene)` → `SceneBuilder` generates MJCF XML (MuJoCo) or calls `createMultiBody` / `createSoftBody` (PyBullet) with primitive `.obj` fallbacks.
+4. **Environment reset**: `SurgicalEnv.reset()` → `EnvironmentController.reset()` samples domain-randomized parameters → applies to simulator → `simulator.reset()` → builds initial observation.
+5. **Step loop** (per timestep):
+   ```
+   Agent action
+     → ActionBuilder.process_action()     (scale, convert, apply noise)
+     → EnvironmentController.step_update() (apply curriculum/adaptive changes)
+     → Simulator.step(action)             (execute physics)
+     → ObservationBuilder.extract()       (map to gym space)
+     → RewardFunction.compute()           (task-specific reward)
+     → check_task_success()               (termination condition)
+   → (obs, reward, terminated, truncated, info)
+   ```
+6. **Training**: `TrainingManager.train()` creates SB3 model + callbacks → `model.learn(total_timesteps)`.
 
-## Extension Points
+## Entry Points
 
-### Adding a New LLM Provider
+| Entry point | Location | Description |
+|---|---|---|
+| CLI | `surg-rl` (pyproject.toml `[project.scripts]`) | Typer app: `version`, `config`, `setup`, `generate`, `train`, `evaluate`, `train-rllib`, `tune`, `checkpoint-inspect`, `test-cli`, `scene-validate`, `convert`, `inspect-scene`, `ros2-bridge`, `profile`, `list-templates` |
+| Python module | `python -m surg_rl.cli` | Same as CLI, no `__main__.py` needed |
+| Library API | `from surg_rl.rl import SurgicalEnv, TrainingManager` | Direct Python import |
+| Demos | `demos/demo.py`, `demos/train_demo.py`, `demos/eval_demo.py` | Runnable example scripts |
+| Examples | `examples/basic_usage.py`, `examples/rl_training.py`, `examples/rl_evaluation.py`, `examples/visualize_scene.py` | Code examples |
 
-1. Create a new parser class extending `BaseParser`
-2. Implement the `parse()` and `parse_with_context()` methods
-3. Add provider-specific configuration to `config.py`
+## Key Abstractions
 
-### Adding a New Simulator
+### BaseSimulator (ABC)
+**File**: `src/surg_rl/simulators/base_simulator.py` (481 lines)
 
-1. Create a new class extending `BaseSimulator`
-2. Implement all abstract methods
-3. Add simulator-specific configuration
-4. Register in `__init__.py`
+Defines the unified simulator interface. All backends must implement:
 
-### Adding a New Scene Template
+| Method | Purpose |
+|---|---|
+| `load_scene(scene_definition)` | Parse `SceneDefinition` → internal representation |
+| `reset(seed)` | Reset simulation to initial state, return `Observation` |
+| `step(action)` | Execute one step, return `StepResult` |
+| `render(mode, width, height, camera_name)` | Render current state as image |
+| `get_state()` / `set_state(state)` | Save/restore full simulation state |
+| `close()` | Clean up resources |
+| `start_viewer(target_fps)` / `stop_viewer()` | Non-blocking 3D viewer lifecycle |
+| `get_joint_states()` | Per-robot joint positions and velocities |
+| `apply_action(action)` → `_apply_action(action)` | Apply control input (templated method) |
 
-1. Create a function returning a `SceneDefinition`
-2. Add to `TEMPLATE_REGISTRY` in `templates.py`
+**Data carriers** (dataclasses in `base_simulator.py`):
+- `Observation` — 20+ fields: `rgb_image`, `depth_image`, `segmentation`, `robot_state`, `end_effector_pos`, `end_effector_quat`, `force_torque`, `tissue_state`, `collision_detected`, `needle_pos`, `entry_point`, `exit_point`, `incision_progress`, `thread_tension`, `cut_force`, `receiver_pos`, `tool_positions`, `custom`
+- `State` — snapshot for save/restore: `time`, `qpos`, `qvel`, `mocap_pos`, `mocap_quat`, body positions/orientations, `custom`
+- `StepResult` — Gymnasium-style transition tuple: `observation`, `reward`, `terminated`, `truncated`, `info`
+- `SimulationStatus` — enum: `RUNNING`, `SUCCESS`, `FAILURE`, `TIMEOUT`
 
-### Adding New Randomization Parameters
+### SurgicalEnv (Gymnasium)
+**File**: `src/surg_rl/rl/environment.py` (962 lines)
 
-1. Add parameter to `PhysicsRandomization`, `VisualRandomization`, or `DynamicsRandomization` in schema.py
-2. Update `ParameterRandomizer._build_parameter_bounds()` to handle new parameter
-3. Implement application logic in `ParameterRandomizer.apply_parameters()`
+A `gym.Env` subclass that wraps simulator + dynamics controller + observation/action builders. Key configuration via `SurgicalEnvConfig`:
+- `scene_path` / `scene` — which scene to load
+- `simulator_type` — `"mujoco"` (default) or `"pybullet"`
+- `timestep` (default: `0.002` s), `frame_skip` (default: `1`), `max_episode_steps` (default: `1000`)
+- `render_mode` — `"human"`, `"rgb_array"`, or `None`
+- `use_curriculum` / `use_adaptive_difficulty` — toggle dynamics features
+- Supports vectorized envs via `make_vec_env()` (SB3 `DummyVecEnv` / `SubprocVecEnv`)
 
-## Performance Considerations
+### EnvironmentController
+**File**: `src/surg_rl/dynamics/environment_controller.py` (578 lines)
 
-### Scene Caching
+Orchestrates three sub-controllers (composition, not inheritance):
 
-- Loaded scenes are cached by file path and modification time
-- LRU eviction when cache is full
-- Thread-safe operations
+| Sub-controller | File | Role |
+|---|---|---|
+| `ParameterRandomizer` | `parameter_randomizer.py` (645 lines) | Domain randomization: physics (mass, friction, gravity), visual (color, lighting), dynamics (action/observation noise). Uses `weakref.WeakKeyDictionary` for baseline storage per simulator. |
+| `CurriculumScheduler` | `curriculum.py` (517 lines) | 4-stage curriculum: Easy → Medium → Hard → Expert. Auto-advances based on success-rate windows. |
+| `AdaptiveDifficultyController` | `adaptive_difficulty.py` (492 lines) | Performance-driven scaling with strategies: linear, exponential, proportional, threshold. |
 
-### Asset Management
+Base class: `BaseController` (ABC) in `base_controller.py` — defines lifecycle: `start`, `stop`, `reset`, `step_update`, `episode_end`, parameter sampling, and callback system.
 
-- Mesh files are generated once and cached
-- Primitive OBJ files are created on-demand
-- Automatic cleanup of temporary files
+## Backend Strategy Pattern
 
-### LLM Integration
+Both simulator backends consume the same `SceneDefinition` schema but translate it through completely different paths:
 
-- Async API calls for better performance
-- Lazy client initialization
-- Support for both sync and async usage
+| Aspect | MuJoCoSimulator | PyBulletSimulator |
+|---|---|---|
+| File | `mujoco_simulator.py` (860 lines) | `pybullet_simulator.py` (1282+ lines) |
+| Model format | MJCF XML (via `SceneBuilder.create_mjcf()`) | Direct API calls (`createMultiBody`, `createCollisionShape`) |
+| Physics engine | MuJoCo 3.x (`mujoco.MjModel.from_xml_path()`) | PyBullet (`p.connect()`) |
+| Rendering | `mujoco.Renderer` (MuJoCo 3.x API) | `p.getCameraImage()` |
+| Control mapping | `mjOBJ_ACTUATOR` lookups | `POSITION_CONTROL` / `TORQUE_CONTROL` mode switching |
+| Soft bodies | Not supported | `loadSoftBody()` with procedural `.vtk` meshes |
+| Detection (duck typing) | `hasattr(sim, "_model")` | `hasattr(sim, "_physics_client")` |
 
-### Controller Performance
+**Backend-specific quirks**:
+- **MuJoCo**: Stores model as private `_model`. Must call `load_scene()` before `reset()` or `step()`.
+- **PyBullet**: Must call `resetSimulation(RESET_USE_DEFORMABLE_WORLD)` before any soft-body load, even on a fresh connect. `removeBody()` is unsafe for soft bodies; `reset()` performs full scene reload when `_soft_body_ids` is non-empty.
+- **Scene assets**: `assets/` directory contains no real mesh files. `SceneBuilder` generates primitive `.obj` / `.vtk` fallbacks on the fly (box, sphere, cylinder via pure NumPy in `utils/mesh_generation.py`).
 
-- Parameter sampling is O(1) for most operations
-- History tracking limited by configurable window size
-- Callbacks executed synchronously (keep callbacks lightweight)
+## Optional Modules
 
-## Error Handling
+### Ray/RLlib Distributed Training
+**Package**: `src/surg_rl/rl/rllib/` | **Extra**: `pip install "surg-rl[distributed]"`
 
-### Exception Hierarchy
+Provides `RllibConfig`, `train_rllib()`, and Ray Tune hyperparameter search integration. Registered via `register_env()` and import-guarded (`ImportError` → helpful message). CLI commands: `surg-rl train-rllib`, `surg-rl tune`.
 
-```
-SceneLoaderError (base)
-├── SceneFileNotFoundError
-├── SceneValidationError
-├── SceneParseError
-└── AssetLoadError
+### ROS2 Bridge
+**Package**: `src/surg_rl/ros2/` | **Extra**: `pip install "surg-rl[ros2]"` (apt deps required)
 
-ParserError (base)
-├── ParseTimeoutError
-└── ParseValidationError
-```
+Bridge between simulation and real hardware via ROS2 (Humble). Components:
+- `Ros2BridgeConfig` — Pydantic v2 configuration
+- `Ros2BridgeNode` — state publishing / command subscribing
+- `TrajectoryReplay` — self-contained SB3 checkpoint replay to ROS2 topics
 
-### Error Recovery
+Degrades gracefully: `HAS_ROS2 = False` on macOS or when `rclpy` is not installed.
 
-- Missing assets automatically fall back to primitives
-- Invalid JSON/YAML raises clear error messages
-- LLM response parsing handles various formats (plain JSON, markdown code blocks)
+### Other Optional Extras
+| Extra | Contents |
+|---|---|
+| `meshing` | `pyvista>=0.43` — advanced mesh visualization |
+| `vision` | `torch`, `torchvision`, `transformers` — VLM inference |
+| `tracking` | `wandb`, `mlflow` — experiment tracking |
+| `docs` | `sphinx`, `sphinx-rtd-theme`, `myst-parser` — documentation build |
 
-## Testing
-
-### Test Organization
+## Inheritance Hierarchies
 
 ```
-tests/
-├── test_config.py           # Configuration tests
-├── test_imports.py          # Import verification
-├── test_loader.py           # Scene loader tests
-├── test_schema.py           # Schema validation tests
-├── test_scene_generation.py # Scene generation tests
-├── test_simulators.py       # Simulator tests
-└── test_dynamics.py         # Environment controller tests (NEW)
+Scene Parsers:
+  BaseParser (ABC)
+  ├── TextParser
+  └── VisionParser
+
+Simulators:
+  BaseSimulator (ABC)
+  ├── MuJoCoSimulator
+  └── PyBulletSimulator
+
+Dynamics Controllers:
+  BaseController (ABC)
+  ├── ParameterRandomizer
+  ├── CurriculumScheduler
+  └── AdaptiveDifficultyController
+  (EnvironmentController composes the three above)
+
+Reward Functions:
+  BaseRewardFunction (ABC)
+  ├── DistanceReward
+  ├── OrientationReward
+  ├── ActionPenalty
+  ├── TimePenalty
+  ├── SuccessReward
+  ├── CollisionPenalty
+  ├── SuturingReward
+  ├── DissectionReward
+  ├── NeedlePassingReward
+  └── CompositeReward
 ```
 
-### Running Tests
+## Directory Structure Rationale
 
-```bash
-# Run all tests
-pytest tests/ -v
-
-# Run specific test file
-pytest tests/test_dynamics.py -v
-
-# Run with coverage
-pytest tests/ --cov=surg_rl
+```
+src/surg_rl/
+  cli.py                   Typer CLI entrypoint (806 lines, 16+ commands)
+  render_thread.py         Off-main-thread render loop
+  scene_definition/        Pydantic v2 schema (schema.py, 1080 lines) +
+                           JSON/YAML loader with caching (loader.py, 889 lines)
+  scene_generation/        LLM/VLM parsers + template registry + composer
+  simulators/              ABC + two backends + scene-to-format builder
+  dynamics/                Domain randomization, curriculum, adaptive difficulty
+  rl/                      Gymnasium env, SB3 training, obs/act/rew builders, callbacks
+    rllib/                 Ray/RLlib distributed training (optional)
+  ros2/                    ROS2 bridge (optional, Linux-only)
+  utils/                   Configuration (pydantic-settings), Rich logging,
+                           mesh generation (pure NumPy), VTK I/O, GPU detection
 ```
 
-### Test Coverage
+Each directory maps to one layer of the pipeline. Dependencies flow in one direction only: `scene_definition` ← `scene_generation`, `simulators`, `dynamics`, `rl`. Circular imports are avoided; cross-layer communication goes through `SceneDefinition` (data) and `Observation` (data carrier).
 
-- Unit tests: All core functionality
-- Integration tests: Scene loading, controller integration
-- Edge cases: Boundary conditions, error handling
+## Key Design Decisions
+
+1. **Pydantic v2 as system schema**: All runtime configuration flows through `SceneDefinition`. Strong typing, validation, and JSON serialization. Caveats: enum values must be converted before YAML dump; `model_construct()` must be used to skip validation (not `Model(**data)`).
+
+2. **No real asset files**: `SceneBuilder` generates primitive `.obj` / `.vtk` fallbacks on the fly. Keeps the repo lightweight but limits visual fidelity. No file in `assets/` is guaranteed to exist.
+
+3. **Backend detection via duck typing**: `hasattr(sim, "_model")` → MuJoCo; `hasattr(sim, "_physics_client")` → PyBullet. Used throughout dynamics controllers and parameter randomizers rather than `isinstance()` checks.
+
+4. **Observation dataclass as cross-backend contract**: `BaseSimulator.Observation` is the only data structure shared between simulators and the RL layer. This ensures backend-agnostic task termination and reward computation.
+
+5. **Optional extras pattern**: Heavy dependencies (Ray/RLlib, ROS2, PyTorch, W&B) are opt-in via `pip install "surg-rl[extra]"`. Each optional package has import guards with helpful error messages.
+
+6. **Composition over inheritance in dynamics**: `EnvironmentController` composes three independent controllers rather than inheriting from them. Each sub-controller has its own ABC (`BaseController`) with a standard lifecycle.
+
+<!-- VERIFY: Documentation site at https://surg-rl.readthedocs.io -->
+<!-- VERIFY: GitHub repository at https://github.com/surg-rl/surg-rl -->

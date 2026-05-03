@@ -1,279 +1,188 @@
-# Getting Started with Surg-RL
+<!-- generated-by: gsd-doc-writer -->
 
-This guide will help you set up Surg-RL and run your first surgical robotics simulation.
+# Getting Started
 
-## Table of Contents
-
-1. [Prerequisites](#prerequisites)
-2. [Installation](#installation)
-3. [Quick Start](#quick-start)
-4. [Configuration](#configuration)
-5. [Next Steps](#next-steps)
+This guide walks you through installing Surg-RL, verifying your setup, and running your first RL training job on a surgical scene.
 
 ## Prerequisites
 
-Before installing Surg-RL, ensure you have:
+| Requirement | Version | Notes |
+|---|---|---|
+| **Python** | `>= 3.10` | Check with `python3 --version` |
+| **pip** | `>= 21.0` | Comes with Python; `pip --version` |
+| **git** | any recent | Needed to clone the repository |
+| **GPU (optional)** | CUDA / ROCm / Metal / Intel | Auto-detected; falls back to CPU gracefully |
+| **ROS2 (optional)** | Humble | Linux-only; requires `apt` packages. See the [`ros2` extra](README.md#optional-extras). |
 
-- **Python 3.11+**: Download from [python.org](https://www.python.org/downloads/)
-- **pip**: Usually comes with Python
-- **Git**: For cloning the repository
-
-### Optional Requirements
-
-For LLM-based scene generation:
-- **OpenAI API key** (for GPT models)
-- **Anthropic API key** (for Claude models)
-- **Ollama** (for local LLM inference)
-
-For physics simulation:
-- **MuJoCo**: Installed automatically via pip
-- **PyBullet**: Installed automatically via pip
+No system-level MuJoCo or PyBullet installation is needed — both are pip-installed as dependencies.
 
 ## Installation
 
-### Step 1: Clone the Repository
+### 1. Clone the repository
 
 ```bash
-git clone https://github.com/yourusername/surg-rl.git
+git clone https://github.com/surg-rl/surg-rl.git
 cd surg-rl
 ```
 
-### Step 2: Create Virtual Environment
+### 2. Create and activate a virtual environment
 
 ```bash
-# Create virtual environment
-python -m venv venv
-
-# Activate it
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python3 -m venv .venv
+source .venv/bin/activate  # Linux/macOS
+# .venv\Scripts\activate   # Windows
 ```
 
-### Step 3: Install Dependencies
+### 3. Install with dev dependencies (recommended)
 
 ```bash
-# Install in development mode with all dependencies
 pip install -e ".[dev]"
 ```
 
-This installs:
-- Core dependencies (numpy, scipy, mujoco, pybullet, etc.)
-- LLM libraries (openai, anthropic)
-- Development tools (pytest, ruff, mypy)
+This editable install registers the `surg-rl` CLI command and includes all development tools (pytest, ruff, black, mypy).
 
-### Step 4: Verify Installation
+**Without editable install**, prefix all commands with `PYTHONPATH=src`:
 
 ```bash
-# Run tests
-pytest tests/
-
-# Check version
-surg-rl version
-
-# View configuration
-surg-rl config
+PYTHONPATH=src python -m surg_rl.cli version
 ```
 
-## Quick Start
-
-### Option A: Use Pre-built Templates
-
-Generate a scene from one of the built-in templates:
-
-```bash
-# Create a suturing scene
-surg-rl generate --template suturing --output my_suturing.json
-
-# Create a dissection scene
-surg-rl generate --template dissection --output my_dissection.yaml
-
-# List available templates
-python -c "from surg_rl.scene_generation import list_templates; print(list_templates())"
-```
-
-### Option B: Generate with LLM
-
-**Using OpenAI:**
-
-```bash
-# Set API key
-export OPENAI_API_KEY="your-api-key"
-
-# Generate scene
-surg-rl generate --text "Create a suturing scene with a robotic arm and skin tissue" --output scene.json
-```
-
-**Using Anthropic:**
-
-```bash
-# Set API key
-export ANTHROPIC_API_KEY="your-api-key"
-
-# Generate scene
-surg-rl generate --text "Design a laparoscopic training scene" --provider anthropic --output scene.json
-```
-
-**Using Ollama (Local):**
-
-```bash
-# Install and run Ollama (see https://ollama.ai)
-ollama pull llama3.2
-
-# Generate scene locally
-surg-rl generate --text "Create a basic surgical training scene" --provider ollama --output scene.json
-```
-
-### Option C: Use Python API
-
-```python
-from surg_rl.scene_definition import load_scene, SceneDefinition
-from surg_rl.scene_generation import get_template
-from surg_rl.simulators import MuJoCoSimulator
-
-# Method 1: Load existing scene
-scene = load_scene("scenes/simple_suturing.json")
-
-# Method 2: Use template
-scene = get_template("suturing")
-
-# Method 3: Create programmatically
-from surg_rl.scene_definition import (
-    Metadata, PhysicsConfig, RobotConfig, TissueConfig, Pose, Position
-)
-
-scene = SceneDefinition(
-    metadata=Metadata(name="My Scene"),
-    physics=PhysicsConfig(gravity=[0, 0, -9.81]),
-    robots=[
-        RobotConfig(
-            name="arm1",
-            urdf_path="assets/robots/arm.urdf",
-            base_pose=Pose(position=Position(x=0, y=0, z=0))
-        )
-    ]
-)
-
-# Use in simulator
-sim = MuJoCoSimulator()
-sim.load_scene(scene)
-obs = sim.reset()
-```
-
-## Configuration
-
-### Environment Variables
-
-Create a `.env` file from the template:
+### 4. Configure your environment
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` with your settings:
+Edit `.env` to set your LLM provider and API key if you plan to use AI-powered scene generation. See [Configuration](CONFIGURATION.md) for the full list of settings.
 
-```ini
-# LLM Provider (openai, anthropic, ollama)
-LLM_PROVIDER=openai
+## Verify Installation
 
-# API Keys
-LLM_API_KEY=your-api-key-here
-
-# Ollama Settings (for local models)
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama3.2
-OLLAMA_VISION_MODEL=llava
-
-# Simulator
-DEFAULT_SIMULATOR=mujoco
+```bash
+surg-rl version
 ```
 
-### Python Configuration
+Expected output:
 
-```python
-from surg_rl.utils.config import get_settings
-
-settings = get_settings()
-print(settings.llm_provider)  # 'openai'
-print(settings.default_simulator)  # 'mujoco'
+```
+Surg-RL version: 0.1.0
 ```
 
-### Configuration Options
+For hardware details including GPU detection:
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `LLM_PROVIDER` | str | `openai` | LLM provider (openai, anthropic, ollama) |
-| `LLM_MODEL` | str | `gpt-4-turbo-preview` | Model name |
-| `LLM_API_KEY` | str | None | API key |
-| `LLM_TEMPERATURE` | float | 0.7 | Generation temperature |
-| `OLLAMA_BASE_URL` | str | `http://localhost:11434` | Ollama server URL |
-| `OLLAMA_MODEL` | str | `llama3.2` | Default text model |
-| `OLLAMA_VISION_MODEL` | str | `llava` | Default vision model |
-| `DEFAULT_SIMULATOR` | str | `mujoco` | Physics simulator |
+```bash
+surg-rl version --verbose
+```
+
+This prints a table showing CUDA, ROCm, Metal, Intel, and CPU backend availability.
+
+## First Run
+
+Train a PPO agent on the built-in suturing scene for 100,000 timesteps:
+
+```bash
+surg-rl train --scene scenes/simple_suturing.json --algorithm PPO --timesteps 100000
+```
+
+This command does the following:
+1. Loads and validates `scenes/simple_suturing.json` against the Pydantic v2 schema
+2. Builds a Gymnasium environment wrapping the MuJoCo simulator (default backend)
+3. Creates a PPO agent via Stable-Baselines3 with default hyperparameters
+4. Trains for 100,000 timesteps, logging progress to the console
+5. Saves the trained model to `logs/training/final_model`
+
+You can also run the interactive demo scripts directly:
+
+```bash
+# Visualization demo (requires a display)
+python demos/demo.py --scene scenes/simple_suturing.json
+
+# Headless training demo (10k steps)
+python demos/demo.py --headless --steps 10000
+
+# Training demo with curriculum learning
+python demos/train_demo.py --curriculum --timesteps 50000
+```
+
+## Core Concepts
+
+Here is a quick tour of the key building blocks in Surg-RL. Each is explored in depth in the [Architecture](ARCHITECTURE.md) guide.
+
+### Scenes
+
+A scene describes everything in the surgical environment — robots, tissues, instruments, physics parameters, and the task definition. Scenes are written as JSON or YAML files that conform to the `SceneDefinition` Pydantic v2 schema. Shipped example scenes include `simple_suturing.json`, `suturing_demo.json`, and `minimal_scene.json`. You can also generate scenes from natural language with `surg-rl generate --text "..."` (requires an LLM API key).
+
+### Simulators
+
+Surg-RL supports two physics backends behind a unified `BaseSimulator` interface. **MuJoCo** (default) delivers high-fidelity rigid-body simulation with GPU-accelerated rendering. **PyBullet** supports soft-body deformable tissue with procedural tetrahedral mesh generation. Switch backends with `--backend pybullet` on the CLI or set `DEFAULT_SIMULATOR=pybullet` in `.env`.
+
+### Environments
+
+The `SurgicalEnv` class wraps a simulator into a standard Gymnasium environment. It handles the step loop — converting agent actions into simulator commands, extracting observations from the physics state, computing task-specific rewards, and detecting termination conditions. You can instantiate it directly in Python or let the `TrainingManager` create it from a `TrainingConfig`.
+
+### Controllers
+
+Three dynamics controllers run alongside the simulator to improve training robustness and policy transfer. **ParameterRandomizer** applies domain randomization to physics, visuals, and dynamics. **CurriculumScheduler** progresses through difficulty stages (Easy → Medium → Hard → Expert) based on success-rate windows. **AdaptiveDifficultyController** adjusts parameters in real time using performance-driven strategies. All three are orchestrated by `EnvironmentController` and toggled via training config flags.
+
+## Simulator Backends
+
+| Backend | Best for | Key capability |
+|---|---|---|
+| **MuJoCo** (default) | Rigid-body surgical robots | Fast, accurate physics; GPU-accelerated rendering |
+| **PyBullet** | Deformable tissue/suturing | Soft-body simulation with procedural `.vtk` meshes |
+
+Switch at runtime:
+
+```bash
+surg-rl train --backend pybullet --scene scenes/simple_suturing.json --algorithm PPO
+```
+
+## Optional Extras
+
+Install additional capabilities with pip extras syntax:
+
+```bash
+pip install -e ".[distributed]"   # Ray/RLlib distributed training
+pip install -e ".[vision]"        # Vision-based scene parsing (torch, transformers)
+pip install -e ".[llm]"           # LLM-based scene generation (openai, anthropic)
+pip install -e ".[tracking]"      # W&B / MLflow experiment tracking
+pip install -e ".[ros2]"          # ROS2 bridge (Linux + apt deps required)
+pip install -e ".[meshing]"       # PyVista mesh manipulation
+```
+
+Combine multiple extras:
+
+```bash
+pip install -e ".[dev,distributed,vision,llm,tracking]"
+```
+
+## Common Setup Issues
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `surg-rl: command not found` | Editable install not run, or venv not active | `source .venv/bin/activate && pip install -e ".[dev]"` |
+| `ModuleNotFoundError: No module named 'surg_rl'` | Direct Python invocation without `PYTHONPATH` | Prefix with `PYTHONPATH=src` |
+| MuJoCo crashes on headless machine | No display available | Use `--headless` flag or set `RENDER_MODE=none` |
+| PyBullet soft body fails silently | `resetSimulation` not called with `RESET_USE_DEFORMABLE_WORLD` | Internal; reload the scene and retry |
+| LLM generation fails | API key not set or placeholder value in use | Edit `.env` with a real API key (placeholder values like `sk-xxxxxxxx` are rejected) |
+| OpenGL errors on macOS | MuJoCo rendering backend mismatch | Install `mujoco` with `pip install mujoco`; macOS uses the `glfw` backend by default |
+
+For more issues, see [Troubleshooting](TROUBLESHOOTING.md).
 
 ## Next Steps
 
-- Read the [Scene Format Documentation](SCENE_FORMAT.md) to understand scene definitions
-- Check out [API Reference](API_REFERENCE.md) for detailed API docs
-- See [Examples](EXAMPLES.md) for more code examples
-- Learn about the [Architecture](ARCHITECTURE.md)
+| Document | What you'll learn |
+|---|---|
+| [Architecture](ARCHITECTURE.md) | System design, data flow, key abstractions, backend strategy |
+| [Configuration](CONFIGURATION.md) | Environment variables, training config, scene schema, overrides |
+| [Testing](TESTING.md) | Running tests, writing new tests, coverage, CI integration |
+| [Development Guide](DEVELOPMENT_GUIDE.md) | Local setup, build commands, code style, PR process |
+| [Scene Format](SCENE_FORMAT.md) | Detailed JSON/YAML scene definition reference |
+| [Dynamics API](DYNAMICS_API.md) | Domain randomization, curriculum learning, adaptive difficulty |
 
-## Troubleshooting
+Try these next:
 
-### Import Errors
-
-If you get import errors, ensure the package is installed:
-
-```bash
-pip install -e ".[dev]"
-```
-
-### LLM API Errors
-
-**OpenAI:**
-```
-Error: OpenAI package not installed
-```
-Solution: `pip install openai`
-
-**Anthropic:**
-```
-Error: Anthropic package not installed
-```
-Solution: `pip install anthropic`
-
-**Ollama:**
-```
-Error: Connection refused
-```
-Solution: Ensure Ollama is running: `ollama serve`
-
-### Simulator Errors
-
-**MuJoCo:**
-```
-Error: MuJoCo is not installed
-```
-Solution: `pip install mujoco`
-
-**PyBullet:**
-```
-Error: PyBullet is not installed
-```
-Solution: `pip install pybullet`
-
-### Scene Loading Errors
-
-```
-Error: Scene file not found
-```
-Solution: Check the file path or use `surg-rl setup` to create directories.
-
-```
-Error: Missing mesh asset
-```
-Solution: This is expected - primitives are used as fallbacks. No action needed.
-
-## Getting Help
-
-- **GitHub Issues**: [Report bugs or request features](https://github.com/yourusername/surg-rl/issues)
-- **Documentation**: Check the [docs/](docs/) folder for detailed guides
-- **Examples**: See [examples/](examples/) for working code samples
+1. **Visualize a scene** — `python demos/demo.py --scene scenes/simple_suturing.json`
+2. **Generate a scene from text** — `surg-rl generate --text "A robotic arm suturing tissue" --output my_scene.json`
+3. **Train with different algorithms** — `surg-rl train --scene scenes/simple_suturing.json --algorithm SAC --timesteps 500000`
+4. **Evaluate a trained model** — `surg-rl evaluate --scene scenes/simple_suturing.json --model logs/training/final_model`
+5. **Scale with distributed training** — `pip install -e ".[distributed]"` then `surg-rl train-rllib --scene scenes/simple_suturing.json`
