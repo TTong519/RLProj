@@ -4,10 +4,6 @@ Provides :func:`build_tune_search_space` and :func:`run_tune_experiment`.
 
 Example::
 
-    from ray import tune
-    from surg_rl.rl.rllib.config import RllibConfig
-    from surg_rl.rl.rllib.tune_integration import build_tune_search_space, run_tune_experiment
-
     base = RllibConfig(total_timesteps=50_000)
     space = build_tune_search_space(base, scene_paths=["a.json", "b.json"])
     results = run_tune_experiment(base, space, num_samples=3)
@@ -20,14 +16,18 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ray import tune
-
 from surg_rl.rl.rllib import _check_rllib
 from surg_rl.rl.rllib.config import RllibConfig
 from surg_rl.rl.rllib.train import train_rllib
 from surg_rl.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+# Lazily import tune objects so tests without Ray can still import this module.
+def _tune():
+    from ray import tune as t
+    return t
 
 
 def build_tune_search_space(
@@ -46,46 +46,34 @@ def build_tune_search_space(
     sub-keys).  The search space is intentionally flat so that Tune's
     schedulers can mutate individual hyperparameters without replacing nested
     structs wholesale.
-
-    Args:
-        base_config: Ignored except for determining algorithm-specific ranges.
-        scene_paths: Categorical sweep over scene definitions.
-        simulator_types: Categorical sweep over backends.
-        algorithms: Categorical sweep over RL algorithms.
-        lr_range: ``(min, max)`` for ``tune.loguniform``.
-        gamma_range: ``(min, max)`` for ``tune.uniform``.
-        reward_weight_ranges: ``reward_name -> (min, max)`` for
-            ``tune.uniform`` injected into ``env_config["reward_config"]``.
-
-    Returns:
-        Dict compatible with ``tune.Tuner(param_space=...)``.
     """
+    t = _tune()
     space: dict[str, Any] = {}
 
     if scene_paths:
-        space["env_config"] = {"scene_path": tune.choice(scene_paths)}
+        space["env_config"] = {"scene_path": t.choice(scene_paths)}
     if simulator_types:
         space.setdefault("env_config", {}).update(
-            {"simulator_type": tune.choice(simulator_types)}
+            {"simulator_type": t.choice(simulator_types)}
         )
     if algorithms:
-        space["algorithm"] = tune.choice(algorithms)
+        space["algorithm"] = t.choice(algorithms)
 
-    space["lr"] = tune.loguniform(*lr_range)
-    space["gamma"] = tune.uniform(*gamma_range)
+    space["lr"] = t.loguniform(*lr_range)
+    space["gamma"] = t.uniform(*gamma_range)
 
     algo = base_config.algorithm.upper() if base_config and base_config.algorithm else "PPO"
     if algo == "PPO":
-        space["clip_param"] = tune.uniform(0.05, 0.3)
-        space["entropy_coeff"] = tune.loguniform(1e-4, 0.1)
+        space["clip_param"] = t.uniform(0.05, 0.3)
+        space["entropy_coeff"] = t.loguniform(1e-4, 0.1)
     elif algo == "SAC":
-        space["tau"] = tune.uniform(0.001, 0.02)
+        space["tau"] = t.uniform(0.001, 0.02)
 
     if reward_weight_ranges:
         space.setdefault("env_config", {}).update(
             {
                 "reward_config": {
-                    name: tune.uniform(low, high)
+                    name: t.uniform(low, high)
                     for name, (low, high) in reward_weight_ranges.items()
                 }
             }
@@ -110,31 +98,30 @@ def run_tune_experiment(
 
     Parameters
     ----------
-    base_config:
-        Starting :class:`RllibConfig` — non-sampled fields are taken from here.
-    param_space:
+    base_config : RllibConfig
+        Starting config — non-sampled fields come from here.
+    param_space : dict | None
         Search space returned by :func:`build_tune_search_space`.
-    num_samples:
-        Number of trials.  Must be ≥ 3 for DIST-04.
-    max_training_iterations:
-        Upper bound on iterations per trial (passed to the scheduler).
-    metric:
+    num_samples : int
+        Number of trials (must be ≥ 3 for DIST-04).
+    max_training_iterations : int
+        Upper bound on iterations per trial.
+    metric : str
         Metric reported by RLlib to optimise.
-    mode:
+    mode : str
         ``"min"`` or ``"max"``.
-    scheduler:
+    scheduler : str
         ``"asha"`` or ``"pbt"``.
-    name:
+    name : str
         Experiment name for Tune logs.
-    local_mode:
-        Whether to run Ray in local mode (single-process).  Defaults to
-        ``True`` because multi-node is rarely needed for hyperparameter
-        sweeps on a single workstation.
+    local_mode : bool
+        Whether to run Ray in local mode (single-process).
 
     Returns:
         A :class:`ray.tune.ResultGrid`.
     """
     _check_rllib()
+    t = _tune()
 
     param_space = param_space or {}
 
@@ -142,9 +129,8 @@ def run_tune_experiment(
         """Inner trainable — sampled flat config applied to *base_config*."""
         import copy
 
-        # Separate direct fields from nested env_config overrides
-        flat_overrides = {}
-        env_overrides = {}
+        flat_overrides: dict[str, Any] = {}
+        env_overrides: dict[str, Any] = {}
         for key, value in tune_cfg.items():
             if key == "env_config":
                 env_overrides = value
@@ -179,21 +165,21 @@ def run_tune_experiment(
             metric=metric,
             mode=mode,
             perturbation_interval=5,
-            hyperparam_mutations={"lr": tune.loguniform(1e-5, 1e-3)},
+            hyperparam_mutations={"lr": t.loguniform(1e-5, 1e-3)},
         )
     else:
         sched = None
 
-    tuner = tune.Tuner(
+    tuner = t.Tuner(
         _trainable,
         param_space=param_space,
-        tune_config=tune.TuneConfig(
+        tune_config=t.TuneConfig(
             metric=metric,
             mode=mode,
             num_samples=num_samples,
             scheduler=sched,
         ),
-        run_config=tune.RunConfig(
+        run_config=t.RunConfig(
             name=name,
             stop={"training_iteration": max_training_iterations},
         ),
@@ -210,7 +196,6 @@ def run_tune_experiment(
             metric,
             best_reward,
         )
-        # Persist best config
         best_cfg_path = Path(base_config.save_dir or "rllib_results") / "best_config.json"
         best_cfg_path.parent.mkdir(parents=True, exist_ok=True)
         best_cfg_path.write_text(
