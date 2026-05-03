@@ -41,5 +41,6 @@ else:
 
 # ── Public API ─────────────────────────────────────────────────────────
 from surg_rl.ros2.config import Ros2BridgeConfig  # noqa: E402, F401
+from surg_rl.ros2.bridge_node import Ros2BridgeNode  # noqa: E402, F401
 
-__all__ = ["HAS_ROS2", "Ros2BridgeConfig"]
+__all__ = ["HAS_ROS2", "Ros2BridgeConfig", "Ros2BridgeNode"]
