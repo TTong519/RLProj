@@ -396,12 +396,20 @@ class SurgicalEnv(gym.Env):
 
         from surg_rl.ros2.bridge_node import Ros2BridgeNode
 
+        # Create multiprocessing.Queue for cross-process command IPC (CR-01 fix)
+        cmd_queue = multiprocessing.Queue(maxsize=1)
+
         node = Ros2BridgeNode(
             joint_names=joint_names,
             publisher_topic=bridge_cfg.state_topic,
             command_topic=bridge_cfg.command_topic,
+            command_queue=cmd_queue,
+            frame_id=bridge_cfg.frame_id,
+            qos_profile=bridge_cfg.qos_profile,
+            on_nan_inf=bridge_cfg.on_nan_inf,
+            on_dimension_mismatch=bridge_cfg.on_dimension_mismatch,
         )
-        self._bridge = Ros2Bridge(node=node, config=bridge_cfg)
+        self._bridge = Ros2Bridge(node=node, config=bridge_cfg, command_queue=cmd_queue)
         self._bridge.start()
         logger.info(
             "ROS2 bridge started: pub=%s, sub=%s",
@@ -857,17 +865,40 @@ class Ros2Bridge:
         4. ``terminate()`` — graceful shutdown: terminate → join(5s) → kill → join(2s).
     """
 
-    def __init__(self, node, config: "Ros2BridgeConfig"):
+    def __init__(self, node, config: "Ros2BridgeConfig", command_queue=None):
         self._node = node
         self._config = config
+        self._command_queue = command_queue
         self._process: "multiprocessing.Process | None" = None
         self._running = False
 
     def start(self) -> None:
-        """Spawn bridge process."""
+        """Spawn bridge process with topic liveness check."""
+        # Topic liveness check per D-24 / WR-05
+        if HAS_ROS2:
+            try:
+                import rclpy
+                if rclpy.ok():
+                    existing = [n for n, _ in rclpy.get_topic_names_and_types()]
+                    missing = []
+                    if self._config.state_topic not in existing:
+                        missing.append(self._config.state_topic)
+                    if self._config.command_topic not in existing:
+                        missing.append(self._config.command_topic)
+                    if missing:
+                        msg = f"ROS2 topics not found: {missing}"
+                        if self._config.on_missing_topic == "error":
+                            raise RuntimeError(msg)
+                        elif self._config.on_missing_topic == "warn":
+                            logger.warning(msg)
+            except RuntimeError:
+                raise
+            except Exception:
+                pass  # rclpy may not be initialized yet
+
         self._process = multiprocessing.Process(
             target=_run_bridge,
-            args=(self._node,),
+            args=(self._node, self._command_queue),
             daemon=True,  # dies with parent
             name="ros2-bridge",
         )
@@ -904,14 +935,19 @@ class Ros2Bridge:
             self._node.publish_state(qpos, qvel)
 
 
-def _run_bridge(node) -> None:
+def _run_bridge(node, command_queue=None) -> None:
     """Bridge process main function.
 
     Initializes rclpy, adds the node to a MultiThreadedExecutor,
     and spins until terminated. Handles keyboard interrupt and cleanup.
+    The command_queue is injected from the parent process for cross-process IPC.
     """
     import rclpy
     from rclpy.executors import MultiThreadedExecutor
+
+    # Set the injected multiprocessing.Queue on the node if provided
+    if command_queue is not None and hasattr(node, '_command_queue'):
+        node._command_queue = command_queue
 
     rclpy.init()
     executor = MultiThreadedExecutor()

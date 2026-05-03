@@ -11,6 +11,7 @@ Architecture:
 """
 
 import logging
+import multiprocessing
 import queue
 import sys
 from typing import Optional
@@ -52,11 +53,20 @@ if not _HAS_ROS2:
             joint_names: Optional[list[str]] = None,
             publisher_topic: str = "/surg_rl/joint_states",
             command_topic: str = "/surg_rl/commands",
+            command_queue: "multiprocessing.Queue | None" = None,
+            frame_id: str = "world",
+            qos_profile: str = "sensor_data",
+            on_nan_inf: str = "raise",
+            on_dimension_mismatch: str = "zero",
         ):
             self._joint_names = joint_names or []
             self._publisher_topic = publisher_topic
             self._command_topic = command_topic
-            self._command_queue: queue.Queue = queue.Queue(maxsize=1)
+            self._frame_id = frame_id
+            self._qos_profile = qos_profile
+            self._on_nan_inf = on_nan_inf
+            self._on_dimension_mismatch = on_dimension_mismatch
+            self._command_queue = command_queue or queue.Queue(maxsize=1)
             logger.debug(
                 "Dummy Ros2BridgeNode created (ROS2 not available). "
                 "Publisher: %s, Subscriber: %s",
@@ -151,15 +161,27 @@ else:
             joint_names: list[str],
             publisher_topic: str = "/surg_rl/joint_states",
             command_topic: str = "/surg_rl/commands",
+            command_queue: "multiprocessing.Queue | None" = None,
+            frame_id: str = "world",
+            qos_profile: str = "sensor_data",
+            on_nan_inf: str = "raise",
+            on_dimension_mismatch: str = "zero",
         ):
             super().__init__("surg_rl_bridge")
             self._joint_names = list(joint_names)
             self._publisher_topic = publisher_topic
             self._command_topic = command_topic
-            self._command_queue: queue.Queue = queue.Queue(maxsize=1)
+            self._frame_id = frame_id
+            self._qos_profile = qos_profile
+            self._on_nan_inf = on_nan_inf
+            self._on_dimension_mismatch = on_dimension_mismatch
+            self._command_queue = command_queue or queue.Queue(maxsize=1)
 
+            from rclpy.qos import qos_profile_sensor_data
+
+            qos = qos_profile_sensor_data if self._qos_profile == "sensor_data" else 10
             self._pub = self.create_publisher(
-                JointState, publisher_topic, 10
+                JointState, publisher_topic, qos
             )
             self._sub = self.create_subscription(
                 Float64MultiArray,
@@ -210,20 +232,20 @@ else:
                 ValueError: If qpos or qvel contains NaN or Inf values.
             """
             # Validate no NaN/Inf (T-09-02 mitigation)
-            if not np.all(np.isfinite(qpos)):
-                raise ValueError(
-                    f"qpos contains NaN or Inf values: "
-                    f"min={np.min(qpos)}, max={np.max(qpos)}"
-                )
-            if not np.all(np.isfinite(qvel)):
-                raise ValueError(
-                    f"qvel contains NaN or Inf values: "
-                    f"min={np.min(qvel)}, max={np.max(qvel)}"
-                )
+            if not np.all(np.isfinite(qpos)) or not np.all(np.isfinite(qvel)):
+                if self._on_nan_inf == "raise":
+                    raise ValueError(
+                        f"NaN/Inf in state data: qpos min={np.min(qpos)}, "
+                        f"max={np.max(qpos)}, qvel min={np.min(qvel)}, "
+                        f"max={np.max(qvel)}"
+                    )
+                elif self._on_nan_inf == "sanitize":
+                    qpos = np.nan_to_num(qpos, nan=0.0, posinf=1e6, neginf=-1e6)
+                    qvel = np.nan_to_num(qvel, nan=0.0, posinf=1e6, neginf=-1e6)
 
             msg = JointState()
             msg.header.stamp = self.get_clock().now().to_msg()
-            msg.header.frame_id = "world"
+            msg.header.frame_id = self._frame_id
             msg.name = joint_names if joint_names else self._joint_names
             msg.position = qpos.tolist()
             msg.velocity = qvel.tolist()
@@ -261,15 +283,23 @@ else:
             # Convert to numpy array
             data = np.array(msg.data, dtype=np.float64)
 
-            # Dimension mismatch → zero action (D-23, T-09-01)
+            # Dimension mismatch → configurable behavior (D-23, T-09-01)
             if len(data) != len(self._joint_names):
-                logger.warning(
-                    "Command dimension mismatch: got %d values, "
-                    "expected %d joints. Applying zero action.",
-                    len(data),
-                    len(self._joint_names),
-                )
-                data = np.zeros(len(self._joint_names), dtype=np.float64)
+                if self._on_dimension_mismatch == "zero":
+                    logger.warning(
+                        "Command dimension mismatch: got %d values, "
+                        "expected %d joints. Applying zero action.",
+                        len(data),
+                        len(self._joint_names),
+                    )
+                    data = np.zeros(len(self._joint_names), dtype=np.float64)
+                elif self._on_dimension_mismatch == "warn":
+                    logger.warning(
+                        "Command dimension mismatch: got %d values, "
+                        "expected %d joints. Passing through as-is.",
+                        len(data),
+                        len(self._joint_names),
+                    )
 
             # Keep-latest semantics: overwrite old command (D-02, T-09-04)
             if self._command_queue.full():
