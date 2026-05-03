@@ -67,3 +67,14 @@ class TestControllerRos2Mode:
         params = controller.reset(seed=42)
         assert params is not None
         assert params.episode == 1
+
+    # ── Gap Fix Tests (Plan 09.2) ────────────────────────────────────────
+
+    def test_external_action_via_multiprocessing_queue(self):
+        """External action injected works with multiprocessing.Queue semantics."""
+        controller = EnvironmentController()
+        controller.set_real_robot_mode(True)
+        external = np.array([9.0, 8.0, 7.0])
+        controller.inject_external_action(external)
+        result = controller.get_action(np.array([1.0, 2.0, 3.0]))
+        np.testing.assert_array_equal(result, external)

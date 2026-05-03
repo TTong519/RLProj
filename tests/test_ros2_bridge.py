@@ -255,3 +255,159 @@ class TestRos2BridgeNodeMocked:
         """setup_joint_names updates the joint names list."""
         bridge.setup_joint_names(["j1", "j2", "j3", "j4"])
         assert bridge._joint_names == ["j1", "j2", "j3", "j4"]
+
+
+# ── Gap Fix Tests (Plan 09.2) ───────────────────────────────────────────
+
+
+class TestRos2BridgeNodeGapFixes:
+    """Tests for gap closure fixes: multiprocessing.Queue, config wiring, error strategies."""
+
+    @property
+    def _has_real_ros2(self):
+        """Check if real rclpy-based Ros2BridgeNode is available (not dummy)."""
+        import sys
+
+        if sys.platform == "darwin":
+            return False
+        try:
+            import rclpy  # noqa: F401
+
+            return True
+        except ImportError:
+            return False
+
+    def test_multiprocessing_queue_injection(self):
+        """multiprocessing.Queue injected via command_queue parameter works."""
+        import multiprocessing
+        import time
+        from surg_rl.ros2.bridge_node import Ros2BridgeNode
+
+        q = multiprocessing.Queue(maxsize=1)
+        node = Ros2BridgeNode(
+            joint_names=["j0", "j1"],
+            command_queue=q,
+        )
+        data = np.array([0.1, 0.2])
+        q.put(data)
+        time.sleep(0.05)
+        result = node.get_latest_command()
+        assert result is not None, "Expected command from multiprocessing.Queue"
+        np.testing.assert_array_almost_equal(result, data)
+
+    def test_frame_id_param_stored(self):
+        """frame_id parameter is stored on the node."""
+        from surg_rl.ros2.bridge_node import Ros2BridgeNode
+
+        node = Ros2BridgeNode(
+            joint_names=["j0"],
+            frame_id="base_link",
+        )
+        assert node._frame_id == "base_link"
+
+    def test_frame_id_defaults_to_world(self):
+        """frame_id defaults to 'world'."""
+        from surg_rl.ros2.bridge_node import Ros2BridgeNode
+
+        node = Ros2BridgeNode(joint_names=["j0"])
+        assert node._frame_id == "world"
+
+    def test_on_nan_inf_raise_mode(self):
+        """NaN raises ValueError when on_nan_inf='raise' (only with real rclpy)."""
+        from surg_rl.ros2.bridge_node import Ros2BridgeNode
+
+        if not self._has_real_ros2:
+            pytest.skip("Real Ros2BridgeNode not available — dummy node has no NaN validation")
+
+        node = Ros2BridgeNode(
+            joint_names=["j0", "j1"],
+            on_nan_inf="raise",
+        )
+        with pytest.raises(ValueError):
+            node.publish_state(np.array([0.0, np.nan]), np.array([0.0, 0.0]))
+
+    def test_on_nan_inf_sanitize_mode(self):
+        """NaN sanitized when on_nan_inf='sanitize' — no exception."""
+        from surg_rl.ros2.bridge_node import Ros2BridgeNode
+
+        if not self._has_real_ros2:
+            pytest.skip("Real Ros2BridgeNode not available — dummy node has no NaN validation")
+
+        node = Ros2BridgeNode(
+            joint_names=["j0", "j1"],
+            on_nan_inf="sanitize",
+        )
+        try:
+            node.publish_state(np.array([0.0, np.nan]), np.array([0.0, 0.0]))
+        except ValueError:
+            pytest.fail(
+                "publish_state with on_nan_inf='sanitize' should not raise ValueError"
+            )
+
+    def test_on_dimension_mismatch_stored(self):
+        """on_dimension_mismatch parameter is stored."""
+        from surg_rl.ros2.bridge_node import Ros2BridgeNode
+
+        node = Ros2BridgeNode(
+            joint_names=["j0"],
+            on_dimension_mismatch="zero",
+        )
+        assert node._on_dimension_mismatch == "zero"
+
+    def test_on_dimension_mismatch_warn_mode(self):
+        """on_dimension_mismatch='warn' — parameter is accepted on all platforms."""
+        from surg_rl.ros2.bridge_node import Ros2BridgeNode
+
+        node = Ros2BridgeNode(
+            joint_names=["j0"],
+            on_dimension_mismatch="warn",
+        )
+        assert node._on_dimension_mismatch == "warn"
+
+    def test_qos_profile_stored(self):
+        """qos_profile parameter is stored."""
+        from surg_rl.ros2.bridge_node import Ros2BridgeNode
+
+        node = Ros2BridgeNode(
+            joint_names=["j0"],
+            qos_profile="default",
+        )
+        assert node._qos_profile == "default"
+
+    def test_multiprocessing_queue_cross_process(self):
+        """multiprocessing.Queue works correctly across process boundary."""
+        import multiprocessing
+        import time
+
+        q = multiprocessing.Queue(maxsize=1)
+
+        p = multiprocessing.Process(target=_child_put_queue, args=(q, np.array([7.0, 8.0, 9.0])))
+        p.start()
+        p.join()
+        time.sleep(0.05)
+        result = q.get_nowait()
+        assert result.tolist() == [7.0, 8.0, 9.0]
+
+    def test_dummy_node_accepts_all_params(self):
+        """Dummy Ros2BridgeNode accepts all new gap-fix parameters."""
+        import multiprocessing
+        from surg_rl.ros2.bridge_node import Ros2BridgeNode
+
+        q = multiprocessing.Queue(maxsize=1)
+        node = Ros2BridgeNode(
+            joint_names=["j0"],
+            command_queue=q,
+            frame_id="odom",
+            qos_profile="default",
+            on_nan_inf="sanitize",
+            on_dimension_mismatch="warn",
+        )
+        assert node._frame_id == "odom"
+        assert node._qos_profile == "default"
+        assert node._on_nan_inf == "sanitize"
+        assert node._on_dimension_mismatch == "warn"
+
+
+def _child_put_queue(q, data):
+    """Module-level helper for multiprocessing test (spawn-safe)."""
+    q.put(data)
