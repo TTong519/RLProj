@@ -7,6 +7,8 @@ the package degrades gracefully on platforms without them.
 Exports:
     HAS_ROS2: bool indicating whether rclpy is available.
     Ros2BridgeConfig: Pydantic v2 dataclass for bridge configuration.
+    Ros2BridgeNode: Bridge node for state publishing / command subscribing.
+    TrajectoryReplay: Self-contained SB3 checkpoint replay to ROS2.
 """
 
 import logging
@@ -42,5 +44,11 @@ else:
 # ── Public API ─────────────────────────────────────────────────────────
 from surg_rl.ros2.config import Ros2BridgeConfig  # noqa: E402, F401
 from surg_rl.ros2.bridge_node import Ros2BridgeNode  # noqa: E402, F401
+from surg_rl.ros2.replay import TrajectoryReplay  # noqa: E402, F401
 
-__all__ = ["HAS_ROS2", "Ros2BridgeConfig", "Ros2BridgeNode"]
+__all__ = [
+    "HAS_ROS2",
+    "Ros2BridgeConfig",
+    "Ros2BridgeNode",
+    "TrajectoryReplay",
+]
