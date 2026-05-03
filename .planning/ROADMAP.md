@@ -60,6 +60,27 @@
 - [x] 07-03-PLAN.md — CLI --render-human/--render-fps flags, comprehensive test suite
 
 **Success criteria:**
+1. `BaseSimulator.render(mode="human")` creates a non-blocking window that survives `reset()`
+2. `SurgicalEnv.step()` does not block when `render_mode="human"` is active
+3. Render FPS is throttled to a configurable target (default 30 FPS)
+4. `surg-rl train` accepts `--render-human` flag that opens a live viewer
+5. Viewer window closes cleanly on `env.close()` and SIGINT without segfault
+
+### Phase 8: Distributed Training with Ray/RLlib (6 plans)
+
+**Goal:** Scale training beyond single-process SB3 with Ray RLlib distributed execution, multi-GPU support, and hyperparameter search.
+
+**Requirements mapped:** DIST-01 through DIST-06
+
+**Plans:**
+- [x] 08-01-PLAN.md — RLlib env registration (env_creator + register_env), RllibConfig dataclass, pyproject.toml [distributed] extra
+- [x] 08-02-PLAN.md — train_rllib() entrypoint, Ray init/shutdown, single-node multi-GPU auto-config
+- [x] 08-03-PLAN.md — Ray Tune integration, build_tune_search_space(), run_tune_experiment(), reward weight search
+- [x] 08-04-PLAN.md — Checkpoint inspection utilities (RLlib + SB3), compare_checkpoints(), documented migration path
+- [x] 08-05-PLAN.md — CLI train-rllib / tune / checkpoint-inspect commands
+- [x] 08-06-PLAN.md — Comprehensive test suite (7 test files, 30+ tests), Nyquist validation map
+
+**Success criteria:**
 1. `SurgicalEnv` is registerable as a custom RLlib environment with proper `env_config` support
 2. `surg_rl.rl.rllib.train_rllib(config)` runs a minimal PPO training loop to convergence (reward improves over 10k steps)
 3. A single-node machine with 2+ GPUs trains without manual Ray cluster setup (`ray.init()` auto-detects)

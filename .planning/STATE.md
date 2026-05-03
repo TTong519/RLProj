@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-05-02)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** Milestone v0.2.0 — Phase 6 complete, Phase 7 executing
+**Current focus:** Milestone v0.2.0 — Phase 7 complete, preparing for Phase 8
 
 ## Current Position
 
-Phase: 07-real-time-rendering
-Plan: 07-01, 07-02, 07-03 (all fixed and ready)
-Status: Executing — plans validated and committed
-Last activity: 2026-05-02 — Plans fixed after review (_create_simulator wiring, PyBullet construction-time GUI)
+Phase: 08-distributed-training
+Plan: 08-01 through 08-06 (all planned and ready)
+Status: Phase 8 planning complete — 6 plans created, research validated
+Last activity: 2026-05-02 — Phase 8 manually planned after gsd-sdk workflow dependency failure
 
-Progress: [████████████████████░░░░░░░░░░░░░░░░░░░░] 50%
+Progress: [██████████████████████████░░░░░░░░░░░░] 65%
 
 ## Performance Metrics
 
 - **Previous milestone:** v0.1.0 — 12 plans, 43 commits, 607 tests, 33/33 UAT passed
-- **Current milestone:** v0.2.0 — Phase 6 complete (628 tests, 0 failures), Phase 7 executing
+- **Current milestone:** v0.2.0 — Phase 6 complete (628 tests), Phase 7 complete (641 tests, 0 failures)
 
 ## Decisions
 
@@ -50,12 +50,8 @@ Progress: [████████████████████░░░
 
 ## Todos
 
-- [ ] Phase 7: Execute 07-01 (backend viewer infrastructure)
-- [ ] Phase 7: Execute 07-02 (env integration)
-- [ ] Phase 7: Execute 07-03 (CLI + tests)
-- [ ] Phase 7: Create SUMMARY.md files
 - [ ] Phase 8: Distributed Training with Ray/RLlib
 - [ ] Phase 9: ROS2 Bridge for Real Hardware
 
 ---
-*Updated: 2026-05-02 — Phase 7 plans fixed and validated*
+*Updated: 2026-05-02 — Phase 7 complete, 641 passed, 18 rendering tests*
