@@ -93,9 +93,17 @@ tracking = [
     "mlflow>=2.10.0",
 ]
 
+# Ray/RLlib: pip-installable, requires Python >=3.10
 distributed = [
     "ray[rllib]>=2.10",
     "tune-sklearn>=0.4.6",
+]
+
+# ros2: apt deps required (rclpy, sensor-msgs, geometry-msgs, std-msgs)
+# Install: sudo apt install ros-humble-rclpy ros-humble-sensor-msgs ros-humble-geometry-msgs ros-humble-std-msgs
+# Then: source /opt/ros/humble/setup.bash
+ros2 = [
+    "PyYAML>=6.0",
 ]
 
 docs = [
