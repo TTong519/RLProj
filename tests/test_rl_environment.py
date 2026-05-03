@@ -78,9 +78,9 @@ class TestSurgicalEnvLifecycle:
         )
         env = SurgicalEnv(config)
         env.reset()
-        action = np.zeros(6, dtype=np.float32)
-        obs, reward, terminated, truncated, info = env.step(action)
-        assert isinstance(obs, dict)
+        env.step(env.action_space.sample())
+        obs, reward, terminated, truncated, info = env.step(env.action_space.sample())
+        assert truncated is True
         env.close()
 
 
