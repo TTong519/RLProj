@@ -93,6 +93,11 @@ tracking = [
     "mlflow>=2.10.0",
 ]
 
+distributed = [
+    "ray[rllib]>=2.10",
+    "tune-sklearn>=0.4.6",
+]
+
 docs = [
     "sphinx>=7.0.0",
     "sphinx-rtd-theme>=2.0.0",

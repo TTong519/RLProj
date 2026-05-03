@@ -186,3 +186,10 @@ __all__ = [
     "TensorBoardCallback",
     "TrainingProgressCallback",
 ]
+
+try:
+    from surg_rl.rl.rllib import RllibConfig, train_rllib  # type: ignore[import,unused-import]
+
+    __all__.extend(["RllibConfig", "train_rllib"])
+except ImportError:
+    pass
