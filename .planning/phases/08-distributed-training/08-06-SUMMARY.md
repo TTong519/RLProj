@@ -73,8 +73,9 @@ summary: "Tests + Nyquist validation map — 26 new tests, full suite green"
 ## Regression Check
 
 **Before Phase 8:** 641 passed, 2 xfailed, 4 xpassed.
-**After Phase 8:** 667 passed, 3 skipped, 9 deselected, 2 xfailed, 4 xpassed.
-**Delta:** +26 new tests passing, 0 regressions.
+**After Phase 8 (no Ray):** 667 passed, 3 skipped, 9 deselected, 2 xfailed, 4 xpassed.
+**After Phase 8 (with Ray 2.55.1 installed):** 674 passed, 0 failed.
+**Delta:** +33 new tests passing, 0 regressions.
 
 ## Deviations from plan
 

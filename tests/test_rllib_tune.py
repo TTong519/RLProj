@@ -92,10 +92,10 @@ def test_build_tune_search_space_reward_weights():
     reason="ray[rllib] not installed",
 )
 def test_build_tune_search_space_returns_tune_objects():
-    from ray import tune
+    from ray.tune.search.sample import Categorical
     from surg_rl.rl.rllib.config import RllibConfig
     from surg_rl.rl.rllib.tune_integration import build_tune_search_space
 
     base = RllibConfig(algorithm="PPO")
     space = build_tune_search_space(base, scene_paths=["a.json"])
-    assert isinstance(space["env_config"]["scene_path"], tune.choice.__class__)
+    assert isinstance(space["env_config"]["scene_path"], Categorical)

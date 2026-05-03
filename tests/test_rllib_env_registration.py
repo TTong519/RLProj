@@ -120,13 +120,14 @@ def test_rllib_package_import_no_ray():
     assert RllibConfig is not None
 
 
-def test_rllib_lazy_fail_without_ray(monkeypatch):
+def test_rllib_lazy_fail_without_ray():
     """Calling ray-dependent functions gives a helpful ImportError."""
-    monkeypatch.setitem(sys.modules, "ray", None)
+    import surg_rl.rl.rllib as rllib_mod
 
-    # Force _check_rllib to think ray is missing without breaking imports
-    with monkeypatch.context():
-        from surg_rl.rl.rllib import _check_rllib
-
+    original_ray = rllib_mod.ray
+    try:
+        rllib_mod.ray = None
         with pytest.raises(ImportError, match="Ray/RLlib is not installed"):
-            _check_rllib()
+            rllib_mod._check_rllib()
+    finally:
+        rllib_mod.ray = original_ray
