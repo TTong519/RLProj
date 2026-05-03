@@ -439,5 +439,195 @@ def evaluate(
         raise typer.Exit(1) from e
 
 
+@app.command(name="train-rllib")
+def cli_train_rllib(
+    scene: str = typer.Option("scenes/simple_suturing.json", "--scene", "-s", help="Scene definition JSON"),
+    algorithm: str = typer.Option("PPO", "--algorithm", "-a", help="RL algorithm"),
+    timesteps: int = typer.Option(100_000, "--timesteps", "-t", help="Total training timesteps"),
+    n_envs: int = typer.Option(1, "--n-envs", "-n", help="Number of parallel environments"),
+    lr: float = typer.Option(3e-4, "--lr", help="Learning rate"),
+    gamma: float = typer.Option(0.99, "--gamma", help="Discount factor"),
+    seed: int = typer.Option(42, "--seed", help="Random seed"),
+    log_dir: str = typer.Option("logs/rllib", "--log-dir", help="Directory for RLlib results/checkpoints"),
+    checkpoint_freq: int = typer.Option(50_000, "--checkpoint-freq", help="Save checkpoint every N timesteps"),
+    local_mode: bool = typer.Option(False, "--local-mode", help="Run Ray in local mode"),
+    verbose: bool = typer.Option(True, "--verbose", help="Verbose logging"),
+) -> None:
+    """Train a policy with Ray RLlib.
+
+    Examples::
+
+        surg-rl train-rllib --scene scenes/suturing.json --timesteps 200000
+        surg-rl train-rllib --algorithm SAC --n-envs 4 --lr 1e-4
+    """
+    try:
+        from surg_rl.rl.rllib.config import RllibConfig
+        from surg_rl.rl.rllib.train import train_rllib
+
+        config = RllibConfig(
+            env_name="surg-rl",
+            env_config={"scene_path": scene, "simulator_type": "mujoco"},
+            algorithm=algorithm,
+            total_timesteps=timesteps,
+            num_env_runners=max(0, n_envs - 1),
+            lr=lr,
+            gamma=gamma,
+            seed=seed,
+            save_dir=log_dir,
+            checkpoint_freq=checkpoint_freq,
+        )
+
+        console.print("[bold blue]Starting RLlib Training[/bold blue]")
+        console.print(f"  • Scene: {scene}")
+        console.print(f"  • Algorithm: {algorithm}")
+        console.print(f"  • Timesteps: {timesteps:,}")
+        console.print(f"  • Environments: {n_envs}")
+
+        final_ckpt = train_rllib(config, local_mode=local_mode)
+        console.print(f"[bold green]Training complete![/bold green] Final checkpoint: {final_ckpt}")
+
+    except ImportError as exc:
+        console.print(f"[bold red]Import Error:[/bold red] {exc}")
+        console.print(
+            '[dim]Make sure ray[rllib] is installed: pip install "surg-rl[distributed]"[/dim]'
+        )
+        raise typer.Exit(1) from exc
+
+
+@app.command(name="tune")
+def cli_tune(
+    scene: str = typer.Option("scenes/simple_suturing.json", "--scene", "-s", help="Scene definition JSON"),
+    algorithm: str = typer.Option("PPO", "--algorithm", "-a", help="RL algorithm"),
+    timesteps: int = typer.Option(50_000, "--timesteps", "-t", help="Total training timesteps per trial"),
+    num_samples: int = typer.Option(3, "--num-samples", "-n", help="Number of Tune trials"),
+    max_iters: int = typer.Option(10, "--max-iters", help="Max iterations per trial"),
+    lr_min: float = typer.Option(1e-5, "--lr-min", help="Learning rate search lower bound"),
+    lr_max: float = typer.Option(1e-3, "--lr-max", help="Learning rate search upper bound"),
+    gamma_min: float = typer.Option(0.95, "--gamma-min", help="Gamma search lower bound"),
+    gamma_max: float = typer.Option(0.999, "--gamma-max", help="Gamma search upper bound"),
+    log_dir: str = typer.Option("logs/tune", "--log-dir", help="Directory for Tune results"),
+    scheduler: str = typer.Option("asha", "--scheduler", help="ASHA or PBT"),
+    local_mode: bool = typer.Option(True, "--local-mode", help="Run Ray in local mode"),
+) -> None:
+    """Run Ray Tune hyperparameter search.
+
+    Examples::
+
+        surg-rl tune --scene scenes/suturing.json --num-samples 5
+        surg-rl tune --algorithm SAC --scheduler pbt
+    """
+    try:
+        from ray import tune
+        from surg_rl.rl.rllib.config import RllibConfig
+        from surg_rl.rl.rllib.tune_integration import build_tune_search_space, run_tune_experiment
+
+        base_config = RllibConfig(
+            env_config={"scene_path": scene, "simulator_type": "mujoco"},
+            algorithm=algorithm,
+            total_timesteps=timesteps,
+            save_dir=log_dir,
+        )
+
+        param_space = build_tune_search_space(
+            base_config,
+            lr_range=(lr_min, lr_max),
+            gamma_range=(gamma_min, gamma_max),
+        )
+
+        console.print("[bold blue]Starting Ray Tune Experiment[/bold blue]")
+        console.print(f"  • Scene: {scene}")
+        console.print(f"  • Algorithm: {algorithm}")
+        console.print(f"  • Trials: {num_samples}")
+        console.print(f"  • Max iterations: {max_iters}")
+        console.print(f"  • Scheduler: {scheduler}")
+
+        results = run_tune_experiment(
+            base_config,
+            param_space=param_space,
+            num_samples=num_samples,
+            max_training_iterations=max_iters,
+            scheduler=scheduler,
+            local_mode=local_mode,
+        )
+
+        best = results.get_best_result()
+        if best and hasattr(best, "metrics"):
+            reward = best.metrics.get("env_runners/episode_return_mean", float("nan"))
+            console.print(f"[bold green]Best reward: {reward:.2f}[/bold green]")
+        console.print(f"Results saved to: {log_dir}/best_config.json")
+
+    except ImportError as exc:
+        console.print(f"[bold red]Import Error:[/bold red] {exc}")
+        console.print(
+            '[dim]Make sure ray[rllib] is installed: pip install "surg-rl[distributed]"[/dim]'
+        )
+        raise typer.Exit(1) from exc
+
+
+@app.command(name="checkpoint-inspect")
+def cli_checkpoint_inspect(
+    path: str = typer.Argument(..., help="Path to checkpoint (RLlib dir or SB3 zip)"),
+    compare_with: str | None = typer.Option(None, "--compare-with", help="Path to second checkpoint for comparison"),
+) -> None:
+    """Inspect checkpoint meta-data and compare RLlib vs SB3 formats.
+
+    Examples::
+
+        surg-rl checkpoint-inspect logs/rllib/checkpoint_50000
+        surg-rl checkpoint-inspect models/ppo_model.zip --compare-with logs/rllib/final
+    """
+    try:
+        from surg_rl.rl.rllib.checkpoint_utils import inspect_rllib_checkpoint, inspect_sb3_checkpoint, compare_checkpoints
+
+        path_obj = Path(path)
+        if not path_obj.exists():
+            console.print(f"[bold red]Path not found:[/bold red] {path}")
+            raise typer.Exit(1)
+
+        # Sniff format
+        if path_obj.is_dir():
+            info = inspect_rllib_checkpoint(path)
+        else:
+            info = inspect_sb3_checkpoint(path)
+
+        console.print(f"[bold cyan]Checkpoint: {path}[/bold cyan]")
+        console.print(f"  Format: {info['format'].upper()}")
+        console.print(f"  Algorithm: {info.get('algorithm', 'unknown')}")
+        if info.get('layer_shapes'):
+            console.print(f"  Layers: {len(info['layer_shapes'])}")
+            for name, shape in list(info['layer_shapes'].items())[:5]:
+                console.print(f"    {name}: {shape}")
+            if len(info['layer_shapes']) > 5:
+                console.print(f"    ... and {len(info['layer_shapes']) - 5} more")
+
+        if compare_with:
+            other_obj = Path(compare_with)
+            if not other_obj.exists():
+                console.print(f"[bold red]Path not found:[/bold red] {compare_with}")
+                raise typer.Exit(1)
+
+            if other_obj.is_dir():
+                other_info = inspect_rllib_checkpoint(compare_with)
+            else:
+                other_info = inspect_sb3_checkpoint(compare_with)
+
+            comparison = compare_checkpoints(
+                info if info['format'] == 'rllib' else other_info,
+                info if info['format'] == 'sb3' else other_info,
+            )
+            console.print(f"\n[bold cyan]Comparison:[/bold cyan]")
+            console.print(f"  Input dim match: {comparison.get('input_dim_match')}")
+            console.print(f"  Output dim match: {comparison.get('output_dim_match')}")
+            console.print(f"\n[bold yellow]Notes:[/bold yellow]")
+            console.print(comparison["notes"])
+
+    except ImportError as exc:
+        console.print(f"[bold red]Import Error:[/bold red] {exc}")
+        console.print(
+            '[dim]Make sure required dependencies are installed.'
+        )
+        raise typer.Exit(1) from exc
+
+
 if __name__ == "__main__":
     app()
