@@ -63,7 +63,7 @@ class Ros2BridgeConfig:
     state_topic: str
     command_topic: str
     frame_id: str = DEFAULT_FRAME_ID
-    batch_size: int = DEFAULT_BATCH_SIZE
+    batch_size: int = DEFAULT_BATCH_SIZE  # reserved for future batching (always 1 per step)
     qos_profile: str = DEFAULT_QOS_PROFILE
     on_missing_topic: str = DEFAULT_ON_MISSING_TOPIC
     on_nan_inf: str = DEFAULT_ON_NAN_INF
