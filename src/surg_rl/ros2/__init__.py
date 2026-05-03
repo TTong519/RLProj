@@ -11,10 +11,11 @@ Exports:
     TrajectoryReplay: Self-contained SB3 checkpoint replay to ROS2.
 """
 
-import logging
 import sys
 
-logger = logging.getLogger(__name__)
+from surg_rl.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 # ── HAS_ROS2 flag ──────────────────────────────────────────────────────
 # Import guard: attempt to import rclpy (Linux-only, apt-installed).

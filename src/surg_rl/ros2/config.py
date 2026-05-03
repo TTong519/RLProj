@@ -4,14 +4,15 @@ Provides Ros2BridgeConfig — type-safe config with 8 fields, YAML loading,
 and configurable error strategies per the Phase 9 context decisions.
 """
 
-import logging
 import warnings
 from pathlib import Path
 from typing import ClassVar, Optional
 
 import yaml
 
-logger = logging.getLogger(__name__)
+from surg_rl.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 # We use pydantic.dataclasses.dataclass (not BaseModel) for consistency with
 # the EnvironmentControllerConfig pattern used in the dynamics module.

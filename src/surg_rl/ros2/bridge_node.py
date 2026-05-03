@@ -10,7 +10,6 @@ Architecture:
     - Error validation: NaN/Inf detection, dimension mismatch handling.
 """
 
-import logging
 import multiprocessing
 import queue
 import sys
@@ -18,7 +17,9 @@ from typing import Optional
 
 import numpy as np
 
-logger = logging.getLogger(__name__)
+from surg_rl.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 # ── Detect ROS2 availability (mirrors __init__.py guard) ──────────────
 # We duplicate the check here to avoid a circular import with
