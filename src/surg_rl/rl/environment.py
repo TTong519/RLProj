@@ -5,6 +5,10 @@ environment that wraps the simulator and dynamic environment controller
 into a standard interface for RL training with Stable-Baselines3.
 """
 
+from __future__ import annotations
+
+import multiprocessing
+import platform  # noqa: F401 — imported at module level for test patching
 from dataclasses import dataclass
 from typing import Any
 
@@ -15,6 +19,7 @@ from surg_rl.dynamics.environment_controller import (
     EnvironmentController,
     EnvironmentControllerConfig,
 )
+from surg_rl.ros2 import HAS_ROS2  # noqa: F401 — used by bridge lifecycle
 from surg_rl.scene_definition.loader import SceneLoader
 from surg_rl.scene_definition.schema import SceneDefinition
 from surg_rl.simulators.base_simulator import BaseSimulator, Observation
@@ -80,6 +85,7 @@ class SurgicalEnvConfig:
     use_adaptive_difficulty: bool = False
     controller_config: EnvironmentControllerConfig | None = None
     seed: int | None = None
+    ros2_bridge_config: "Ros2BridgeConfig | None" = None
 
 
 class SurgicalEnv(gym.Env):
@@ -187,6 +193,10 @@ class SurgicalEnv(gym.Env):
         # Initialize environment controller
         self._controller: EnvironmentController | None = None
         self._setup_controller()
+
+        # ROS2 Bridge (D-01: spawn as separate multiprocessing Process)
+        self._bridge: "Ros2Bridge | None" = None
+        self._setup_bridge()
 
         # Episode state
         self._step_count = 0
@@ -350,6 +360,55 @@ class SurgicalEnv(gym.Env):
                 seed=self.config.seed,
             )
 
+    def _setup_bridge(self) -> None:
+        """Set up the ROS2 bridge Process (D-01).
+
+        Spawns a separate multiprocessing.Process running Ros2BridgeNode
+        when ros2_bridge_config is provided and ROS2 is available.
+
+        Per D-13: on macOS, logs warning and disables bridge.
+        Per D-01: bridge spawns at __init__ time, terminates at close().
+        """
+        if self.config.ros2_bridge_config is None:
+            return
+
+        # Platform check (D-13)
+        system = platform.system()
+        if system == "Darwin":
+            logger.warning(
+                "ROS2 bridge not supported on macOS. "
+                "Use Docker Linux container: docker run -v $(pwd):/workspace ros:humble."
+            )
+            return
+
+        if not HAS_ROS2:
+            logger.warning(
+                "rclpy not installed — bridge disabled. "
+                "Install via apt: ros-humble-rclpy"
+            )
+            return
+
+        bridge_cfg = self.config.ros2_bridge_config
+
+        # Get joint names from simulator
+        joint_states = self._simulator.get_joint_states()
+        joint_names = list(joint_states.keys()) if joint_states else ["joint_0"]
+
+        from surg_rl.ros2.bridge_node import Ros2BridgeNode
+
+        node = Ros2BridgeNode(
+            joint_names=joint_names,
+            publisher_topic=bridge_cfg.state_topic,
+            command_topic=bridge_cfg.command_topic,
+        )
+        self._bridge = Ros2Bridge(node=node, config=bridge_cfg)
+        self._bridge.start()
+        logger.info(
+            "ROS2 bridge started: pub=%s, sub=%s",
+            bridge_cfg.state_topic,
+            bridge_cfg.command_topic,
+        )
+
     def reset(
         self,
         seed: int | None = None,
@@ -419,6 +478,11 @@ class SurgicalEnv(gym.Env):
         """
         # Process action through action builder
         processed_action = self._action_builder.process_action(action)
+
+        # Route through controller mode switch (D-11):
+        # sim mode → passthrough, real_robot → external action from queue
+        if self._controller is not None:
+            processed_action = self._controller.get_action(processed_action)
 
         # Apply domain randomization noise
         if self._controller is not None:
@@ -491,6 +555,11 @@ class SurgicalEnv(gym.Env):
 
         self._last_observation = obs_dict
 
+        # Publish joint state via ROS2 bridge (D-19: every step)
+        if self._bridge is not None:
+            sim_state = self._simulator.get_state()
+            self._bridge.publish_joint_state(sim_state.qpos, sim_state.qvel)
+
         # Update environment controller
         if self._controller is not None:
             self._controller.step_update(self._simulator)
@@ -509,7 +578,16 @@ class SurgicalEnv(gym.Env):
         return None
 
     def close(self) -> None:
-        """Clean up environment resources."""
+        """Clean up environment resources.
+
+        Order matters — bridge terminates first (before simulator cleanup)
+        per D-01 to avoid dangling shared-state references.
+        """
+        # Terminate ROS2 bridge before simulator cleanup (D-01)
+        if self._bridge is not None:
+            self._bridge.terminate()
+            logger.info("ROS2 bridge terminated")
+
         if self._simulator is not None:
             if hasattr(self._simulator, "stop_viewer"):
                 self._simulator.stop_viewer()
@@ -758,3 +836,91 @@ def make_vec_env(
         vec_env_cls = DummyVecEnv if n_envs == 1 else SubprocVecEnv
 
     return vec_env_cls([env_factory(i) for i in range(n_envs)])
+
+
+# ============================================================================
+# ROS2 Bridge Process Wrapper
+# ============================================================================
+
+
+class Ros2Bridge:
+    """Manages Ros2BridgeNode lifecycle as a separate multiprocessing Process.
+
+    Per D-01: the bridge runs in a separate Process so rclpy.spin() doesn't
+    block the training loop. The main thread calls ``publish_joint_state()``
+    directly on the node object (rclpy Node is thread-safe for publish).
+
+    Lifecycle:
+        1. ``Ros2Bridge(node, config)`` — create wrapper.
+        2. ``start()`` — spawn child Process running rclpy.spin().
+        3. ``publish_joint_state(qpos, qvel)`` — called from main at every step().
+        4. ``terminate()`` — graceful shutdown: terminate → join(5s) → kill → join(2s).
+    """
+
+    def __init__(self, node, config: "Ros2BridgeConfig"):
+        self._node = node
+        self._config = config
+        self._process: "multiprocessing.Process | None" = None
+        self._running = False
+
+    def start(self) -> None:
+        """Spawn bridge process."""
+        self._process = multiprocessing.Process(
+            target=_run_bridge,
+            args=(self._node,),
+            daemon=True,  # dies with parent
+            name="ros2-bridge",
+        )
+        self._process.start()
+        self._running = True
+
+    def terminate(self) -> None:
+        """Terminate bridge process and join.
+
+        Per T-09-07: escalation chain ensures cleanup even if process is
+        unresponsive: terminate → join(5s) → kill → join(2s).
+        """
+        if self._process is not None and self._process.is_alive():
+            self._process.terminate()
+            self._process.join(timeout=5.0)
+            if self._process.is_alive():
+                self._process.kill()
+                self._process.join(timeout=2.0)
+            self._running = False
+
+    def publish_joint_state(
+        self, qpos: "np.ndarray", qvel: "np.ndarray"
+    ) -> None:
+        """Publish joint state from main process — delegates to node.
+
+        Called at every ``SurgicalEnv.step()`` call when bridge is active.
+        The node's ``publish_state()`` method is thread-safe.
+
+        Args:
+            qpos: Joint positions array.
+            qvel: Joint velocities array.
+        """
+        if self._running:
+            self._node.publish_state(qpos, qvel)
+
+
+def _run_bridge(node) -> None:
+    """Bridge process main function.
+
+    Initializes rclpy, adds the node to a MultiThreadedExecutor,
+    and spins until terminated. Handles keyboard interrupt and cleanup.
+    """
+    import rclpy
+    from rclpy.executors import MultiThreadedExecutor
+
+    rclpy.init()
+    executor = MultiThreadedExecutor()
+    executor.add_node(node)
+    try:
+        executor.spin()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        executor.shutdown()
+        node.destroy_node()
+        rclpy.shutdown()
