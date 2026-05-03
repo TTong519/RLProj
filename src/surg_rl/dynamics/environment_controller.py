@@ -5,10 +5,16 @@ parameter randomization, curriculum learning, and adaptive difficulty
 into a unified interface.
 """
 
+from __future__ import annotations
+
+import logging
+import queue
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 from surg_rl.scene_definition.schema import (
     DomainRandomizationConfig,
@@ -136,6 +142,12 @@ class EnvironmentController:
 
         # Current parameters
         self._current_params = ParameterSnapshot()
+
+        # ROS2 real-robot mode (D-10, D-11, D-12)
+        self._mode: Literal["sim", "real_robot"] = "sim"
+        self._external_action_queue: queue.Queue = queue.Queue(maxsize=1)
+        self._last_action: np.ndarray | None = None
+
         self._step = 0
         self._episode = 0
 
@@ -170,6 +182,82 @@ class EnvironmentController:
         )
 
         return cls(config=config)
+
+    # === Real-Robot Mode (ROS2 Bridge) ===
+
+    @property
+    def mode(self) -> str:
+        """Current mode: 'sim' (RL policy) or 'real_robot' (external commands)."""
+        return self._mode
+
+    def set_real_robot_mode(self, enabled: bool) -> None:
+        """Switch between simulation and real-robot mode.
+
+        Per D-12: sets _mode to 'sim' or 'real_robot'.
+        Logs the mode transition at INFO level.
+
+        Args:
+            enabled: True to switch to real_robot mode, False for sim mode.
+        """
+        self._mode = "real_robot" if enabled else "sim"
+        logger.info("Mode switched to %s", self._mode)
+
+    def inject_external_action(self, action: np.ndarray) -> None:
+        """Inject an external action into the command queue.
+
+        Per D-02 (keep-latest): uses queue.Queue(maxsize=1). If the queue
+        is full, discards the old command and stores the new one.
+
+        Args:
+            action: Action array from external source (e.g., ROS2 command).
+        """
+        if self._external_action_queue.full():
+            try:
+                self._external_action_queue.get_nowait()
+            except queue.Empty:
+                pass
+        self._external_action_queue.put_nowait(action.copy())
+
+    def get_action(self, policy_action: np.ndarray) -> np.ndarray:
+        """Get the action to apply to the simulator.
+
+        Per D-11: routing depending on current mode:
+        - sim mode: returns the policy action unchanged.
+        - real_robot mode: returns external action from queue if available,
+          or hold-last action if queue is empty.
+
+        Per D-25: validates that the selected action has no NaN/Inf values.
+
+        Args:
+            policy_action: Action proposed by the RL policy.
+
+        Returns:
+            Action to apply to the simulator (either policy or external).
+
+        Raises:
+            ValueError: If selected action contains NaN or Inf values.
+        """
+        if self._mode == "sim":
+            return policy_action
+
+        # real_robot mode: try external queue, fallback to hold-last
+        try:
+            external = self._external_action_queue.get_nowait()
+            self._last_action = external
+        except queue.Empty:
+            if self._last_action is None:
+                # No external command received yet — use policy action
+                return policy_action
+            logger.debug("No external command, holding last action")
+            external = self._last_action
+
+        # Validate no NaN/Inf (D-25, T-09-06 mitigation)
+        if not np.all(np.isfinite(external)):
+            raise ValueError(
+                f"External action contains NaN or Inf values: "
+                f"min={np.min(external)}, max={np.max(external)}"
+            )
+        return external
 
     # === Properties ===
 
@@ -455,6 +543,7 @@ class EnvironmentController:
         """
         status = {
             "enabled": self.config.enabled,
+            "mode": self._mode,
             "episode": self._episode,
             "step": self._step,
         }
