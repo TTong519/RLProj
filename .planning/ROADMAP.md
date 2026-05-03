@@ -73,12 +73,12 @@
 **Requirements mapped:** DIST-01 through DIST-06
 
 **Plans:**
-- [x] 08-01-PLAN.md — RLlib env registration (env_creator + register_env), RllibConfig dataclass, pyproject.toml [distributed] extra
-- [x] 08-02-PLAN.md — train_rllib() entrypoint, Ray init/shutdown, single-node multi-GPU auto-config
-- [x] 08-03-PLAN.md — Ray Tune integration, build_tune_search_space(), run_tune_experiment(), reward weight search
-- [x] 08-04-PLAN.md — Checkpoint inspection utilities (RLlib + SB3), compare_checkpoints(), documented migration path
-- [x] 08-05-PLAN.md — CLI train-rllib / tune / checkpoint-inspect commands
-- [x] 08-06-PLAN.md — Comprehensive test suite (7 test files, 30+ tests), Nyquist validation map
+- [x] 08-01-PLAN.md ✅ 2026-05-02 — RLlib env registration (env_creator + register_env), RllibConfig dataclass, pyproject.toml [distributed] extra
+- [x] 08-02-PLAN.md ✅ 2026-05-02 — train_rllib() entrypoint, Ray init/shutdown, single-node multi-GPU auto-config
+- [x] 08-03-PLAN.md ✅ 2026-05-02 — Ray Tune integration, build_tune_search_space(), run_tune_experiment(), reward weight search
+- [x] 08-04-PLAN.md ✅ 2026-05-02 — Checkpoint inspection utilities (RLlib + SB3), compare_checkpoints(), documented migration path
+- [x] 08-05-PLAN.md ✅ 2026-05-02 — CLI train-rllib / tune / checkpoint-inspect commands
+- [x] 08-06-PLAN.md ✅ 2026-05-02 — Comprehensive test suite (7 test files, 26 tests), Nyquist validation map
 
 **Success criteria:**
 1. `SurgicalEnv` is registerable as a custom RLlib environment with proper `env_config` support

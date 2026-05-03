@@ -10,16 +10,22 @@ See: .planning/PROJECT.md (updated 2026-05-02)
 ## Current Position
 
 Phase: 08-distributed-training
-Plan: 08-01 through 08-06 (all planned and ready)
-Status: Phase 8 planning complete — 6 plans created, research validated
-Last activity: 2026-05-02 — Phase 8 manually planned after gsd-sdk workflow dependency failure
+Plan: 08-01 through 08-06 (ALL EXECUTED)
+Status: Phase 8 complete — 6 plans, 4 commits, 667 tests, 0 failures
+Last activity: 2026-05-02 — All 6 plans executed, tested, committed
 
-Progress: [██████████████████████████░░░░░░░░░░░░] 65%
+Progress: [████████████████████████████░░░░░░░░░░] 70%
 
 ## Performance Metrics
 
 - **Previous milestone:** v0.1.0 — 12 plans, 43 commits, 607 tests, 33/33 UAT passed
-- **Current milestone:** v0.2.0 — Phase 6 complete (628 tests), Phase 7 complete (641 tests, 0 failures)
+- **Current milestone:** v0.2.0 — Phase 6 complete (628 tests), Phase 7 complete (641 tests, 0 failures), Phase 8 complete (667 tests, 0 failures)
+- **Test delta:** +26 new tests (28 new rllib tests, 0 regressions)
+- **Phase 8 key stats:**
+  - 7 new source files in `src/surg_rl/rl/rllib/`
+  - 6 new test files in `tests/test_rllib_*.py`
+  - `[distributed]` extra added to `pyproject.toml`
+  - 3 new CLI commands: `train-rllib`, `tune`, `checkpoint-inspect`
 
 ## Decisions
 
