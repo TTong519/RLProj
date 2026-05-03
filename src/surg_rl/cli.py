@@ -629,5 +629,178 @@ def cli_checkpoint_inspect(
         raise typer.Exit(1) from exc
 
 
+@app.command()
+def ros2_bridge(
+    config: str = typer.Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to ros2_bridge.yaml config file",
+    ),
+    scene: str = typer.Option(
+        None,
+        "--scene",
+        "-s",
+        help="Path to scene JSON file",
+    ),
+    simulator: str = typer.Option(
+        "mujoco",
+        "--simulator",
+        help="Simulator backend: mujoco or pybullet",
+    ),
+    headless: bool = typer.Option(
+        False,
+        "--headless",
+        help="Run without GUI rendering",
+    ),
+) -> None:
+    """Start ROS2 bridge publisher and subscriber nodes."""
+    from surg_rl.ros2 import HAS_ROS2
+    from surg_rl.ros2.config import Ros2BridgeConfig
+
+    # macOS guard per D-15
+    import platform
+    if platform.system() == "Darwin":
+        typer.echo(
+            "ROS2 bridge is not supported on macOS.\n"
+            "Use a Docker Linux container:\n"
+            "  docker run -v $(pwd):/workspace ros:humble \\\n"
+            "    surg-rl ros2-bridge --config /workspace/ros2_bridge.yaml"
+        )
+        raise typer.Exit(0)
+
+    if not HAS_ROS2:
+        typer.echo(
+            "ROS2 not installed. Install via apt:\n"
+            "  sudo apt install ros-humble-rclpy ros-humble-sensor-msgs "
+            "ros-humble-geometry-msgs ros-humble-std-msgs"
+        )
+        raise typer.Exit(1)
+
+    # Load config per D-21: user-specified --config path
+    if config is None:
+        typer.echo("Error: --config is required.", err=True)
+        typer.echo("  surg-rl ros2-bridge --config ros2_bridge.yaml")
+        raise typer.Exit(1)
+
+    bridge_config = Ros2BridgeConfig.from_yaml(config)
+    logger.info("Loaded bridge config: %s", config)
+
+    # Load scene if provided
+    if scene is None:
+        typer.echo("Error: --scene is required.", err=True)
+        raise typer.Exit(1)
+
+    from surg_rl.rl.environment import SurgicalEnv, SurgicalEnvConfig
+    env_config = SurgicalEnvConfig(
+        scene_path=scene,
+        simulator_type=simulator,
+        render_mode=None if headless else "human",
+        ros2_bridge_config=bridge_config,
+    )
+    env = SurgicalEnv(env_config)
+
+    typer.echo(
+        f"ROS2 bridge started:\n"
+        f"  Publishing: {bridge_config.state_topic}\n"
+        f"  Subscribing: {bridge_config.command_topic}\n"
+    )
+
+    # Run env interactively until interrupted
+    try:
+        import time
+        obs, _ = env.reset()
+        while True:
+            action = env.action_space.sample()
+            obs, reward, terminated, truncated, info = env.step(action)
+            if terminated or truncated:
+                obs, _ = env.reset()
+    except KeyboardInterrupt:
+        typer.echo("Shutting down bridge...")
+    finally:
+        env.close()
+        typer.echo("Bridge terminated.")
+
+
+@app.command()
+def ros2_replay(
+    checkpoint: str = typer.Option(
+        ...,
+        "--checkpoint",
+        help="Path to SB3 model checkpoint (zip file)",
+    ),
+    scene: str = typer.Option(
+        ...,
+        "--scene",
+        help="Path to scene JSON file",
+    ),
+    command_topic: str = typer.Option(
+        "/surg_rl/commands",
+        "--command-topic",
+        help="ROS2 topic to publish actions to",
+    ),
+    speed: float = typer.Option(
+        0.1,
+        "--speed",
+        min=0.01,
+        max=1.0,
+        help="Replay speed multiplier (0.01=1%, 0.1=10%, 1.0=full)",
+    ),
+    simulator: str = typer.Option(
+        "mujoco",
+        "--simulator",
+        help="Simulator backend: mujoco or pybullet",
+    ),
+    max_steps: int = typer.Option(
+        10000,
+        "--max-steps",
+        help="Maximum replay steps",
+    ),
+) -> None:
+    """Replay a trained SB3 checkpoint at reduced speed through ROS2 bridge."""
+    import platform
+    if platform.system() == "Darwin":
+        typer.echo(
+            "ROS2 is not supported on macOS.\n"
+            "Use a Docker Linux container:\n"
+            "  docker run -v $(pwd):/workspace ros:humble \\\n"
+            "    surg-rl ros2-replay --checkpoint /workspace/model.zip "
+            "--scene /workspace/scene.json"
+        )
+        raise typer.Exit(0)
+
+    from surg_rl.ros2.replay import TrajectoryReplay
+
+    try:
+        replay = TrajectoryReplay(
+            model_path=checkpoint,
+            scene_path=scene,
+            command_topic=command_topic,
+            speed=speed,
+            simulator_type=simulator,
+        )
+    except RuntimeError as exc:
+        typer.echo(
+            f"ROS2 not installed. Install via apt:\n"
+            f"  sudo apt install ros-humble-rclpy ros-humble-std-msgs\n"
+            f"\nDetails: {exc}"
+        )
+        raise typer.Exit(1)
+
+    typer.echo(f"Replaying {checkpoint} at {speed:.0%} speed on {command_topic}")
+
+    try:
+        result = replay.run_replay(max_steps=max_steps)
+        typer.echo(
+            f"Replay complete: {result['steps_executed']} steps "
+            f"in {result['total_wall_time']:.1f}s "
+            f"(avg {result['avg_step_time']*1000:.1f}ms/step)"
+        )
+    except KeyboardInterrupt:
+        typer.echo("Replay interrupted.")
+    finally:
+        replay.terminate()
+
+
 if __name__ == "__main__":
     app()
