@@ -1,8 +1,8 @@
 # Requirements: Surg-RL v0.2.0
 
 **Defined:** 2026-05-02
-**Completed:** — (milestone in progress)
-**Status:** Defining
+**Completed:** 2026-05-03
+**Status:** Complete — milestone v0.2.0 shipped
 
 ## v1 Requirements
 
@@ -86,39 +86,39 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GPU-01 | Phase 6 | Pending |
-| GPU-02 | Phase 6 | Pending |
-| GPU-03 | Phase 6 | Pending |
-| GPU-04 | Phase 6 | Pending |
-| GPU-05 | Phase 6 | Pending |
-| GPU-06 | Phase 6 | Pending |
-| GPU-07 | Phase 6 | Pending |
-| GPU-08 | Phase 6 | Pending |
-| GPU-09 | Phase 6 | Pending |
-| GPU-10 | Phase 6 | Pending |
-| GPU-11 | Phase 6 | Pending |
-| GPU-12 | Phase 6 | Pending |
-| GPU-13 | Phase 6 | Pending |
-| GPU-14 | Phase 6 | Pending |
-| GPU-15 | Phase 6 | Pending |
-| GPU-16 | Phase 6 | Pending |
-| RENDER-01 | Phase 7 | Pending |
-| RENDER-02 | Phase 7 | Pending |
-| RENDER-03 | Phase 7 | Pending |
-| RENDER-04 | Phase 7 | Pending |
-| RENDER-05 | Phase 7 | Pending |
-| DIST-01 | Phase 8 | Pending |
-| DIST-02 | Phase 8 | Pending |
-| DIST-03 | Phase 8 | Pending |
-| DIST-04 | Phase 8 | Pending |
-| DIST-05 | Phase 8 | Pending |
-| DIST-06 | Phase 8 | Pending |
-| ROS2-01 | Phase 9 | Pending |
-| ROS2-02 | Phase 9 | Pending |
-| ROS2-03 | Phase 9 | Pending |
-| ROS2-04 | Phase 9 | Pending |
-| ROS2-05 | Phase 9 | Pending |
-| ROS2-06 | Phase 9 | Pending |
+| GPU-01 | Phase 6 | Complete |
+| GPU-02 | Phase 6 | Complete |
+| GPU-03 | Phase 6 | Complete |
+| GPU-04 | Phase 6 | Complete |
+| GPU-05 | Phase 6 | Complete |
+| GPU-06 | Phase 6 | Complete |
+| GPU-07 | Phase 6 | Complete |
+| GPU-08 | Phase 6 | Complete |
+| GPU-09 | Phase 6 | Complete |
+| GPU-10 | Phase 6 | Complete |
+| GPU-11 | Phase 6 | Complete |
+| GPU-12 | Phase 6 | Complete |
+| GPU-13 | Phase 6 | Complete |
+| GPU-14 | Phase 6 | Complete |
+| GPU-15 | Phase 6 | Complete |
+| GPU-16 | Phase 6 | Complete |
+| RENDER-01 | Phase 7 | Complete |
+| RENDER-02 | Phase 7 | Complete |
+| RENDER-03 | Phase 7 | Complete |
+| RENDER-04 | Phase 7 | Complete |
+| RENDER-05 | Phase 7 | Complete |
+| DIST-01 | Phase 8 | Complete |
+| DIST-02 | Phase 8 | Complete |
+| DIST-03 | Phase 8 | Complete |
+| DIST-04 | Phase 8 | Complete |
+| DIST-05 | Phase 8 | Complete |
+| DIST-06 | Phase 8 | Complete |
+| ROS2-01 | Phase 9 | Complete |
+| ROS2-02 | Phase 9 | Complete |
+| ROS2-03 | Phase 9 | Complete |
+| ROS2-04 | Phase 9 | Complete |
+| ROS2-05 | Phase 9 | Complete |
+| ROS2-06 | Phase 9 | Complete |
 
 **Coverage:**
 - v1 requirements: 33 total

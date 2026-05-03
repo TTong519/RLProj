@@ -88,11 +88,20 @@
 5. RLlib checkpoint can be inspected for compatibility (state dict shape matches) with SB3 checkpoint
 6. `pip install "surg-rl[distributed]"` installs `ray[rllib]>=2.10` without version conflicts
 
-### Phase 9: ROS2 Bridge for Real Hardware (6 plans)
+### Phase 9: ROS2 Bridge for Real Hardware (5 plans + 2 gap closure)
 
 **Goal:** Publish simulation state to ROS2 and accept external commands for real-robot validation.
 
 **Requirements mapped:** ROS2-01 through ROS2-06
+
+**Plans:**
+- [x] 09-01-PLAN.md ✅ 2026-05-02 — Foundation: Ros2BridgeConfig Pydantic v2, HAS_ROS2 import guard, Ros2BridgeNode pub/sub
+- [x] 09-02-PLAN.md ✅ 2026-05-02 — Env integration: Controller mode switch, multiprocessing.Process bridge, step() injection
+- [x] 09-03-PLAN.md ✅ 2026-05-02 — TrajectoryReplay: SB3 checkpoint loading, sleep-based throttling, self-contained
+- [x] 09-04-PLAN.md ✅ 2026-05-02 — CLI: surg-rl ros2-bridge / ros2-replay commands, [ros2] extra in pyproject.toml
+- [x] 09-05-PLAN.md ✅ 2026-05-02 — Test suite: 67 ROS2 tests across 5 files, all passing on macOS
+- [x] 09.1-PLAN.md ✅ 2026-05-03 — Gap closure: Fix CR-01 (queue.Queue→multiprocessing.Queue), wire config fields to runtime
+- [x] 09.2-PLAN.md ✅ 2026-05-03 — Gap closure: Add 12 tests for IPC fix + config wiring
 
 **Success criteria:**
 1. `ros2 topic list` shows `/surg_rl/joint_states` after running `surg-rl ros2-bridge --publisher`

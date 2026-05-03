@@ -10,39 +10,20 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 
 ## Requirements
 
-### Validated (v0.1.0)
+### Validated (v0.2.0)
 
-- ✓ Scene definition schema (Pydantic v2) — supports robots, tissues, instruments, physics, tasks, domain randomization
-- ✓ Scene loader with JSON/YAML parsing, LRU cache, and asset validation
-- ✓ LLM/VLM scene generation via OpenAI, Anthropic, and Ollama + 8 pre-built surgical task templates
-- ✓ Dual-backend simulation (MuJoCo 3.x and PyBullet ≥3.2.5) with unified `BaseSimulator` API
-- ✓ Procedural mesh generation (box, sphere, cylinder) and VTK I/O for soft bodies
-- ✓ Domain randomization (physics / visual / dynamics)
-- ✓ Curriculum scheduler (Easy → Medium → Hard → Expert)
-- ✓ Adaptive difficulty controller (performance-driven scaling)
-- ✓ Gymnasium-compatible `SurgicalEnv` with observation/action/reward builders
-- ✓ SB3 training pipeline wired for 5 algorithms with callbacks and TensorBoard logging
-- ✓ Typer CLI (`surg-rl`) with version, config, setup, generate, train, evaluate commands
-- ✓ **8 critical bugs fixed** — quaternion order, joint reset, physics=None, reward sign, curriculum dynamics, LightConfig mutation, API key exposure, VecEnv evaluate
-- ✓ **All 7 ActionTypes implemented** — JOINT_POSITIONS, JOINT_VELOCITIES, JOINT_TORQUES, ENDEFFECTOR_POSE, ENDEFFECTOR_DELTA, DISCRETE, GRIPPER
-- ✓ **Gripper auto-detection** in both MuJoCo and PyBullet backends
-- ✓ **Soft-body mesh caching** (<100ms reset) and vectorized mesh generation
-- ✓ **Cross-backend state save/restore** (qpos/qvel within 1e-6)
-- ✓ **Persistent eval env caching** in TrainingManager
-- ✓ **Task geometry binding** — needle_pos, entry_point, exit_point from target_body
-- ✓ **Real asset loading** — URDF/OBJ with deduplicated fallback warnings
-- ✓ **Experiment tracking** — optional W&B/MLflow callbacks with controller-aware logging
-- ✓ **CI/CD** — GitHub Actions CI (matrix 3.10/3.11/3.12) + PyPI release pipeline
-- ✓ **Containerization** — multi-stage Dockerfile
-- ✓ 607 passing tests across 15+ test modules
+- ✓ All v0.1.0 features (607 tests, 15+ modules)
+- ✓ **GPU acceleration** — HardwareBackend enum (auto/cuda/rocm/metal/intel/cpu), detection via nvidia-smi/rocminfo/torch.mps, Docker variants (CUDA + ROCm), graceful CPU fallback
+- ✓ **Real-time rendering** — Non-blocking viewer via RenderThread, 30 FPS throttle, --render-human CLI flag, clean SIGINT shutdown, macOS mjpython support
+- ✓ **Ray/RLlib distributed training** — RLlib env registration, RllibConfig dataclass, train_rllib()/build_tune_search_space()/run_tune_experiment(), checkpoint inspection, [distributed] optional extra, 7 new source files, 3 new CLI commands
+- ✓ **ROS2 bridge** — Ros2BridgeConfig Pydantic v2, Ros2BridgeNode pub/sub (JointState + Float64MultiArray), multiprocessing.Process bridge, EnvironmentController real/sim mode switch, TrajectoryReplay at 10% speed, surg-rl ros2-bridge/ros2-replay CLI, [ros2] optional extra, macOS graceful degradation, 757 passing tests
 
-### Active (v0.2.0)
+### Active (v0.3.0)
 
-- [ ] Ray/RLlib distributed training support
-- [ ] ROS2 integration for real-hardware validation
 - [ ] Kubernetes deployment manifests
 - [ ] Multi-platform Docker builds (arm64)
-- [ ] Real-time rendering during RL training (currently synchronous)
+- [ ] `ros2_control` hardware_interface integration
+- [ ] ROS2 launch file support (.launch.py)
 
 ### Out of Scope
 
@@ -50,104 +31,35 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 - Real-time multi-user networked surgery — Single-agent training scope
 - FDA certification / medical-grade safety validation — Research and simulation tool, not clinical device
 - Unity/Unreal rendering backends — MuJoCo and PyBullet rendering is sufficient
+- DirectML / Vulkan compute backends — Windows not primary target; niche use case
 
 ## Context
 
-This repository was rapidly prototyped as an alpha build and has now completed its v0.1.0 stabilization milestone. All 8 critical bugs are fixed, all action types are implemented, simulator performance is hardened with caching and vectorization, task geometry is bound to observations, real assets load with fallback, and the project has CI/CD + containerization.
+**Platform:** Python ≥3.10, MuJoCo 3.x, PyBullet ≥3.2.5, Gymnasium ≥0.29, Stable-Baselines3 ≥2.0
+**Build:** setuptools, pip, pyproject.toml
+**CLI:** Typer + Rich (`surg-rl` command)
+**Config:** Pydantic v2 dataclasses + pydantic-settings (.env support)
+**Testing:** pytest (pytest.ini with `pythonpath = src`), 757+ tests
+**Lint/Type:** ruff, black, mypy
 
-The `.planning/codebase/` map serves as the brownfield discovery record for all existing architecture, stack, conventions, and concerns.
+## Key Architecture Decisions
 
-## Constraints
+- Dual-backend simulation via `BaseSimulator` ABC (Strategy pattern)
+- Pydantic v2 `SceneDefinition` as single source of truth
+- Optional dependency groups: `[distributed]`, `[ros2]`, `[llm]`, `[vision]`
+- Lazy imports for optional deps (Ray, ROS2) — no crash on missing packages
+- `PYTHONPATH=src` required for direct Python script invocations
+- Cross-backend state save/restore via `get_state()`/`set_state()`
+- Observation dataclass as cross-backend contract for RL layer
+- Simulator owns threads/processes; env owns lifecycle via start/stop
 
-- **Tech stack**: Python ≥3.10, MuJoCo / PyBullet, Gymnasium, Stable-Baselines3, Pydantic v2, Typer, Rich
-- **Assets**: Procedural `.obj` and `.vtk` fallbacks; real URDF/OBJ supported when available
-- **Test stability**: PyBullet soft-body tests xfail on darwin/CI; known issue not to remove
-- **Security**: API keys masked in logs (last 4 chars shown); placeholder keys rejected at validation
+## Recent Milestones
 
-## Key Decisions
-
-| Decision | Rationale | Outcome |
-|----------|-----------|---------|
-| Pydantic v2 as system schema | Strong typing, validation, and serialization across JSON/YAML configs | ✓ Good — single source of truth |
-| Dual simulator backends (MuJoCo + PyBullet) | MuJoCo for performance, PyBullet for soft-body deformable physics | ✓ Good — flexibility at cost of maintenance |
-| Procedural primitive fallbacks instead of real assets | Lightweight repo, avoids licensing and distribution of surgical meshes | ✓ Good — real asset loading added with graceful fallback |
-| LLM/VLM-based scene generation | Natural language input reduces barrier to scene creation | ✓ Good — reduces config boilerplate |
-| No site-wide install (editable only) | Matches research-tool convention where users modify source | ✓ Good — prevents stale-site issues |
-| Backend detection via duck typing (`hasattr`) | Avoids explicit simulator-type enums in controller layer | ⚠️ Revisit — fragile, breaks with internal API changes |
-| Optional dependencies for tracking (wandb/mlflow) | Keeps core install lightweight; tracking only when needed | ✓ Good — `[tracking]` extra works well |
-| Multi-stage Dockerfile | System deps in base, build in middle, runtime lean | ✓ Good — image is ~200MB smaller than single-stage |
-
-## Milestones
-
-- **v0.1.0 Stabilization** (2026-04-29 → 2026-05-02) — [Archive](milestones/v0.1.0-ROADMAP.md)
-  - 5 phases, 12 plans, 43 commits, 607 tests, 33/33 UAT passed
-
-## Current Milestone: v0.2.0 — Scaling, Rendering & Real Robot
-
-**Goal:** Scale beyond single-GPU training, add real-time 3D rendering, and bridge to real hardware via ROS2.
-
-**Target features:**
-1. **GPU acceleration** — CUDA detection, GPU-backed MuJoCo rendering, nvidia-docker variant
-2. **Real-time rendering** — Live, non-blocking OpenGL window during RL training
-3. **Ray/RLlib distributed training** — Multi-GPU, multi-node with Ray Tune + RLlib algorithms
-4. **ROS2 bridge** — Publisher/subscriber nodes for real-robot validation (trajectory replay, state sync)
-
-**Deferred to v0.3.0:**
-- Kubernetes deployment manifests
-- Multi-platform Docker builds (arm64)
+| Milestone | Phases | Plans | Tests | Status |
+|-----------|--------|-------|-------|--------|
+| v0.1.0 | 1–5 | 12 | 607 | Complete |
+| v0.2.0 | 6–9 | 22 (+2 gap) | 757 | Complete |
 
 ---
-## Active (v0.2.0)
 
-- [ ] GPU acceleration — CUDA detection, GPU-backed rendering, nvidia-docker variant
-- [ ] Real-time rendering — Non-blocking human render during training
-- [ ] Ray/RLlib distributed training — Multi-GPU + Tune hyperparameter search
-- [ ] ROS2 bridge — joint_states publisher, command subscriber, trajectory replay
-
-## Out of Scope
-
-- Mobile app — Web/library-first, mobile applications are a different product
-- Real-time multi-user networked surgery — Single-agent training scope
-- FDA certification / medical-grade safety validation — Research and simulation tool, not clinical device
-- Unity/Unreal rendering backends — MuJoCo and PyBullet rendering is sufficient
-
-## Context
-
-This repository was rapidly prototyped as an alpha build and has now completed its v0.1.0 stabilization milestone. All 8 critical bugs are fixed, all action types are implemented, simulator performance is hardened with caching and vectorization, task geometry is bound to observations, real assets load with fallback, and the project has CI/CD + containerization.
-
-The `.planning/codebase/` map serves as the brownfield discovery record for all existing architecture, stack, conventions, and concerns.
-
-## Constraints
-
-- **Tech stack**: Python ≥3.10, MuJoCo / PyBullet, Gymnasium, Stable-Baselines3, Pydantic v2, Typer, Rich
-- **Assets**: Procedural `.obj` and `.vtk` fallbacks; real URDF/OBJ supported when available
-- **Test stability**: PyBullet soft-body tests xfail on darwin/CI; known issue not to remove
-- **Security**: API keys masked in logs (last 4 chars shown); placeholder keys rejected at validation
-- **GPU**: CUDA/ROCm/Metal/oneAPI optional; system works without GPU (graceful degradation)
-- **macOS**: Metal support for MuJoCo rendering; ROS2 not available (Linux-only)
-- **ROS2**: Linux-only by design; macOS bridge code detects platform and warns
-
-## Key Decisions
-
-| Decision | Rationale | Outcome |
-|----------|-----------|---------|
-| Pydantic v2 as system schema | Strong typing, validation, and serialization across JSON/YAML configs | ✓ Good — single source of truth |
-| Dual simulator backends (MuJoCo + PyBullet) | MuJoCo for performance, PyBullet for soft-body deformable physics | ✓ Good — flexibility at cost of maintenance |
-| Procedural primitive fallbacks instead of real assets | Lightweight repo, avoids licensing and distribution of surgical meshes | ✓ Good — real asset loading added with graceful fallback |
-| LLM/VLM-based scene generation | Natural language input reduces barrier to scene creation | ✓ Good — reduces config boilerplate |
-| No site-wide install (editable only) | Matches research-tool convention where users modify source | ✓ Good — prevents stale-site issues |
-| Backend detection via duck typing (`hasattr`) | Avoids explicit simulator-type enums in controller layer | ⚠️ Revisit — fragile, breaks with internal API changes |
-| Optional dependencies for tracking (wandb/mlflow) | Keeps core install lightweight; tracking only when needed | ✓ Good — `[tracking]` extra works well |
-| Multi-stage Dockerfile | System deps in base, build in middle, runtime lean | ✓ Good — image is ~200MB smaller than single-stage |
-
-## Milestones
-
-- **v0.2.0 Scaling, Rendering & Real Robot** (in progress)
-  - 4 phases (6–9), 22 requirements
-  - GPU acceleration → Real-time rendering → Ray/RLlib → ROS2 bridge
-
-- **v0.1.0 Stabilization** (2026-04-29 → 2026-05-02) — [Archive](milestones/v0.1.0-ROADMAP.md)
-  - 5 phases, 12 plans, 43 commits, 607 tests, 33/33 UAT passed
-
----
-*Last updated: 2026-05-02 after v0.2.0 milestone initialization*
+*Last updated: 2026-05-03 — Phase 9 complete, milestone v0.2.0 shipped*

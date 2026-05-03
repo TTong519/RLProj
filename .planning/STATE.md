@@ -2,30 +2,31 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-02)
+See: .planning/PROJECT.md (updated 2026-05-03)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** Milestone v0.2.0 — Phase 7 complete, preparing for Phase 8
+**Current focus:** Milestone v0.2.0 **COMPLETE** — all 4 phases shipped
 
 ## Current Position
 
-Phase: 08-distributed-training
-Plan: 08-01 through 08-06 (ALL EXECUTED)
-Status: Phase 8 complete — 6 plans, 4 commits, 667 tests, 0 failures
-Last activity: 2026-05-02 — All 6 plans executed, tested, committed
+Phase: 09-ros2-bridge
+Plan: 09-01 through 09-05 + 09.1, 09.2 (ALL EXECUTED)
+Status: Phase 9 complete — 7 plans (5 + 2 gap closure), 22 commits, 757 tests, 0 failures
+Last activity: 2026-05-03 — All 7 plans executed, tested, committed; all 5 gaps fixed
 
-Progress: [████████████████████████████░░░░░░░░░░] 70%
+Progress: [████████████████████████████████████████] 100%
 
 ## Performance Metrics
 
 - **Previous milestone:** v0.1.0 — 12 plans, 43 commits, 607 tests, 33/33 UAT passed
-- **Current milestone:** v0.2.0 — Phase 6 complete (628 tests), Phase 7 complete (641 tests, 0 failures), Phase 8 complete (667 tests, 0 failures)
-- **Test delta:** +26 new tests (28 new rllib tests, 0 regressions)
-- **Phase 8 key stats:**
-  - 7 new source files in `src/surg_rl/rl/rllib/`
-  - 6 new test files in `tests/test_rllib_*.py`
-  - `[distributed]` extra added to `pyproject.toml`
-  - 3 new CLI commands: `train-rllib`, `tune`, `checkpoint-inspect`
+- **Current milestone:** v0.2.0 — Phase 6 complete (628 tests), Phase 7 complete (641 tests, 0 failures), Phase 8 complete (674 tests, 0 failures), Phase 9 complete (757 tests, 0 failures)
+- **Test delta:** +150 tests (+26 Phase 8, +83 Phase 9)
+- **Phase 9 key stats:**
+  - 4 new source files in `src/surg_rl/ros2/`
+  - 5 new test files in `tests/test_ros2_*.py`
+  - `[ros2]` extra added to `pyproject.toml`
+  - 2 new CLI commands: `ros2-bridge`, `ros2-replay`
+  - 22 commits, 2 gap closure plans
 
 ## Decisions
 
@@ -49,6 +50,20 @@ Progress: [███████████████████████
   - macOS: RuntimeError with instructions if not using mjpython
   - SIGINT + atexit for clean shutdown
   - render_fps is SurgicalEnvConfig field (not metadata)
+- **Phase 8 specific:**
+  - Ray/RLlib as optional [distributed] extra with lazy imports
+  - New API stack: config.learners() and config.env_runners()
+  - build_rllib_config() returns AlgorithmConfig; train_rllib() resolves Algo class separately
+  - Checkpoint compatibility: inspection utils + documented migration path
+  - Tune search space flat structure for scheduler compatibility
+- **Phase 9 specific:**
+  - Bridge runs as separate multiprocessing.Process (not daemon thread)
+  - IPC via multiprocessing.Queue(maxsize=1) — keep-latest semantics
+  - JointState publisher + Float64MultiArray subscriber, configurable in YAML
+  - EnvironmentController owns mode flag + get_action() override
+  - TrajectoryReplay is self-contained (own env + predict loop), sleep-based throttle
+  - macOS: warn + disable at import, CLI exit 0, mock tests, Docker docs
+  - [ros2] extra documents apt-only deps (rclpy not on PyPI)
 
 ## Blockers
 
@@ -60,4 +75,4 @@ Progress: [███████████████████████
 - [ ] Phase 9: ROS2 Bridge for Real Hardware
 
 ---
-*Updated: 2026-05-02 — Phase 7 complete, 641 passed, 18 rendering tests*
+*Updated: 2026-05-03 — Phase 9 complete, milestone v0.2.0 shipped*
