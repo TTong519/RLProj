@@ -20,6 +20,7 @@ from surg_rl.dynamics.environment_controller import (
     EnvironmentControllerConfig,
 )
 from surg_rl.ros2 import HAS_ROS2  # noqa: F401 — used by bridge lifecycle
+from surg_rl.ros2.config import Ros2BridgeConfig
 from surg_rl.scene_definition.loader import SceneLoader
 from surg_rl.scene_definition.schema import SceneDefinition
 from surg_rl.simulators.base_simulator import BaseSimulator, Observation
@@ -85,7 +86,7 @@ class SurgicalEnvConfig:
     use_adaptive_difficulty: bool = False
     controller_config: EnvironmentControllerConfig | None = None
     seed: int | None = None
-    ros2_bridge_config: "Ros2BridgeConfig | None" = None
+    ros2_bridge_config: Ros2BridgeConfig | None = None
 
 
 class SurgicalEnv(gym.Env):
@@ -865,7 +866,7 @@ class Ros2Bridge:
         4. ``terminate()`` — graceful shutdown: terminate → join(5s) → kill → join(2s).
     """
 
-    def __init__(self, node, config: "Ros2BridgeConfig", command_queue=None):
+    def __init__(self, node, config: Ros2BridgeConfig, command_queue=None):
         self._node = node
         self._config = config
         self._command_queue = command_queue
