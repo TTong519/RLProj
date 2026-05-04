@@ -364,3 +364,35 @@ class TestStepOverhead:
             assert step_called
         finally:
             env.close()
+
+
+# ============================================================================
+# CLI train --render-human wiring (RENDER-04)
+# ============================================================================
+
+class TestCliRenderHumanWiring:
+    """RENDER-04: verify --render-human/--render-fps flow to TrainingConfig."""
+
+    def test_trainingconfig_accepts_render_mode(self):
+        """TrainingConfig has render_mode field for CLI wiring."""
+        from surg_rl.rl.training import TrainingConfig
+
+        config = TrainingConfig(render_mode="human", render_fps=30.0)
+        assert config.render_mode == "human"
+        assert config.render_fps == 30.0
+
+    def test_trainingconfig_default_render_none(self):
+        """TrainingConfig render_mode defaults to None (no viewer)."""
+        from surg_rl.rl.training import TrainingConfig
+
+        config = TrainingConfig()
+        assert config.render_mode is None
+        assert config.render_fps == 30.0
+
+    def test_surgicalenvconfig_propagates_render_mode(self):
+        """SurgicalEnvConfig propagates render_mode when set."""
+        from surg_rl.rl.environment import SurgicalEnvConfig
+
+        config = SurgicalEnvConfig(render_mode="human", render_fps=30.0)
+        assert config.render_mode == "human"
+        assert config.render_fps == 30.0

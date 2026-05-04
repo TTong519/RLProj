@@ -83,3 +83,47 @@ def test_train_rllib_rllib_sac_builds():
     cfg = rc.build_rllib_config()
     assert cfg is not None
     assert "SAC" in type(cfg).__name__
+
+
+@pytest.mark.skipif(
+    __import__("importlib").util.find_spec("ray") is None,
+    reason="ray[rllib] not installed",
+)
+class TestTrainRllibIntegration:
+    """Integration tests for train_rllib() configuration pipeline."""
+
+    def test_train_rllib_config_pipeline(self):
+        """Full config pipeline: RllibConfig → build_rllib_config → training kwargs."""
+        from surg_rl.rl.rllib.config import RllibConfig
+        from surg_rl.rl.training import AlgorithmConfig, TrainingConfig
+
+        tc = TrainingConfig(
+            algorithm=AlgorithmConfig(name="PPO"),
+            n_envs=2,
+            total_timesteps=50000,
+            scene_path="/tmp/test.json",
+            seed=42,
+        )
+
+        rc = RllibConfig.from_training_config(tc, env_config={"foo": 1})
+        assert rc.env_name == "surg-rl"
+        assert rc.algorithm == "PPO"
+        assert rc.env_config["foo"] == 1
+        assert rc.env_config.get("scene_path") == "/tmp/test.json"
+        assert rc.total_timesteps == 50000
+        assert rc.seed == 42
+
+    def test_rllib_config_stop_criteria(self):
+        """build_stop_criteria() returns timestep-bounded dict."""
+        from surg_rl.rl.rllib.config import RllibConfig
+
+        rc = RllibConfig(total_timesteps=100000)
+        stop = rc.build_stop_criteria()
+        assert stop["num_env_steps_sampled_lifetime"] == 100000
+
+    def test_rllib_unsupported_algorithm_raises(self):
+        """_resolve_algo_class raises ValueError for unknown algorithm."""
+        from surg_rl.rl.rllib.train import _resolve_algo_class
+
+        with pytest.raises(ValueError, match="Unsupported algorithm"):
+            _resolve_algo_class("A3C")

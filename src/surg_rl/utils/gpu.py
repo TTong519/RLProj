@@ -153,13 +153,15 @@ def select_backend(requested: HardwareBackend) -> HardwareBackend:
         logger.info("Selected backend: %s", requested.value)
         return requested
 
-    # Requested explicit backend not available — raise or fallback based on policy
+    # Intel gracefully falls back to CPU per GPU-08
     available_names = ", ".join(b.value for b in available)
-    logger.info(
-        "Requested backend %s not available. Available: %s.",
-        requested.value,
-        available_names,
-    )
+    if requested == HardwareBackend.intel:
+        logger.info(
+            "Intel oneAPI not available — falling back to CPU. Available: %s.",
+            available_names,
+        )
+        return HardwareBackend.cpu
+
     raise RuntimeError(
         f"Requested backend '{requested.value}' is not available. "
         f"Available backends: {available_names}"

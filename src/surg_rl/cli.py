@@ -344,6 +344,8 @@ def train(
             experiment_name=experiment_name,
             wandb_project=wandb_project,
             backend=backend_enum,
+            render_mode="human" if render_human else None,
+            render_fps=render_fps,
         )
 
         manager = TrainingManager(config)

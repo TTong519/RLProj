@@ -163,6 +163,18 @@ def test_select_backend_cpu_always_works():
         assert select_backend(HardwareBackend.cpu) == HardwareBackend.cpu
 
 
+def test_select_backend_intel_fallback_to_cpu(caplog: pytest.LogCaptureFixture):
+    """GPU-08: Intel gracefully falls back to CPU when unavailable."""
+    with mock.patch("surg_rl.utils.gpu._has_cuda", return_value=False), \
+         mock.patch("surg_rl.utils.gpu._has_rocm", return_value=False), \
+         mock.patch("surg_rl.utils.gpu._has_metal", return_value=False), \
+         mock.patch("surg_rl.utils.gpu._has_intel", return_value=False):
+        with caplog.at_level("INFO", logger="surg_rl.utils.gpu"):
+            result = select_backend(HardwareBackend.intel)
+        assert result == HardwareBackend.cpu
+        assert "falling back to CPU" in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # get_cuda_version
 # ---------------------------------------------------------------------------
