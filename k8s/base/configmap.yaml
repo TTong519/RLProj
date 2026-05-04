@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: surg-rl-scene
+  labels:
+    app: surg-rl
+data:
+  scene.json: |
+    {
+      "metadata": {"name": "k8s-training-scene"},
+      "robots": [],
+      "tissues": [],
+      "instruments": [],
+      "physics": {"timestep": 0.002, "gravity": [0, 0, -9.81]}
+    }
