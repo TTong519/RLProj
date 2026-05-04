@@ -1,0 +1,85 @@
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: surg-rl-raycluster
+  labels:
+    app: surg-rl
+    component: ray-cluster
+spec:
+  rayVersion: "2.55.0"
+  enableInTreeAutoscaling: false
+  headGroupSpec:
+    rayStartParams:
+      dashboard-host: "0.0.0.0"
+    template:
+      metadata:
+        labels:
+          app: surg-rl
+      spec:
+        restartPolicy: Never
+        nodeSelector:
+          nvidia.com/gpu.present: "true"
+        tolerations:
+          - key: nvidia.com/gpu
+            operator: Exists
+            effect: NoSchedule
+        containers:
+          - name: ray-head
+            image: ghcr.io/surg-rl/surg-rl:v0.3.0
+            imagePullPolicy: IfNotPresent
+            ports:
+              - containerPort: 6379
+                name: gcs
+              - containerPort: 8265
+                name: dashboard
+              - containerPort: 10001
+                name: client
+            resources:
+              requests:
+                cpu: "2"
+                memory: "4Gi"
+              limits:
+                cpu: "4"
+                memory: "8Gi"
+            volumeMounts:
+              - name: checkpoints
+                mountPath: /app/checkpoints
+  workerGroupSpecs:
+    - groupName: gpu-workers
+      replicas: 1
+      minReplicas: 1
+      maxReplicas: 4
+      rayStartParams:
+        block: "true"
+      template:
+        metadata:
+          labels:
+            app: surg-rl
+        spec:
+          restartPolicy: Never
+          nodeSelector:
+            nvidia.com/gpu.present: "true"
+          tolerations:
+            - key: nvidia.com/gpu
+              operator: Exists
+              effect: NoSchedule
+          containers:
+            - name: ray-worker
+              image: ghcr.io/surg-rl/surg-rl:v0.3.0
+              imagePullPolicy: IfNotPresent
+              resources:
+                requests:
+                  cpu: "4"
+                  memory: "8Gi"
+                  nvidia.com/gpu: "1"
+                limits:
+                  cpu: "8"
+                  memory: "16Gi"
+                  nvidia.com/gpu: "1"
+              volumeMounts:
+                - name: checkpoints
+                  mountPath: /app/checkpoints
+    volumes:
+      - name: checkpoints
+        persistentVolumeClaim:
+          claimName: surg-rl-checkpoints

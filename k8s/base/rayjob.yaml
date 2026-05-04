@@ -1,0 +1,70 @@
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  name: surg-rl-rayjob
+  labels:
+    app: surg-rl
+    component: ray-job
+spec:
+  shutdownAfterJobFinishes: true
+  ttlSecondsAfterFinished: 86400
+  entrypoint: |
+    python -m surg_rl.cli train-rllib \
+      --scene /etc/surg-rl/scene.json \
+      --timesteps 1000000
+  rayClusterSpec:
+    rayVersion: "2.55.0"
+    enableInTreeAutoscaling: false
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: "0.0.0.0"
+      template:
+        spec:
+          nodeSelector:
+            nvidia.com/gpu.present: "true"
+          tolerations:
+            - key: nvidia.com/gpu
+              operator: Exists
+              effect: NoSchedule
+          containers:
+            - name: ray-head
+              image: ghcr.io/surg-rl/surg-rl:v0.3.0
+              resources:
+                requests: {cpu: "2", memory: "4Gi"}
+                limits: {cpu: "4", memory: "8Gi"}
+              volumeMounts:
+                - name: checkpoints
+                  mountPath: /app/checkpoints
+                - name: scene
+                  mountPath: /etc/surg-rl
+                  readOnly: true
+    workerGroupSpecs:
+      - groupName: gpu-workers
+        replicas: 2
+        minReplicas: 1
+        maxReplicas: 4
+        template:
+          spec:
+            nodeSelector:
+              nvidia.com/gpu.present: "true"
+            tolerations:
+              - key: nvidia.com/gpu
+                operator: Exists
+                effect: NoSchedule
+            containers:
+              - name: ray-worker
+                image: ghcr.io/surg-rl/surg-rl:v0.3.0
+                resources:
+                  requests: {cpu: "4", memory: "8Gi", "nvidia.com/gpu": "1"}
+                  limits: {cpu: "8", memory: "16Gi", "nvidia.com/gpu": "1"}
+                volumeMounts:
+                  - name: checkpoints
+                    mountPath: /app/checkpoints
+    volumes:
+      - name: checkpoints
+        persistentVolumeClaim:
+          claimName: surg-rl-checkpoints
+      - name: scene
+        configMap:
+          name: surg-rl-scene
+  submissionMode: HTTPMode
