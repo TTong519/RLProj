@@ -1017,10 +1017,7 @@ class TestCameraNameRendering:
 class TestSoftBodyMeshCaching:
     """Tests for soft-body mesh caching (PERF-01)."""
 
-    @pytest.mark.xfail(
-        sys.platform in ("darwin",) or os.environ.get("CI") == "true",
-        reason="PyBullet soft body fragile on macOS/CI",
-    )
+    @pytest.mark.skipif(sys.platform == "darwin", reason="macOS PyBullet soft-body reset slower (PERF-01 — platform limitation)")
     def test_soft_body_reset_under_100ms(self):
         """PERF-01: Soft-body reset must complete in <100ms on second reset."""
         from surg_rl.scene_definition.schema import (
@@ -1156,10 +1153,6 @@ class TestSoftBodyMeshCaching:
 class TestPyBulletSoftBodyLoad:
     """Soft body loading tests for PyBullet."""
 
-    @pytest.mark.xfail(
-        sys.platform in ("darwin",) or os.environ.get("CI") == "true",
-        reason="PyBullet soft body auto-tetgen unstable on macOS and some CI runners",
-    )
     def test_pybullet_soft_body_load_no_crash(self, tmp_path):
         """Soft body tissue should load without NotImplementedError."""
         from surg_rl.scene_definition.schema import (
@@ -1187,10 +1180,6 @@ class TestPyBulletSoftBodyLoad:
         assert "soft_tissue" in sim._soft_body_ids
         assert sim._soft_body_ids["soft_tissue"] >= 0
 
-    @pytest.mark.xfail(
-        sys.platform in ("darwin",) or os.environ.get("CI") == "true",
-        reason="PyBullet soft body unstable on macOS and CI",
-    )
     def test_pybullet_soft_body_step_no_crash(self):
         """Soft body should survive at least one simulation step."""
         from surg_rl.scene_definition.schema import (
@@ -1217,10 +1206,6 @@ class TestPyBulletSoftBodyLoad:
         sim.load_scene(scene)
         sim.step(np.zeros(1))  # dummy action
 
-    @pytest.mark.xfail(
-        sys.platform in ("darwin",) or os.environ.get("CI") == "true",
-        reason="PyBullet soft body fragile on macOS/CI",
-    )
     def test_pybullet_soft_body_get_mesh_data(self):
         """getMeshData should return vertices after loading."""
         from surg_rl.scene_definition.schema import (
@@ -1254,10 +1239,7 @@ class TestPyBulletSoftBodyLoad:
         vertices = data[1]
         assert len(vertices) > 0
 
-    @pytest.mark.xfail(
-        sys.platform in ("darwin",) or os.environ.get("CI") == "true",
-        reason="PyBullet soft body fragile on macOS/CI",
-    )
+    @pytest.mark.skipif(sys.platform == "darwin", reason="PyBullet createSoftBodyAnchor API incompatible on macOS")
     def test_pybullet_soft_body_anchor_to_world(self):
         """Anchoring a node to world should prevent gravity-driven motion."""
         from surg_rl.scene_definition.schema import (
