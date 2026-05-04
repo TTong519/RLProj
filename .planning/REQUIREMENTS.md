@@ -9,56 +9,56 @@
 ### Hardware Acceleration (GPU)
 
 **CUDA (NVIDIA):**
-- [ ] **GPU-01**: System detects CUDA availability and advertises it in `surg-rl version --verbose`
-- [ ] **GPU-02**: MuJoCo simulator uses `mujoco.Renderer(..., gl_context)` with GPU backend when available
-- [ ] **GPU-03**: PyBullet simulator accepts `gpu_accelerated=True` flag and warns gracefully if unavailable
-- [ ] **GPU-04**: Docker image includes `nvidia-docker` runtime variant and build arg for CUDA base image
-- [ ] **GPU-05**: `TrainingConfig` has `gpu_accelerated: bool = False` flag wired to simulator construction
+- [x] **GPU-01**: System detects CUDA availability and advertises it in `surg-rl version --verbose`
+- [x] **GPU-02**: MuJoCo simulator uses `mujoco.Renderer(..., gl_context)` with GPU backend when available
+- [x] **GPU-03**: PyBullet simulator accepts `gpu_accelerated=True` flag and warns gracefully if unavailable
+- [x] **GPU-04**: Docker image includes `nvidia-docker` runtime variant and build arg for CUDA base image
+- [x] **GPU-05**: `TrainingConfig` has `gpu_accelerated: bool = False` flag wired to simulator construction
 
 **Intel oneAPI / XPU:**
-- [ ] **GPU-06**: System detects Intel oneAPI / XPU availability (`sycl-ls`, `dpctl`, or `torch.xpu`) and advertises it
-- [ ] **GPU-07**: MuJoCo falls back to OSMesa/CPU on Intel if no GPU context is available; oneAPI path is documented even if not implemented
-- [ ] **GPU-08**: `TrainingConfig` backend selector supports `"intel"` as a valid enum value with graceful CPU fallback
+- [x] **GPU-06**: System detects Intel oneAPI / XPU availability (`sycl-ls`, `dpctl`, or `torch.xpu`) and advertises it
+- [x] **GPU-07**: MuJoCo falls back to OSMesa/CPU on Intel if no GPU context is available; oneAPI path is documented even if not implemented
+- [x] **GPU-08**: `TrainingConfig` backend selector supports `"intel"` as a valid enum value with graceful CPU fallback
 
 **AMD ROCm / HIP:**
-- [ ] **GPU-09**: System detects AMD ROCm (`rocminfo`, `torch.cuda` with HIP visible) and advertises it
-- [ ] **GPU-10**: PyBullet accepts `backend="rocm"` and maps to ROCm-compatible OpenGL / EGL; warns if unavailable
-- [ ] **GPU-11**: Docker image includes build arg for ROCm base image (`rocm/dev-ubuntu-22.04`)
+- [x] **GPU-09**: System detects AMD ROCm (`rocminfo`, `torch.cuda` with HIP visible) and advertises it
+- [x] **GPU-10**: PyBullet accepts `backend="rocm"` and maps to ROCm-compatible OpenGL / EGL; warns if unavailable
+- [x] **GPU-11**: Docker image includes build arg for ROCm base image (`rocm/dev-ubuntu-22.04`)
 
 **Apple Metal:**
-- [ ] **GPU-12**: System detects Apple Metal (`torch.backends.mps.is_available()` or `metal` GPU family) on macOS and advertises it
-- [ ] **GPU-13**: MuJoCo on macOS uses Metal-backed `mjrContext` when available; falls back to NS/OpenGL
-- [ ] **GPU-14**: `TrainingConfig` backend selector supports `"metal"` as a valid enum value
+- [x] **GPU-12**: System detects Apple Metal (`torch.backends.mps.is_available()` or `metal` GPU family) on macOS and advertises it
+- [x] **GPU-13**: MuJoCo on macOS uses Metal-backed `mjrContext` when available; falls back to NS/OpenGL
+- [x] **GPU-14**: `TrainingConfig` backend selector supports `"metal"` as a valid enum value
 
 **Unified Backend:**
-- [ ] **GPU-15**: `HardwareBackend` enum covers `auto`, `cuda`, `rocm`, `metal`, `intel`, `cpu`; `"auto"` tries all in priority order
-- [ ] **GPU-16**: Backend selection is logged at INFO level so users know which path is active
+- [x] **GPU-15**: `HardwareBackend` enum covers `auto`, `cuda`, `rocm`, `metal`, `intel`, `cpu`; `"auto"` tries all in priority order
+- [x] **GPU-16**: Backend selection is logged at INFO level so users know which path is active
 
 ### Real-time Rendering (RENDER)
 
-- [ ] **RENDER-01**: `BaseSimulator.render(mode="human")` creates a non-blocking window that survives `reset()`
-- [ ] **RENDER-02**: `SurgicalEnv.step()` does not block when `render_mode="human"` is active
-- [ ] **RENDER-03**: Render FPS is throttled to a configurable target (default 30 FPS) to avoid GPU starvation
-- [ ] **RENDER-04**: `surg_rl.cli train` accepts `--render-human` flag that opens a live viewer
-- [ ] **RENDER-05**: Viewer window closes cleanly on `env.close()` and SIGINT without segfault
+- [x] **RENDER-01**: `BaseSimulator.render(mode="human")` creates a non-blocking window that survives `reset()`
+- [x] **RENDER-02**: `SurgicalEnv.step()` does not block when `render_mode="human"` is active
+- [x] **RENDER-03**: Render FPS is throttled to a configurable target (default 30 FPS) to avoid GPU starvation
+- [x] **RENDER-04**: `surg_rl.cli train` accepts `--render-human` flag that opens a live viewer
+- [x] **RENDER-05**: Viewer window closes cleanly on `env.close()` and SIGINT without segfault
 
 ### Distributed Training (DIST)
 
-- [ ] **DIST-01**: `SurgicalEnv` wrapped as `ray.rllib.env.env_context` compatible class
-- [ ] **DIST-02**: `surg_rl.rl.rllib` module provides `train_rllib(config)` entrypoint with PPO/SAC support
-- [ ] **DIST-03**: Multi-GPU training configuration works out-of-the-box on a single node with 2+ GPUs
-- [ ] **DIST-04**: Ray Tune integration for hyperparameter search over scene definitions and reward weights
-- [ ] **DIST-05**: Checkpoint format is compatible between SB3 and RLlib (or documented migration path exists)
-- [ ] **DIST-06**: `pyproject.toml` adds `[distributed]` extra with `ray[rllib]>=2.10`, `tune-sklearn`
+- [x] **DIST-01**: `SurgicalEnv` wrapped as `ray.rllib.env.env_context` compatible class
+- [x] **DIST-02**: `surg_rl.rl.rllib` module provides `train_rllib(config)` entrypoint with PPO/SAC support
+- [x] **DIST-03**: Multi-GPU training configuration works out-of-the-box on a single node with 2+ GPUs
+- [x] **DIST-04**: Ray Tune integration for hyperparameter search over scene definitions and reward weights
+- [x] **DIST-05**: Checkpoint format is compatible between SB3 and RLlib (or documented migration path exists)
+- [x] **DIST-06**: `pyproject.toml` adds `[distributed]` extra with `ray[rllib]>=2.10`, `tune-sklearn`
 
 ### ROS2 Bridge (ROS2)
 
-- [ ] **ROS2-01**: `surg_rl.ros2.publisher` publishes robot joint_states at simulation frequency
-- [ ] **ROS2-02**: `surg_rl.ros2.subscriber` receives action commands and injects them as external actions
-- [ ] **ROS2-03**: Trajectory replay from saved SB3/RLlib checkpoints executes on real robot at reduced speed
-- [ ] **ROS2-04**: State synchronization mode switches between simulation-only and real-robot modes at runtime
-- [ ] **ROS2-05**: `surg-rl ros2-bridge` CLI command starts publisher/subscriber nodes with configurable topics
-- [ ] **ROS2-06**: `pyproject.toml` adds `[ros2]` extra with `rclpy>=6.0`, `geometry_msgs`, `sensor_msgs`
+- [x] **ROS2-01**: `surg_rl.ros2.publisher` publishes robot joint_states at simulation frequency
+- [x] **ROS2-02**: `surg_rl.ros2.subscriber` receives action commands and injects them as external actions
+- [x] **ROS2-03**: Trajectory replay from saved SB3/RLlib checkpoints executes on real robot at reduced speed
+- [x] **ROS2-04**: State synchronization mode switches between simulation-only and real-robot modes at runtime
+- [x] **ROS2-05**: `surg-rl ros2-bridge` CLI command starts publisher/subscriber nodes with configurable topics
+- [x] **ROS2-06**: `pyproject.toml` adds `[ros2]` extra with `rclpy>=6.0`, `geometry_msgs`, `sensor_msgs`
 
 ## v2 Requirements
 
