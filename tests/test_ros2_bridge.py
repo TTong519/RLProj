@@ -408,6 +408,166 @@ class TestRos2BridgeNodeGapFixes:
         assert node._on_dimension_mismatch == "warn"
 
 
+class TestRos2BridgeGapFixes:
+    """Tests for G-1 (bridge-to-controller forwarding) and G-2 (topic liveness)."""
+
+    def test_forward_commands_to_controller(self):
+        """G-1: Ros2Bridge.forward_commands() polls shared queue and injects into controller."""
+        import multiprocessing
+        from surg_rl.dynamics.environment_controller import (
+            EnvironmentController,
+            EnvironmentControllerConfig,
+        )
+        from surg_rl.ros2.config import Ros2BridgeConfig
+        from surg_rl.rl.environment import Ros2Bridge
+
+        cmd_queue = multiprocessing.Queue(maxsize=1)
+        cmd_queue.put(np.array([0.5, -0.3, 0.1]))
+
+        bridge_cfg = Ros2BridgeConfig(
+            state_topic="/surg_rl/joint_states",
+            command_topic="/surg_rl/commands",
+        )
+        controller_cfg = EnvironmentControllerConfig()
+        controller = EnvironmentController(config=controller_cfg)
+        controller.set_real_robot_mode(True)
+
+        bridge = Ros2Bridge(node=None, config=bridge_cfg, command_queue=cmd_queue)
+        bridge.forward_commands(controller)
+
+        action = controller.get_action(np.array([1.0, 1.0, 1.0]))
+        np.testing.assert_array_equal(action, np.array([0.5, -0.3, 0.1]))
+
+    def test_forward_commands_drains_all_pending(self):
+        """G-1: forward_commands() drains all pending commands, keep-latest wins."""
+        import queue as queuelib
+        from surg_rl.dynamics.environment_controller import (
+            EnvironmentController,
+            EnvironmentControllerConfig,
+        )
+        from surg_rl.ros2.config import Ros2BridgeConfig
+        from surg_rl.rl.environment import Ros2Bridge
+
+        cmd_queue = queuelib.Queue()
+        cmd_queue.put(np.array([1.0, 1.0]))
+        cmd_queue.put(np.array([2.0, 2.0]))
+        cmd_queue.put(np.array([3.0, 3.0]))
+
+        bridge_cfg = Ros2BridgeConfig(
+            state_topic="/surg_rl/joint_states",
+            command_topic="/surg_rl/commands",
+        )
+        controller_cfg = EnvironmentControllerConfig()
+        controller = EnvironmentController(config=controller_cfg)
+        controller.set_real_robot_mode(True)
+
+        bridge = Ros2Bridge(node=None, config=bridge_cfg, command_queue=cmd_queue)
+        bridge.forward_commands(controller)
+
+        action = controller.get_action(np.array([0.0, 0.0]))
+        np.testing.assert_array_equal(action, np.array([3.0, 3.0]))
+
+    def test_forward_commands_none_queues(self):
+        """G-1: forward_commands() is a no-op when queue or controller is None."""
+        import multiprocessing
+        from surg_rl.ros2.config import Ros2BridgeConfig
+        from surg_rl.rl.environment import Ros2Bridge
+
+        bridge_cfg = Ros2BridgeConfig(
+            state_topic="/surg_rl/joint_states",
+            command_topic="/surg_rl/commands",
+        )
+
+        bridge_no_q = Ros2Bridge(node=None, config=bridge_cfg, command_queue=None)
+        bridge_no_q.forward_commands(None)
+
+        cmd_queue = multiprocessing.Queue(maxsize=1)
+        bridge_with_q = Ros2Bridge(node=None, config=bridge_cfg, command_queue=cmd_queue)
+        bridge_with_q.forward_commands(None)
+
+        bridge_with_q.forward_commands(None)
+
+    def test_forward_commands_empty_queue_noop(self):
+        """G-1: forward_commands() is a no-op when queue is empty."""
+        import multiprocessing
+        from surg_rl.dynamics.environment_controller import (
+            EnvironmentController,
+            EnvironmentControllerConfig,
+        )
+        from surg_rl.ros2.config import Ros2BridgeConfig
+        from surg_rl.rl.environment import Ros2Bridge
+
+        cmd_queue = multiprocessing.Queue(maxsize=1)
+        bridge_cfg = Ros2BridgeConfig(
+            state_topic="/surg_rl/joint_states",
+            command_topic="/surg_rl/commands",
+        )
+        controller_cfg = EnvironmentControllerConfig()
+        controller = EnvironmentController(config=controller_cfg)
+
+        bridge = Ros2Bridge(node=None, config=bridge_cfg, command_queue=cmd_queue)
+        bridge.forward_commands(controller)
+
+        action = controller.get_action(np.array([7.0, 7.0, 7.0]))
+        np.testing.assert_array_equal(action, np.array([7.0, 7.0, 7.0]))
+
+    def test_on_missing_topic_error_raises(self):
+        """G-2: on_missing_topic='error' raises RuntimeError when topics missing."""
+        import multiprocessing
+        from unittest.mock import MagicMock, patch
+        from surg_rl.ros2.config import Ros2BridgeConfig
+        from surg_rl.rl.environment import Ros2Bridge
+
+        bridge_cfg = Ros2BridgeConfig(
+            state_topic="/surg_rl/joint_states",
+            command_topic="/surg_rl/commands",
+            on_missing_topic="error",
+        )
+        bridge = Ros2Bridge(node=None, config=bridge_cfg, command_queue=multiprocessing.Queue(maxsize=1))
+
+        with patch("surg_rl.rl.environment.HAS_ROS2", True), \
+             patch("surg_rl.ros2.__init__.HAS_ROS2", True), \
+             patch("surg_rl.rl.environment.multiprocessing.Process") as mock_proc, \
+             patch.dict("sys.modules", {"rclpy": MagicMock()}):
+            import rclpy
+            rclpy.ok.return_value = True
+            rclpy.get_topic_names_and_types.return_value = []
+
+            with pytest.raises(RuntimeError, match="ROS2 topics not found"):
+                bridge.start()
+
+            mock_proc.assert_not_called()
+
+    def test_on_missing_topic_warn_logs(self):
+        """G-2: on_missing_topic='warn' logs warning when topics missing."""
+        import logging
+        import multiprocessing
+        from unittest.mock import MagicMock, patch
+        from surg_rl.ros2.config import Ros2BridgeConfig
+        from surg_rl.rl.environment import Ros2Bridge
+
+        bridge_cfg = Ros2BridgeConfig(
+            state_topic="/surg_rl/joint_states",
+            command_topic="/surg_rl/commands",
+            on_missing_topic="warn",
+        )
+        bridge = Ros2Bridge(node=None, config=bridge_cfg, command_queue=multiprocessing.Queue(maxsize=1))
+
+        with patch("surg_rl.rl.environment.HAS_ROS2", True), \
+             patch("surg_rl.ros2.__init__.HAS_ROS2", True), \
+             patch("surg_rl.rl.environment.multiprocessing.Process") as mock_proc, \
+             patch.dict("sys.modules", {"rclpy": MagicMock()}):
+            import rclpy
+            rclpy.ok.return_value = True
+            rclpy.get_topic_names_and_types.return_value = []
+
+            with patch.object(logging.getLogger("surg_rl.rl.environment"), "warning") as mock_warn:
+                bridge.start()
+                mock_warn.assert_called_once()
+                assert "ROS2 topics not found" in mock_warn.call_args[0][0]
+            mock_proc.assert_called_once()
+
+
 def _child_put_queue(q, data):
     """Module-level helper for multiprocessing test (spawn-safe)."""
     q.put(data)

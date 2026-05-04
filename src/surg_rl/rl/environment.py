@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import multiprocessing
 import platform  # noqa: F401 — imported at module level for test patching
+import queue
 from dataclasses import dataclass
 from typing import Any
 
@@ -488,6 +489,10 @@ class SurgicalEnv(gym.Env):
         # Process action through action builder
         processed_action = self._action_builder.process_action(action)
 
+        # Forward pending ROS2 commands from bridge queue to controller (G-1 fix)
+        if self._bridge is not None and self._controller is not None:
+            self._bridge.forward_commands(self._controller)
+
         # Route through controller mode switch (D-11):
         # sim mode → passthrough, real_robot → external action from queue
         if self._controller is not None:
@@ -919,6 +924,24 @@ class Ros2Bridge:
                 self._process.kill()
                 self._process.join(timeout=2.0)
             self._running = False
+
+    def forward_commands(self, controller) -> None:
+        """Forward pending ROS2 commands from shared queue to controller.
+
+        Polls the shared multiprocessing.Queue (child process writes,
+        parent reads) and injects each pending command via
+        ``controller.inject_external_action()`` for keep-latest semantics.
+
+        Called at every ``SurgicalEnv.step()`` before ``get_action()``.
+        """
+        if self._command_queue is None or controller is None:
+            return
+        try:
+            while True:
+                cmd = self._command_queue.get_nowait()
+                controller.inject_external_action(cmd)
+        except queue.Empty:
+            pass
 
     def publish_joint_state(
         self, qpos: "np.ndarray", qvel: "np.ndarray"
