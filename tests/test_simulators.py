@@ -1366,7 +1366,6 @@ class TestStateSaveRestore:
 class TestSoftBodyStateRoundtrip:
     """Tests for soft-body state save/restore in PyBullet (PERF-03)."""
 
-    @pytest.mark.xfail(sys.platform in ("darwin",) or os.environ.get("CI") == "true", reason="PyBullet soft body fragile on macOS/CI")
     def test_pybullet_soft_body_state_roundtrip(self):
         """PERF-03: Soft body node positions must survive get_state → set_state."""
         scene = SceneDefinition(
