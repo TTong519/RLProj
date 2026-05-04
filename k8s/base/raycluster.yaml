@@ -79,7 +79,7 @@ spec:
               volumeMounts:
                 - name: checkpoints
                   mountPath: /app/checkpoints
-    volumes:
-      - name: checkpoints
-        persistentVolumeClaim:
-          claimName: surg-rl-checkpoints
+          volumes:
+            - name: checkpoints
+              persistentVolumeClaim:
+                claimName: surg-rl-checkpoints

@@ -6,6 +6,7 @@ builds the RLlib algorithm, runs the training loop, and shuts down cleanly.
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -57,10 +58,13 @@ def train_rllib(
     save_dir.mkdir(parents=True, exist_ok=True)
 
     if not ray.is_initialized():
+        ray_address = os.environ.get("RAY_ADDRESS", "auto")
         ray.init(
+            address=ray_address,
             local_mode=local_mode,
             ignore_reinit_error=True,
         )
+        logger.info("Ray connected: address=%s", ray_address)
         resources = ray.available_resources()
         logger.info(
             "Ray initialised — CPUs=%s GPUs=%s",
