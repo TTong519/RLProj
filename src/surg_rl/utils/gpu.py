@@ -198,6 +198,25 @@ def get_rocm_version() -> str | None:
 
 _MPS_SPEED_CAVEAT = "Note: MPS is 2-4x slower than CUDA on equivalent hardware."
 
+_mps_fallback_warned: bool = False
+
+
+def mps_fallback_to_cpu(operation_name: str) -> None:
+    """Log MPS→CPU fallback warning once per training run.
+
+    Call this from a ``try/except RuntimeError`` block around MPS tensor
+    operations that may hit unsupported ops.  The warning fires only once
+    per process lifetime.
+    """
+    global _mps_fallback_warned
+    if not _mps_fallback_warned:
+        _mps_fallback_warned = True
+        logger.warning(
+            "MPS does not support operation '%s' — falling back to CPU. "
+            "This warning appears once per training run.",
+            operation_name,
+        )
+
 
 def get_metal_memory_info() -> dict[str, Any] | None:
     """Get Apple Silicon unified memory info on macOS.

@@ -13,7 +13,13 @@ import sys
 import pytest
 
 from surg_rl.scene_definition.schema import HardwareBackend
-from surg_rl.utils.gpu import detect_backends, get_cuda_version, get_rocm_version, select_backend
+from surg_rl.utils.gpu import (
+    detect_backends,
+    get_cuda_version,
+    get_rocm_version,
+    get_torch_device,
+    select_backend,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -108,3 +114,67 @@ def test_cli_version_verbose_runs():
     )
     assert result.returncode == 0
     assert "GPU Availability" in result.stdout or "Backend" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# METAL-01: torch device resolution
+# ---------------------------------------------------------------------------
+
+
+def test_get_torch_device_auto():
+    """auto device resolves to a valid string."""
+    device = get_torch_device("auto")
+    assert device in ("cuda", "mps", "cpu"), f"Unexpected: {device}"
+
+
+def test_get_torch_device_passthrough():
+    """Explicit device strings pass through unchanged."""
+    assert get_torch_device("cpu") == "cpu"
+    assert get_torch_device("cuda") == "cuda"
+    assert get_torch_device("mps") == "mps"
+
+
+# ---------------------------------------------------------------------------
+# METAL-02: memory info
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Metal memory only on macOS")
+def test_metal_memory_info_on_macos():
+    """Memory info available on macOS."""
+    from surg_rl.utils.gpu import get_metal_memory_info
+
+    info = get_metal_memory_info()
+    assert info is not None
+    assert "unified_memory_gb" in info
+    assert info["unified_memory_gb"] > 0
+
+
+def test_metal_memory_info_on_non_macos():
+    """Memory info is None on non-macOS."""
+    if sys.platform == "darwin":
+        pytest.skip("test is for non-macOS")
+    from surg_rl.utils.gpu import get_metal_memory_info
+
+    assert get_metal_memory_info() is None
+
+
+# ---------------------------------------------------------------------------
+# METAL-03: fallback utility
+# ---------------------------------------------------------------------------
+
+
+def test_mps_fallback_warns_once(caplog):
+    """Fallback warns once per run, silent thereafter."""
+    from surg_rl.utils.gpu import _mps_fallback_warned, mps_fallback_to_cpu
+    import surg_rl.utils.gpu as gpu_mod
+
+    gpu_mod._mps_fallback_warned = False
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="surg_rl.utils.gpu"):
+        mps_fallback_to_cpu("test_op")
+        assert "test_op" in caplog.text
+        caplog.clear()
+        mps_fallback_to_cpu("test_op")
+        assert caplog.text == ""
