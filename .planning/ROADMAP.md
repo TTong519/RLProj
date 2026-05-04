@@ -79,12 +79,12 @@ Phase 12 is Linux-only and independent of Phases 10–11. Phase 13 requires both
 5. Launch files work from both a colcon workspace (`ros2 launch`) and a pip install (`ROS_PACKAGE_PATH=src ros2 launch`)
 
 **Plans:**
-- [ ] 12-01-PLAN.md — SystemInterface subclass + controller manager lifecycle
-- [ ] 12-02-PLAN.md — URDF ros2_control tag injection in scene_builder
-- [ ] 12-03-PLAN.md — CLI ros2-control command + controller YAML config
-- [ ] 12-04-PLAN.md — .launch.py files for bridge + replay + simulator composition
-- [ ] 12-05-PLAN.md — pip vs colcon workflow compatibility + launch arguments
-- [ ] 12-06-PLAN.md — Test suite (mocked ros2_control + launch tests)
+- [x] 12-01-PLAN.md — SystemInterface subclass + controller manager lifecycle
+- [x] 12-02-PLAN.md — URDF ros2_control tag injection in scene_builder
+- [x] 12-03-PLAN.md — CLI ros2-control command + controller YAML config
+- [x] 12-04-PLAN.md — .launch.py files for bridge + replay + simulator composition
+- [x] 12-05-PLAN.md — pip vs colcon workflow compatibility + launch arguments
+- [x] 12-06-PLAN.md — Test suite (mocked ros2_control + launch tests)
 
 ---
 
