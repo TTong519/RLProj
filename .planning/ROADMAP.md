@@ -50,10 +50,18 @@ Phase 12 is Linux-only and independent of Phases 10–11. Phase 13 requires both
 3. `v0.3.0` git tag triggers GHCR push with `ghcr.io/.../surg-rl:v0.3.0` multi-arch manifest
 4. CI `docker buildx` step verifies cross-arch builds on every PR
 
-**Plans:**
-- [ ] 11-01-PLAN.md — Multi-arch CPU + CUDA Dockerfiles (buildx + QEMU)
-- [ ] 11-02-PLAN.md — Jetson arm64 Dockerfile + architecture-conditional FROM
-- [ ] 11-03-PLAN.md — CI buildx verification + release workflow GHCR push
+**Plans:** 3 plans
+
+**Wave 1** *(parallel)*
+- [x] 11-01-PLAN.md — Multi-arch CPU + CUDA/ROCm Dockerfiles (buildx + platform directives)
+- [x] 11-02-PLAN.md — Jetson arm64 Dockerfile with JetPack 6.0 base
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 11-03-PLAN.md — CI buildx verification + release workflow GHCR push
+
+**Cross-cutting constraints:**
+- GHCR image naming (DOCKR-03) — release workflow must match image names from 11-01 + 11-02
+- buildx platform targets — ci.yml platforms must match Dockerfile `--platform` directives
 
 ---
 

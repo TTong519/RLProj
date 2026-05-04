@@ -71,10 +71,10 @@ Requirements for v0.3.0 release. Each maps to roadmap phases.
 | MACOS-02 | Phase 10 | Complete |
 | MACOS-03 | Phase 10 | Complete |
 | MACOS-04 | Phase 10 | Complete |
-| DOCKR-01 | Phase 11 | Pending |
-| DOCKR-02 | Phase 11 | Pending |
-| DOCKR-03 | Phase 11 | Pending |
-| DOCKR-04 | Phase 11 | Pending |
+| DOCKR-01 | Phase 11 | Complete |
+| DOCKR-02 | Phase 11 | Complete |
+| DOCKR-03 | Phase 11 | Complete |
+| DOCKR-04 | Phase 11 | Complete |
 | R2CTL-01 | Phase 12 | Pending |
 | R2CTL-02 | Phase 12 | Pending |
 | R2CTL-03 | Phase 12 | Pending |

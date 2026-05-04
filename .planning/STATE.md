@@ -10,12 +10,14 @@ See: .planning/PROJECT.md (updated 2026-05-03)
 ## Current Position
 
 Milestone: v0.3.0 — Production & Cross-Platform
-Phase: 10 — Metal GPU Compute + macOS Test Parity ✓
+Phase: 11 — Multi-platform Docker ✓
 Plan: —
-Status: Phase 10 complete
-Last activity: 2026-05-03 — Phase 10 shipped (4/4 plans, 7/7 reqs)
+Status: Phase 11 complete
+Last activity: 2026-05-03 — Phase 11 shipped (3/3 plans, 4/4 reqs)
 
-Progress: ██████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 25% (v0.3.0)
+Progress: ████████████████████░░░░░░░░░░░░░░░░░░ 50% (v0.3.0)
+
+Progress: ████████████░░░░░░░░░░░░░░░░░░░░░░░░░░ 30% (v0.3.0)
 
 ## Performance Metrics
 
