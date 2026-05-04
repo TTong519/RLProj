@@ -1,0 +1,21 @@
+# ros2_control configuration for surg-rl
+# Used by controller_manager to configure controllers and hardware interfaces.
+# See: https://control.ros.org/humble/doc/ros2_control/controller_manager/doc/userdoc.html
+
+controller_manager:
+  ros__parameters:
+    update_rate: 100  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    joint_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+joint_trajectory_controller:
+  ros__parameters:
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity

@@ -122,6 +122,18 @@ pip install -e ".[dev,distributed,vision,llm,tracking]"
 | `surg-rl checkpoint-inspect` | Inspect RLlib checkpoint contents |
 | `surg-rl ros2-bridge` | Start ROS2 bridge for hardware integration |
 | `surg-rl ros2-replay` | Replay trajectory via ROS2 |
+| `surg-rl ros2-control` | Start bridge with ros2_control hardware interface |
+
+### Using ros2 launch with pip install
+
+If you installed surg-rl via pip (not a colcon workspace), use `ROS_PACKAGE_PATH`:
+
+```bash
+ROS_PACKAGE_PATH=src ros2 launch surg_rl bridge.launch.py scene:=path/to/scene.json
+ROS_PACKAGE_PATH=src ros2 launch surg_rl replay.launch.py model:=path/to/checkpoint.zip
+```
+
+For colcon workspaces, no `ROS_PACKAGE_PATH` is needed — colcon's `setup.bash` handles package discovery automatically.
 
 ## Documentation
 

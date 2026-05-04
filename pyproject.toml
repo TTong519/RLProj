@@ -104,6 +104,8 @@ distributed = [
 # Then: source /opt/ros/humble/setup.bash
 ros2 = [
     "PyYAML>=6.0",
+    "launch",
+    "launch_ros",
 ]
 
 docs = [
@@ -122,6 +124,10 @@ Repository = "https://github.com/surg-rl/surg-rl"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.data-files]
+"share/surg_rl/launch" = ["launch/bridge.launch.py", "launch/replay.launch.py"]
+"share/surg_rl/config" = ["configs/ros2_control.yaml"]
 
 [tool.black]
 line-length = 100
