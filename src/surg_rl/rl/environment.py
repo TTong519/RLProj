@@ -8,6 +8,7 @@ into a standard interface for RL training with Stable-Baselines3.
 from __future__ import annotations
 
 import multiprocessing
+import os
 import platform  # noqa: F401 — imported at module level for test patching
 import queue
 from dataclasses import dataclass
@@ -376,7 +377,16 @@ class SurgicalEnv(gym.Env):
 
         Per D-13: on macOS, logs warning and disables bridge.
         Per D-01: bridge spawns at __init__ time, terminates at close().
+        Per K8S-03: skips in-process spawn when SURGRL_BRIDGE_SIDECAR=true
+        (bridge runs as K8s sidecar container).
         """
+        if os.environ.get("SURGRL_BRIDGE_SIDECAR") == "true":
+            logger.info(
+                "SURGRL_BRIDGE_SIDECAR=true — bridge runs as K8s sidecar, "
+                "skipping in-process spawn"
+            )
+            return
+
         if self.config.ros2_bridge_config is None:
             return
 

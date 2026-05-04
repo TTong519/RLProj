@@ -1,0 +1,34 @@
+# syntax=docker/dockerfile:1
+# ROS2-enabled surg-rl bridge image for K8s sidecar deployment.
+# Build: docker buildx build --platform linux/amd64 -f Dockerfile.ros2 -t surg-rl:ros2 .
+# ROS2 Humble must be installed via apt (not available on PyPI for rclpy).
+
+FROM --platform=linux/amd64 ros:humble-ros-base
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
+    libglu1-mesa \
+    libglew2.2 \
+    libx11-6 \
+    libglib2.0-0 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY pyproject.toml pytest.ini ./
+
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -e ".[ros2]"
+
+COPY src/ /app/src/
+COPY scenes/ /app/scenes/
+COPY configs/ /app/configs/
+
+ENV PYTHONPATH=/app/src
+ENV PYTHONUNBUFFERED=1
+
+ENTRYPOINT ["python", "-m", "surg_rl.cli"]
+CMD ["ros2-bridge", "--help"]
