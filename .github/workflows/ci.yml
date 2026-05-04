@@ -8,10 +8,20 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        include:
+          - os: ubuntu-latest
+            python-version: "3.10"
+          - os: ubuntu-latest
+            python-version: "3.11"
+          - os: ubuntu-latest
+            python-version: "3.12"
+          - os: macos-latest
+            python-version: "3.11"
 
     steps:
       - name: Checkout
@@ -26,9 +36,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-pip-${{ hashFiles('pyproject.toml') }}
           restore-keys: |
-            ${{ runner.os }}-pip-
+            ${{ runner.os }}-${{ runner.arch }}-pip-
 
       - name: Install dependencies
         run: |
@@ -36,13 +46,36 @@ jobs:
           pip install -e ".[dev,tracking]"
 
       - name: Lint with ruff
+        if: runner.os == 'Linux'
         run: ruff check src/ tests/
 
       - name: Check formatting with black
+        if: runner.os == 'Linux'
         run: black --check src/ tests/
 
       - name: Type check with mypy
+        if: runner.os == 'Linux'
         run: mypy src/surg_rl
 
-      - name: Test with pytest
+      - name: Find mjpython (macOS)
+        if: runner.os == 'macOS'
+        id: mjpython
+        run: |
+          MJPYTHON=$(python -c "import mujoco; import os; print(os.path.join(os.path.dirname(mujoco.__path__[0]), 'bin', 'mjpython'))")
+          echo "path=$MJPYTHON" >> "$GITHUB_OUTPUT"
+          echo "Found mjpython at: $MJPYTHON"
+
+      - name: Test with pytest (Linux)
+        if: runner.os == 'Linux'
         run: pytest tests/ -m "not integration" -v
+
+      - name: Test with mjpython (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          ${{ steps.mjpython.outputs.path }} -m pytest tests/ \
+            -m "not integration" \
+            -v \
+            --ignore=tests/test_ros2_bridge.py \
+            --ignore=tests/test_ros2_cli.py \
+            --ignore=tests/test_ros2_controller.py \
+            --ignore=tests/test_ros2_replay.py

@@ -3,6 +3,7 @@
 Tests use MagicMock to avoid creating real OS windows.
 """
 
+import os
 import platform
 import threading
 import time
@@ -118,8 +119,8 @@ class TestMuJoCoViewer:
         assert sim._viewer is None
 
     @pytest.mark.skipif(
-        platform.system() != "Darwin",
-        reason="macOS-specific RuntimeError"
+        platform.system() != "Darwin" or os.environ.get("CI") == "true",
+        reason="macOS-specific RuntimeError (expected only without mjpython)",
     )
     def test_macos_raises_without_mjpython(self, monkeypatch):
         """On macOS, without mjpython, start_viewer raises RuntimeError."""
