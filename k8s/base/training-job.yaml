@@ -1,0 +1,55 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: surg-rl-training
+  labels:
+    app: surg-rl
+    component: training
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: surg-rl
+        component: training
+    spec:
+      restartPolicy: Never
+      serviceAccountName: surg-rl
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: trainer
+          image: ghcr.io/surg-rl/surg-rl:v0.3.0
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "surg_rl.cli"]
+          args: ["train", "--scene", "/etc/surg-rl/scene.json", "--timesteps", "1000000"]
+          env:
+            - name: PYTHONPATH
+              value: /app/src
+          resources:
+            requests:
+              cpu: "4"
+              memory: "8Gi"
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "8"
+              memory: "16Gi"
+              nvidia.com/gpu: "1"
+          volumeMounts:
+            - name: scene
+              mountPath: /etc/surg-rl
+              readOnly: true
+            - name: checkpoints
+              mountPath: /app/checkpoints
+      volumes:
+        - name: scene
+          configMap:
+            name: surg-rl-scene
+        - name: checkpoints
+          persistentVolumeClaim:
+            claimName: surg-rl-checkpoints
