@@ -1,0 +1,34 @@
+# syntax=docker/dockerfile:1
+# Dockerfile for NVIDIA Jetson (arm64 + JetPack 6.0 L4T)
+# JetPack 6.0 ships: Ubuntu 22.04, CUDA 12.4, cuDNN 9.x, TensorRT 10.x
+# Build: docker buildx build --platform linux/arm64 -f Dockerfile.jetson -t surg-rl:jetson .
+# Run:   docker run --runtime=nvidia surg-rl:jetson version --verbose
+
+FROM --platform=linux/arm64 nvcr.io/nvidia/l4t-pytorch:r36.4.0-pth2.5.0
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
+    libglu1-mesa \
+    libglew2.2 \
+    libx11-6 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY pyproject.toml pytest.ini ./
+
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -e ".[tracking]"
+
+COPY src/ /app/src/
+COPY scenes/ /app/scenes/
+COPY configs/ /app/configs/
+
+ENV PYTHONPATH=/app/src
+ENV PYTHONUNBUFFERED=1
+
+ENTRYPOINT ["python", "-m", "surg_rl.cli"]
+CMD ["version", "--verbose"]
