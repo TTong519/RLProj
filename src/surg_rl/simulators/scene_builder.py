@@ -786,6 +786,78 @@ f 5 4 8
                 pos = f"{light.position.x} {light.position.y} {light.position.z}"
                 light_elem.set("pos", pos)
 
+    @staticmethod
+    def _inject_ros2_control_tags(urdf_xml: str, joint_names: list[str]) -> str:
+        """Inject ``<ros2_control>`` XML into a URDF string.
+
+        Adds position and velocity state interfaces plus position command
+        interface for each joint, referencing the standard
+        ``mock_components/GenericSystem`` hardware plugin.
+
+        Args:
+            urdf_xml: Raw URDF XML as a string.
+            joint_names: Joint names to annotate.
+
+        Returns:
+            Modified URDF XML string with ros2_control tags appended.
+        """
+        root = ET.fromstring(urdf_xml)
+        rc = ET.SubElement(root, "ros2_control", name="RobotSystem", type="system")
+        hw = ET.SubElement(rc, "hardware")
+        ET.SubElement(hw, "plugin").text = "mock_components/GenericSystem"
+        ET.SubElement(hw, "param", name="joint_names").text = " ".join(joint_names)
+        for name in joint_names:
+            joint = ET.SubElement(rc, "joint", name=name)
+            ET.SubElement(joint, "command_interface", name="position")
+            ET.SubElement(joint, "state_interface", name="position")
+            ET.SubElement(joint, "state_interface", name="velocity")
+        return ET.tostring(root, encoding="unicode")
+
+    def create_urdf(
+        self,
+        scene_definition: Any,
+        output_path: str | Path | None = None,
+        inject_ros2_control: bool = False,
+    ) -> Path:
+        """Create a URDF file from a scene definition.
+
+        Generates a minimal URDF with robot links/joints and optionally
+        injects ``<ros2_control>`` tags for hardware interface integration.
+
+        Args:
+            scene_definition: SceneDefinition object.
+            output_path: Output file path (uses temp_dir if None).
+            inject_ros2_control: Whether to add ros2_control XML tags.
+
+        Returns:
+            Path to created URDF file.
+        """
+        output_path = Path(output_path) if output_path else self.temp_dir / "scene.urdf"
+
+        robot = ET.Element("robot", name=scene_definition.metadata.name)
+
+        for joint_name in self._collect_joint_names(scene_definition):
+            ET.SubElement(robot, "joint", name=joint_name, type="revolute")
+
+        urdf_xml = ET.tostring(robot, encoding="unicode")
+
+        if inject_ros2_control and self._collect_joint_names(scene_definition):
+            urdf_xml = self._inject_ros2_control_tags(
+                urdf_xml, self._collect_joint_names(scene_definition)
+            )
+
+        output_path.write_text(urdf_xml)
+        logger.info("Created URDF file: %s (ros2_control=%s)", output_path, inject_ros2_control)
+        return output_path
+
+    def _collect_joint_names(self, scene_definition: Any) -> list[str]:
+        """Collect all joint names from robots in the scene definition."""
+        names: list[str] = []
+        for robot in getattr(scene_definition, "robots", []) or []:
+            for joint in getattr(robot, "joints", []) or []:
+                names.append(joint.name)
+        return names
+
     def cleanup(self) -> None:
         """Clean up temporary files."""
         if hasattr(self, "_temp_dir_obj") and self._temp_dir_obj is not None:
