@@ -64,34 +64,34 @@ Requirements for v0.3.0 release. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| METAL-01 | — | Pending |
-| METAL-02 | — | Pending |
-| METAL-03 | — | Pending |
-| MACOS-01 | — | Pending |
-| MACOS-02 | — | Pending |
-| MACOS-03 | — | Pending |
-| MACOS-04 | — | Pending |
-| DOCKR-01 | — | Pending |
-| DOCKR-02 | — | Pending |
-| DOCKR-03 | — | Pending |
-| DOCKR-04 | — | Pending |
-| R2CTL-01 | — | Pending |
-| R2CTL-02 | — | Pending |
-| R2CTL-03 | — | Pending |
-| R2CTL-04 | — | Pending |
-| LAUNCH-01 | — | Pending |
-| LAUNCH-02 | — | Pending |
-| LAUNCH-03 | — | Pending |
-| K8S-01 | — | Pending |
-| K8S-02 | — | Pending |
-| K8S-03 | — | Pending |
-| K8S-04 | — | Pending |
-| K8S-05 | — | Pending |
+| METAL-01 | Phase 10 | Pending |
+| METAL-02 | Phase 10 | Pending |
+| METAL-03 | Phase 10 | Pending |
+| MACOS-01 | Phase 10 | Pending |
+| MACOS-02 | Phase 10 | Pending |
+| MACOS-03 | Phase 10 | Pending |
+| MACOS-04 | Phase 10 | Pending |
+| DOCKR-01 | Phase 11 | Pending |
+| DOCKR-02 | Phase 11 | Pending |
+| DOCKR-03 | Phase 11 | Pending |
+| DOCKR-04 | Phase 11 | Pending |
+| R2CTL-01 | Phase 12 | Pending |
+| R2CTL-02 | Phase 12 | Pending |
+| R2CTL-03 | Phase 12 | Pending |
+| R2CTL-04 | Phase 12 | Pending |
+| LAUNCH-01 | Phase 12 | Pending |
+| LAUNCH-02 | Phase 12 | Pending |
+| LAUNCH-03 | Phase 12 | Pending |
+| K8S-01 | Phase 13 | Pending |
+| K8S-02 | Phase 13 | Pending |
+| K8S-03 | Phase 13 | Pending |
+| K8S-04 | Phase 13 | Pending |
+| K8S-05 | Phase 13 | Pending |
 
 **Coverage:**
 - v1 requirements: 23 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 23 ⚠️
+- Mapped to phases: 23
+- Unmapped: 0 ✓
 
 ---
 
