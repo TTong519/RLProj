@@ -5,26 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-05-03)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** Planning v0.3.0 — Deployment & Production
+**Current focus:** Defining v0.3.0 requirements — Production & Cross-Platform
 
 ## Current Position
 
-Milestone v0.2.0 **ARCHIVED** — all 4 phases shipped, tagged v0.2.0
-Next: v0.3.0 (Phases 10–12) — Kubernetes, multi-platform Docker, ros2_control
+Milestone: v0.3.0 — Production & Cross-Platform
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-03 — Milestone v0.3.0 started
 
-Progress: [████████████████████████████████████████] 100% (v0.2.0)
+Progress: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0% (v0.3.0)
 
 ## Performance Metrics
 
 - **v0.1.0:** Phases 1–5, 12 plans, 607 tests, 33/33 UAT passed
 - **v0.2.0:** Phases 6–9, 19 plans, 775 tests, 0 failures, 7/7 UAT passed
 - **Test delta:** +168 tests (v0.1.0→v0.2.0)
-- **v0.2.0 key stats:**
-  - 4 new source modules: `src/surg_rl/utils/gpu.py`, `src/surg_rl/render_thread.py`, `src/surg_rl/rl/rllib/` (6 files), `src/surg_rl/ros2/` (4 files)
-  - 17 new test files across Phases 6-9
-  - Optional extras: `[distributed]` (ray[rllib]), `[ros2]` (PyYAML + apt docs)
-  - CLI: 7 new commands (train-rllib, tune, checkpoint-inspect, ros2-bridge, ros2-replay) + --render-human/--render-fps flags
-  - Total: 9 phases, 31 plans, 775 tests, ~20,800 LOC
 
 ## Decisions
 
@@ -52,9 +49,8 @@ Progress: [███████████████████████
 
 ## Todos
 
-- [ ] Plan v0.3.0 milestone (Kubernetes, multi-platform Docker, ros2_control)
-- [ ] Phase 12: ros2_control real hardware integration
+- [ ] Plan v0.3.0 milestone (Kubernetes, multi-platform Docker, ros2_control, ROS2 launch, Metal compute, macOS xfail removal)
 
 ---
 
-_Updated: 2026-05-03 — v0.2.0 milestone archived_
+_Updated: 2026-05-03 — v0.3.0 milestone started_

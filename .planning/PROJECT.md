@@ -8,6 +8,18 @@ A comprehensive surgical-robotics reinforcement learning training system. It gen
 
 End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation — with automatic primitive fallbacks when real assets are missing.
 
+## Current Milestone: v0.3.0 — Production & Cross-Platform
+
+**Goal:** Hardened production deployment (K8s, multi-arch Docker), full real-hardware ROS2 integration (ros2_control, launch files), and complete Apple Silicon Metal GPU acceleration with macOS test suite parity.
+
+**Target features:**
+- Kubernetes deployment manifests (job + service)
+- Multi-platform Docker builds (amd64 + arm64)
+- `ros2_control` hardware_interface integration
+- ROS2 launch file support (.launch.py)
+- Full Metal GPU compute — PyTorch MPS backend for RL training on Apple Silicon
+- Remove feasible macOS xfail/skip markers (test parity)
+
 ## Requirements
 
 ### Validated (v0.2.0)
@@ -20,10 +32,12 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 
 ### Active (v0.3.0)
 
-- [ ] Kubernetes deployment manifests
-- [ ] Multi-platform Docker builds (arm64)
+- [ ] Kubernetes deployment manifests (job + service)
+- [ ] Multi-platform Docker builds (amd64 + arm64)
 - [ ] `ros2_control` hardware_interface integration
 - [ ] ROS2 launch file support (.launch.py)
+- [ ] Full Metal GPU compute — PyTorch MPS backend for RL training on Apple Silicon
+- [ ] Remove feasible macOS xfail/skip markers (test parity)
 
 ### Out of Scope
 
@@ -32,6 +46,7 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 - FDA certification / medical-grade safety validation — Research and simulation tool, not clinical device
 - Unity/Unreal rendering backends — MuJoCo and PyBullet rendering is sufficient
 - DirectML / Vulkan compute backends — Windows not primary target; niche use case
+- Linux-only ROS2 subscriber e2e tests — Requires real ROS2 runtime; mock coverage is sufficient for macOS
 
 ## Context
 
@@ -60,6 +75,23 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 | v0.1.0 | 1–5 | 12 | 607 | Complete |
 | v0.2.0 | 6–9 | 19 | 775 | Complete |
 
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd-transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd-complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
+
 ---
 
-*Last updated: 2026-05-03 after v0.2.0 milestone — all 9 phases shipped, 33/33 requirements validated*
+*Last updated: 2026-05-03 after v0.3.0 milestone initialization*
