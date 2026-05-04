@@ -31,10 +31,10 @@ Phase 12 is Linux-only and independent of Phases 10–11. Phase 13 requires both
 5. Viewer tests pass under `mjpython` auto-detection on macOS CI
 
 **Plans:**
-- [ ] 10-01-PLAN.md — MPS device resolution + SB3/RLlib wiring
-- [ ] 10-02-PLAN.md — MPS logging, fallback, and Metal-specific tests
-- [ ] 10-03-PLAN.md — macOS CI runner + mjpython integration
-- [ ] 10-04-PLAN.md — Remove xfail markers, validate soft-body test stability
+- [x] 10-01-PLAN.md — MPS device resolution + SB3/RLlib wiring
+- [x] 10-02-PLAN.md — MPS logging, fallback, and Metal-specific tests
+- [x] 10-03-PLAN.md — macOS CI runner + mjpython integration
+- [x] 10-04-PLAN.md — Remove xfail markers, validate soft-body test stability
 
 ---
 

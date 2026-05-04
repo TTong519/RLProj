@@ -64,13 +64,13 @@ Requirements for v0.3.0 release. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| METAL-01 | Phase 10 | Pending |
-| METAL-02 | Phase 10 | Pending |
-| METAL-03 | Phase 10 | Pending |
-| MACOS-01 | Phase 10 | Pending |
-| MACOS-02 | Phase 10 | Pending |
-| MACOS-03 | Phase 10 | Pending |
-| MACOS-04 | Phase 10 | Pending |
+| METAL-01 | Phase 10 | Complete |
+| METAL-02 | Phase 10 | Complete |
+| METAL-03 | Phase 10 | Complete |
+| MACOS-01 | Phase 10 | Complete |
+| MACOS-02 | Phase 10 | Complete |
+| MACOS-03 | Phase 10 | Complete |
+| MACOS-04 | Phase 10 | Complete |
 | DOCKR-01 | Phase 11 | Pending |
 | DOCKR-02 | Phase 11 | Pending |
 | DOCKR-03 | Phase 11 | Pending |
