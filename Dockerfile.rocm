@@ -1,8 +1,9 @@
+# syntax=docker/dockerfile:1
 # Dockerfile for AMD ROCm support
-# Build: docker build -f Dockerfile.rocm -t surg-rl:rocm .
+# Build: docker buildx build --platform linux/amd64 -f Dockerfile.rocm -t surg-rl:rocm .
 # Run:   docker run --device /dev/kfd --device /dev/dri surg-rl:rocm version --verbose
 
-FROM rocm/dev-ubuntu-22.04
+FROM --platform=linux/amd64 rocm/dev-ubuntu-22.04
 
 # Prevent interactive apt prompts
 ENV DEBIAN_FRONTEND=noninteractive

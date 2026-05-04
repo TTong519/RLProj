@@ -1,8 +1,9 @@
+# syntax=docker/dockerfile:1
 # Dockerfile for NVIDIA GPU (CUDA) support
-# Build: docker build -f Dockerfile.cuda -t surg-rl:cuda .
+# Build: docker buildx build --platform linux/amd64 -f Dockerfile.cuda -t surg-rl:cuda .
 # Run:   docker run --gpus all surg-rl:cuda version --verbose
 
-FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04
+FROM --platform=linux/amd64 nvidia/cuda:12.2.0-runtime-ubuntu22.04
 
 # Prevent interactive apt prompts
 ENV DEBIAN_FRONTEND=noninteractive
