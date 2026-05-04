@@ -194,3 +194,70 @@ def get_rocm_version() -> str | None:
                 if len(parts) > 1:
                     return parts[1].strip() or None
     return None
+
+
+_MPS_SPEED_CAVEAT = "Note: MPS is 2-4x slower than CUDA on equivalent hardware."
+
+
+def get_metal_memory_info() -> dict[str, Any] | None:
+    """Get Apple Silicon unified memory info on macOS.
+
+    Returns:
+        Dict with ``unified_memory_gb`` key on macOS, ``None`` on other platforms.
+    """
+    if sys.platform != "darwin":
+        return None
+    try:
+        result = subprocess.run(
+            ["sysctl", "-n", "hw.memsize"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            bytes_total = int(result.stdout.strip())
+            return {"unified_memory_gb": round(bytes_total / (1024**3), 1)}
+    except (subprocess.SubprocessError, ValueError, OSError):
+        pass
+    return None
+
+
+def get_torch_device(device: str) -> str:
+    """Resolve a device string for PyTorch / SB3 training.
+
+    Args:
+        device: Device specifier (``"auto"``, ``"cpu"``, ``"cuda"``, ``"mps"``).
+
+    Returns:
+        Resolved device string suitable for SB3 model construction.
+        ``"auto"`` probes CUDA, then MPS, then falls back to CPU.
+    """
+    if device != "auto":
+        return device
+
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            logger.info("Resolved device: cuda (CUDA)")
+            return "cuda"
+        if torch.backends.mps.is_available():
+            mem_info = get_metal_memory_info()
+            if mem_info:
+                logger.info(
+                    "Resolved device: mps (Apple Metal MPS, unified memory: %s GB). %s",
+                    mem_info["unified_memory_gb"],
+                    _MPS_SPEED_CAVEAT,
+                )
+            else:
+                logger.info(
+                    "Resolved device: mps (Apple Metal MPS). %s",
+                    _MPS_SPEED_CAVEAT,
+                )
+            return "mps"
+    except ImportError:
+        pass
+
+    logger.info("Resolved device: cpu (CPU)")
+    return "cpu"

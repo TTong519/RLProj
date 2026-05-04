@@ -15,6 +15,7 @@ import gymnasium as gym
 import numpy as np
 
 from surg_rl.scene_definition.schema import HardwareBackend
+from surg_rl.utils.gpu import get_torch_device
 from surg_rl.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -303,6 +304,8 @@ class TrainingManager:
             policy_type = "MultiInputPolicy"
 
         # Create model with common parameters
+        resolved_device = get_torch_device(self.config.device)
+
         common_kwargs = {
             "policy": policy_type,
             "env": env,
@@ -310,7 +313,7 @@ class TrainingManager:
             "gamma": algo_config.gamma,
             "verbose": self.config.verbose,
             "seed": self.config.seed,
-            "device": self.config.device,
+            "device": resolved_device,
             "policy_kwargs": policy_kwargs,
         }
 

@@ -10,6 +10,20 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from surg_rl.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+def _mps_available() -> bool:
+    """Check if Apple Metal MPS is available."""
+    try:
+        import torch
+
+        return bool(torch.backends.mps.is_available())
+    except Exception:
+        return False
+
 
 @dataclass
 class RllibConfig:
@@ -82,8 +96,15 @@ class RllibConfig:
             num_learners = gpu_count
             num_gpus_per_learner = 1.0
         elif gpu_count == 1:
-            num_learners = 0  # local learner for better single-GPU throughput
+            num_learners = 0
             num_gpus_per_learner = 1.0
+        elif _mps_available():
+            logger.info(
+                "Metal MPS detected — using local learner "
+                "(distributed MPS not yet supported by Ray)"
+            )
+            num_learners = 0
+            num_gpus_per_learner = 0.0
         else:
             num_learners = 0
             num_gpus_per_learner = 0.0
