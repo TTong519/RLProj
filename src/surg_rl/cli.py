@@ -804,5 +804,60 @@ def ros2_replay(
         replay.terminate()
 
 
+@app.command(name="ros2-control")
+def ros2_control(
+    scene: str = typer.Argument(..., help="Path to scene definition JSON/YAML"),
+    controller_yaml: str = typer.Option(
+        "configs/ros2_control.yaml",
+        "--controller-yaml",
+        help="ros2_control controller configuration YAML",
+    ),
+    launch_file: str | None = typer.Option(
+        None,
+        "--launch",
+        help="Optional .launch.py file to use instead of direct start",
+    ),
+):
+    """Start bridge with ros2_control hardware interface."""
+    from surg_rl.ros2 import HAS_ROS2
+
+    if not HAS_ROS2:
+        console.print(
+            "[yellow]ROS2 not available on this platform. "
+            "Use a Docker Linux container.[/yellow]"
+        )
+        raise typer.Exit(0)
+
+    if launch_file:
+        import subprocess
+
+        subprocess.run(
+            ["ros2", "launch", "surg_rl", launch_file], check=True
+        )
+    else:
+        from surg_rl.ros2.hardware_bridge import ControllerBridge
+        from surg_rl.rl.environment import SurgicalEnv, SurgicalEnvConfig
+
+        config = SurgicalEnvConfig(
+            scene_path=scene,
+            use_ros2_control=True,
+            controller_yaml=controller_yaml,
+        )
+        env = SurgicalEnv(config)
+        try:
+            env.reset()
+            console.print(
+                "[green]ros2_control bridge active. Press Ctrl+C to stop.[/green]"
+            )
+            import time
+
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            env.close()
+
+
 if __name__ == "__main__":
     app()
