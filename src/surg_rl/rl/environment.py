@@ -88,6 +88,8 @@ class SurgicalEnvConfig:
     controller_config: EnvironmentControllerConfig | None = None
     seed: int | None = None
     ros2_bridge_config: Ros2BridgeConfig | None = None
+    use_ros2_control: bool = False
+    controller_yaml: str | None = None
 
 
 class SurgicalEnv(gym.Env):
@@ -199,6 +201,10 @@ class SurgicalEnv(gym.Env):
         # ROS2 Bridge (D-01: spawn as separate multiprocessing Process)
         self._bridge: "Ros2Bridge | None" = None
         self._setup_bridge()
+
+        # ros2_control ControllerBridge
+        self._controller_bridge: "ControllerBridge | None" = None
+        self._setup_controller_bridge()
 
         # Episode state
         self._step_count = 0
@@ -419,6 +425,37 @@ class SurgicalEnv(gym.Env):
             bridge_cfg.command_topic,
         )
 
+    def _setup_controller_bridge(self) -> None:
+        """Set up ros2_control ControllerBridge.
+
+        Launches the controller_manager lifecycle via ControllerBridge
+        when use_ros2_control is enabled and ROS2 is available.
+        """
+        if not self.config.use_ros2_control:
+            return
+        if not HAS_ROS2:
+            logger.warning(
+                "ros2_control requested but ROS2 not available — "
+                "hardware control disabled"
+            )
+            return
+        from surg_rl.ros2.hardware_bridge import ControllerBridge
+
+        joint_states = self._simulator.get_joint_states()
+        joint_names = list(joint_states.keys()) if joint_states else ["joint_0"]
+
+        self._controller_bridge = ControllerBridge(
+            controller_yaml=self.config.controller_yaml,
+            joint_names=joint_names,
+        )
+        self._controller_bridge.start()
+
+    def _teardown_controller_bridge(self) -> None:
+        """Stop and clean up the ros2_control ControllerBridge."""
+        if self._controller_bridge is not None:
+            self._controller_bridge.stop()
+            self._controller_bridge = None
+
     def reset(
         self,
         seed: int | None = None,
@@ -597,7 +634,8 @@ class SurgicalEnv(gym.Env):
         Order matters — bridge terminates first (before simulator cleanup)
         per D-01 to avoid dangling shared-state references.
         """
-        # Terminate ROS2 bridge before simulator cleanup (D-01)
+        self._teardown_controller_bridge()
+
         if self._bridge is not None:
             self._bridge.terminate()
             logger.info("ROS2 bridge terminated")
