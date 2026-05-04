@@ -82,11 +82,11 @@ Requirements for v0.3.0 release. Each maps to roadmap phases.
 | LAUNCH-01 | Phase 12 | Complete |
 | LAUNCH-02 | Phase 12 | Complete |
 | LAUNCH-03 | Phase 12 | Complete |
-| K8S-01 | Phase 13 | Pending |
-| K8S-02 | Phase 13 | Pending |
-| K8S-03 | Phase 13 | Pending |
-| K8S-04 | Phase 13 | Pending |
-| K8S-05 | Phase 13 | Pending |
+| K8S-01 | Phase 13 | Complete |
+| K8S-02 | Phase 13 | Complete |
+| K8S-03 | Phase 13 | Complete |
+| K8S-04 | Phase 13 | Complete |
+| K8S-05 | Phase 13 | Complete |
 
 **Coverage:**
 - v1 requirements: 23 total

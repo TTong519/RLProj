@@ -10,10 +10,12 @@ See: .planning/PROJECT.md (updated 2026-05-03)
 ## Current Position
 
 Milestone: v0.3.0 — Production & Cross-Platform
-Phase: 12 — ros2_control + ROS2 Launch Files ✓
+Phase: 13 — Kubernetes Deployment ✓
 Plan: —
-Status: Phase 12 complete
-Last activity: 2026-05-04 — Phase 12 shipped (6/6 plans, 7/7 reqs)
+Status: v0.3.0 milestone complete
+Last activity: 2026-05-04 — Phase 13 shipped (5/5 plans, 5/5 reqs)
+
+Progress: ████████████████████████████████████████ 100% (v0.3.0)
 
 Progress: ████████████████████████████████░░░░░░ 75% (v0.3.0)
 

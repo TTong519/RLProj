@@ -102,11 +102,11 @@ Phase 12 is Linux-only and independent of Phases 10–11. Phase 13 requires both
 5. Checkpoint PVC survives pod deletion; a second Job with the same PVC resumes from the latest checkpoint
 
 **Plans:**
-- [ ] 13-01-PLAN.md — Training Job + GPU node selectors + resource limits
-- [ ] 13-02-PLAN.md — KubeRay RayCluster + RAY_ADDRESS env var wiring
-- [ ] 13-03-PLAN.md — ROS2 bridge sidecar container in training pod
-- [ ] 13-04-PLAN.md — ConfigMap + Secrets + PVC manifests
-- [ ] 13-05-PLAN.md — RLlib K8s-aware config (ray.init(address="auto")) + CI kind integration tests
+- [x] 13-01-PLAN.md — Training Job + GPU node selectors + resource limits
+- [x] 13-02-PLAN.md — KubeRay RayCluster + RAY_ADDRESS env var wiring
+- [x] 13-03-PLAN.md — ROS2 bridge sidecar container in training pod
+- [x] 13-04-PLAN.md — ConfigMap + Secrets + PVC manifests
+- [x] 13-05-PLAN.md — RLlib K8s-aware config (ray.init(address="auto")) + CI kind integration tests
 
 ---
 
