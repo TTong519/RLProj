@@ -8,36 +8,13 @@ surg-rl supports three deployment strategies for different environments and comp
 
 ### Docker (CPU / headless)
 
-The project includes a multi-stage `Dockerfile` optimized for CPU-only deployment and CI use:
-
-| Stage   | Purpose                                                 |
-|---------|---------------------------------------------------------|
-| `base`  | `python:3.11-slim` with system libs (OpenGL, GLEW, GLU) |
-| `build` | Copies source and installs `surg-rl` with `[dev,tracking]` extras |
-| `runtime` | Copies site-packages and source from build; minimal final image |
+The CPU `Dockerfile` supports **multi-architecture builds** (linux/amd64 + linux/arm64) via `docker buildx`:
 
 **Build:**
-
 ```bash
-docker build -t surg-rl:latest .
+# Multi-arch build (requires QEMU)
+docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/surg-rl/surg-rl:v0.3.0 .
 ```
-
-**Run:**
-
-```bash
-# Show version
-docker run surg-rl:latest version
-
-# Train a suturing scene (mount data volumes as needed)
-docker run -v $(pwd)/scenes:/app/scenes -v $(pwd)/models:/app/models \
-  surg-rl:latest train --scene scenes/simple_suturing.json --algorithm PPO --timesteps 100000
-
-# Evaluate a trained model
-docker run -v $(pwd)/models:/app/models \
-  surg-rl:latest evaluate --model models/ppo_model.zip
-```
-
-The default entrypoint is `python -m surg_rl.cli` and overrides are passed as arguments after the image name.
 
 ### GPU Docker variants
 
@@ -46,15 +23,8 @@ Dedicated GPU Dockerfiles are provided for NVIDIA CUDA and AMD ROCm environments
 #### CUDA (NVIDIA)
 
 ```bash
-# Build
-docker build -f Dockerfile.cuda -t surg-rl:cuda .
-
-# Run (requires nvidia-container-toolkit)
-docker run --gpus all surg-rl:cuda version --verbose
-
-# Training with GPU acceleration
-docker run --gpus all -v $(pwd)/scenes:/app/scenes -v $(pwd)/models:/app/models \
-  surg-rl:cuda train --scene scenes/simple_suturing.json --algorithm PPO --timesteps 100000
+# Build (amd64 only — no arm64 CUDA base image)
+docker buildx build --platform linux/amd64 -f Dockerfile.cuda -t surg-rl:cuda .
 ```
 
 Base image: `nvidia/cuda:12.2.0-runtime-ubuntu22.04`

@@ -54,7 +54,7 @@ PYTHONPATH=src pytest tests/ -v
 
 ```
 src/surg_rl/
-├── cli.py                 # Typer CLI application (11 subcommands)
+├── cli.py                 # Typer CLI application (12 subcommands)
 ├── render_thread.py       # Non-blocking rendering thread (30 FPS throttle)
 │
 ├── scene_definition/      # Pydantic v2 schema + JSON/YAML loader
@@ -100,7 +100,12 @@ src/surg_rl/
 ├── ros2/                  # ROS2 bridge (ros2 extra)
 │   ├── bridge_node.py     # ROS2 node (joint states + actions)
 │   ├── config.py          # ROS2 topic/qos configuration
+│   ├── hardware_bridge.py # ros2_control lifecycle manager
 │   └── replay.py          # Trajectory replay via ROS2
+│
+├── k8s/                    # Kubernetes manifests
+│   ├── base/               # Base resources (Job, RayCluster, PVC, RBAC)
+│   └── overlays/           # Kustomize overlays (cpu/gpu)
 │
 └── utils/                 # Shared utilities
     ├── config.py          # Pydantic-settings configuration

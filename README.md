@@ -17,10 +17,12 @@ End-to-end pipeline from a text description or JSON/YAML scene definition to a t
 - **Distributed training** — Scale across clusters with Ray/RLlib, hyperparameter tuning, and checkpoint inspection
 - **Domain randomization** — Physics, visual, and dynamics randomization for robust policy transfer
 - **Curriculum & adaptive learning** — Progressive difficulty scheduling and performance-based adjustment
-- **GPU acceleration** — Auto-detect CUDA, ROCm, Metal, Intel, or CPU with graceful fallback
-- **Real-time rendering** — Non-blocking viewer with 30 FPS throttle via render thread
+- **GPU acceleration** — Auto-detect CUDA, ROCm, Metal, Intel, or CPU with graceful fallback. Full Metal MPS compute on Apple Silicon for RL training
+- **Real-time rendering** — Non-blocking viewer with 30 FPS throttle via render thread, macOS mjpython support
 - **ROS2 bridge** — Publish/subscribe joint states and action commands for hardware-in-the-loop integration
-- **Rich CLI** — Typer-powered `surg-rl` command with 11 subcommands and Rich-formatted output
+- **ros2_control integration** — Hardware interface via controller_manager with launch file composition
+- **Production deployment** — Multi-arch Docker images (amd64 + arm64), K8s manifests with GPU scheduling
+- **Rich CLI** — Typer-powered `surg-rl` command with 12 subcommands and Rich-formatted output
 
 ## Quick Install
 

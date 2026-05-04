@@ -168,8 +168,27 @@ Bridge between simulation and real hardware via ROS2 (Humble). Components:
 - `Ros2BridgeConfig` — Pydantic v2 configuration
 - `Ros2BridgeNode` — state publishing / command subscribing
 - `TrajectoryReplay` — self-contained SB3 checkpoint replay to ROS2 topics
+- `ControllerBridge` (`hardware_bridge.py`) — manages ros2_control lifecycle from Python, wrapping C++ `controller_manager` via `spawner`/`unspawner` subprocess calls
+- Launch files: `bridge.launch.py`, `replay.launch.py` — compose controller_manager + bridge/replay nodes with configurable arguments
 
 Degrades gracefully: `HAS_ROS2 = False` on macOS or when `rclpy` is not installed.
+
+### Kubernetes Deployment
+**Directory**: `k8s/` | **Operator**: KubeRay v1.6+
+
+Production K8s manifests for RL training and ROS2 bridge:
+- `k8s/base/training-job.yaml` — SB3 training as `batch/v1` Job with GPU node selectors
+- `k8s/base/raycluster.yaml` / `rayjob.yaml` — KubeRay RayCluster and RayJob for RLlib
+- `k8s/base/` — ConfigMap, Secret, PVC, RBAC infrastructure manifests
+- `k8s/overlays/{cpu,gpu}/` — Kustomize overlays for environment variants
+- ROS2 bridge runs as sidecar container with `SURGRL_BRIDGE_SIDECAR` detection
+- Images pushed to GHCR on `v*` tags via release workflow
+
+### Multi-platform Docker
+**Dockerfiles**: `Dockerfile` (CPU amd64+arm64), `Dockerfile.cuda` (CUDA amd64), `Dockerfile.rocm` (ROCm amd64), `Dockerfile.jetson` (Jetson arm64), `Dockerfile.ros2` (ROS2 bridge)
+- Cross-arch builds via `docker buildx` + QEMU emulation
+- CI docker-ci job validates all 4 Dockerfiles per PR
+- Release workflow pushes multi-arch manifest to GHCR
 
 ### Other Optional Extras
 | Extra | Contents |
