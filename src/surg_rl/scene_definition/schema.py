@@ -339,6 +339,113 @@ class PyBulletSoftBodyConfig(BaseModel):
     )
 
 
+class MuJoCoFlexConfig(BaseModel):
+    """MuJoCo-specific flex/FEM parameters."""
+
+    youngs_modulus: float | None = Field(
+        default=None, ge=0.0, description="Override Young's modulus (Pa) for MuJoCo FEM"
+    )
+    poissons_ratio: float | None = Field(
+        default=None, ge=0.0, le=0.5, description="Override Poisson's ratio for MuJoCo FEM"
+    )
+    fem_damping: float | None = Field(
+        default=None, ge=0.0, description="Rayleigh damping for FEM (units: time)"
+    )
+    edge_stiffness: float | None = Field(
+        default=None, ge=0.0, description="Edge spring stiffness (N/m)"
+    )
+    edge_damping: float | None = Field(
+        default=None, ge=0.0, description="Edge spring damping"
+    )
+    condim: int = Field(default=3, ge=1, le=6, description="Contact dimensionality (1, 3, 4, 6)")
+    solref: str | None = Field(default=None, description="Solver reference (timeconst dampratio)")
+    solimp: str | None = Field(default=None, description="Solver impedance")
+    friction: float = Field(default=0.5, ge=0.0, description="Contact friction coefficient")
+    margin: float = Field(default=0.001, ge=0.0, description="Contact margin (m)")
+    smooth_normals: bool = Field(default=True, description="Use smooth shading for flex surface")
+
+
+class PyBulletFlexConfig(BaseModel):
+    """PyBullet-specific soft body parameters for unified DeformableConfig."""
+
+    solver_type: Literal["mass_spring", "neo_hookean"] = Field(
+        default="mass_spring", description="PyBullet soft body solver type"
+    )
+    auto_derive_neo_hookean: bool = Field(
+        default=True, description="Auto-derive Neo-Hookean mu/lambda from SoftBodyPhysics E, nu"
+    )
+    repulsion_stiffness: float = Field(
+        default=800.0, ge=0.0, description="Contact repulsion stiffness"
+    )
+    use_self_collision: bool = Field(default=False, description="Enable self-collision")
+    bending_stiffness: float = Field(
+        default=0.1, ge=0.0, description="Bending stiffness (mass-spring only)"
+    )
+    collision_margin: float = Field(default=0.006, gt=0.0, description="Collision margin (m)")
+
+
+class BoundaryCondition(BaseModel):
+    """A single boundary condition for a deformable body."""
+
+    name: str = Field(description="BC name (e.g., 'clamp_left')")
+    type: Literal["pin", "fixed_displacement", "force"] = Field(
+        default="pin", description="BC type"
+    )
+    anchor_body: str = Field(description="Name of the rigid body to attach to")
+    vertex_indices: list[int] = Field(
+        default_factory=list, description="Vertex indices to constrain (empty = full weld)"
+    )
+    stiffness: float = Field(
+        default=1e6, ge=0.0, description="Attachment stiffness"
+    )
+
+
+class DeformableConfig(BaseModel):
+    """Unified deformable body configuration.
+
+    Attached to TissueConfig when soft_body=True.
+    Provides backend-specific overrides while falling back to
+    SoftBodyPhysics for material properties.
+    """
+
+    mesh_source: Literal["tetgen", "flexcomp_grid", "file"] = Field(
+        default="tetgen", description="How the deformable mesh is generated"
+    )
+    mesh_path: str | None = Field(
+        default=None, description="Path to mesh file or tetgen prefix (without extension)"
+    )
+    mesh_resolution: int = Field(
+        default=4, ge=1, description="Mesh resolution hint (coarser=faster, finer=accurate)"
+    )
+    max_vertices: int = Field(
+        default=200, ge=1, description="Maximum vertex count (for observation padding)"
+    )
+    mujoco: MuJoCoFlexConfig = Field(
+        default_factory=MuJoCoFlexConfig, description="MuJoCo FEM override parameters"
+    )
+    pybullet: PyBulletFlexConfig = Field(
+        default_factory=PyBulletFlexConfig, description="PyBullet soft body override parameters"
+    )
+    boundary_conditions: list[BoundaryCondition] = Field(
+        default_factory=list, description="Attachment/pin boundary conditions"
+    )
+    observe_vertex_positions: bool = Field(
+        default=True, description="Include vertex positions in observation"
+    )
+    observe_strain: bool = Field(
+        default=False, description="Include per-element strain in observation"
+    )
+    observe_stress: bool = Field(
+        default=False, description="Include per-element stress in observation"
+    )
+
+    @model_validator(mode="after")
+    def validate_mesh_source(self) -> "DeformableConfig":
+        if self.mesh_source != "flexcomp_grid" and not self.mesh_path:
+            raise ValueError(f"mesh_path is required when mesh_source='{self.mesh_source}'")
+        return self
+
+
 class SoftBodyPhysics(BaseModel):
     """Soft body physics parameters for tissues."""
 
@@ -589,6 +696,10 @@ class TissueConfig(BaseModel):
     )
     pathology: str | None = Field(default=None, description="Pathological condition (if any)")
     vitality: float = Field(default=1.0, ge=0.0, le=1.0, description="Tissue health indicator")
+    deformable: DeformableConfig | None = Field(
+        default=None,
+        description="Deformable body configuration (active when soft_body=True)",
+    )
 
 
 # ============================================================================

@@ -7,6 +7,7 @@ automatic fallback to primitive shapes for missing assets.
 
 import tempfile
 import xml.etree.ElementTree as ET
+import numpy as np
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,53 @@ class AssetMissingError(Exception):
         super().__init__(
             f"Missing {asset_type} asset: {asset_path}. " f"Primitive fallback will be used."
         )
+
+
+def _parse_tetgen_node(node_path: Path) -> "np.ndarray":
+    """Parse tetgen .node file into (N,3) float64 vertex array.
+
+    .node format:
+        <#vertices> <dim> <#attributes> <boundary_markers_flag>
+        <index> <x> <y> <z> [attributes] [boundary marker]
+    """
+    with open(node_path, "r") as f:
+        lines = f.readlines()
+    header = lines[0].strip().split()
+    n_verts = int(header[0])
+    verts = np.zeros((n_verts, 3), dtype=np.float64)
+    for i, line in enumerate(lines[1 : 1 + n_verts]):
+        parts = line.strip().split()
+        if not parts or parts[0].startswith("#"):
+            continue
+        verts[i, 0] = float(parts[1])
+        verts[i, 1] = float(parts[2])
+        verts[i, 2] = float(parts[3])
+    return verts
+
+
+def _parse_tetgen_ele(ele_path: Path) -> "np.ndarray":
+    """Parse tetgen .ele file into (M,4) int32 0-indexed element array.
+
+    .ele format:
+        <#tetrahedra> <nodes_per_tet> <region_attribute_flag>
+        <index> <v1> <v2> <v3> <v4> [region attribute]
+
+    tetgen uses 1-indexed vertex IDs -> converts to 0-indexed.
+    """
+    with open(ele_path, "r") as f:
+        lines = f.readlines()
+    header = lines[0].strip().split()
+    n_tets = int(header[0])
+    elems = np.zeros((n_tets, 4), dtype=np.int32)
+    for i, line in enumerate(lines[1 : 1 + n_tets]):
+        parts = line.strip().split()
+        if not parts or parts[0].startswith("#"):
+            continue
+        elems[i, 0] = int(parts[1]) - 1
+        elems[i, 1] = int(parts[2]) - 1
+        elems[i, 2] = int(parts[3]) - 1
+        elems[i, 3] = int(parts[4]) - 1
+    return elems
 
 
 class SceneBuilder:
@@ -597,6 +645,114 @@ f 5 4 8
                 kp="100",
             )
 
+    def _add_flex_body_to_mjcf(
+        self,
+        mujoco: ET.Element,
+        tissue: Any,
+        node_path: Path | None = None,
+        ele_path: Path | None = None,
+    ) -> bool:
+        """Add a low-level <flex> FEM body to MJCF from tetgen mesh.
+
+        Args:
+            mujoco: Root <mujoco> element.
+            tissue: TissueConfig with soft_body=True and DeformableConfig.
+            node_path: Path to tetgen .node file (vertices).
+            ele_path: Path to tetgen .ele file (elements).
+
+        Returns:
+            True if the flex body was added, False if not.
+        """
+        dc = tissue.deformable
+
+        if node_path is None and dc.mesh_path is not None:
+            node_path = Path(str(dc.mesh_path) + ".1.node")
+        if ele_path is None and dc.mesh_path is not None:
+            ele_path = Path(str(dc.mesh_path) + ".1.ele")
+
+        if node_path is None or ele_path is None:
+            return False
+        if not node_path.exists() or not ele_path.exists():
+            self._log_missing_asset(str(node_path), tissue.name)
+            return False
+
+        vertices = _parse_tetgen_node(node_path)
+        elements = _parse_tetgen_ele(ele_path)
+
+        deformable = mujoco.find("deformable")
+        if deformable is None:
+            deformable = ET.SubElement(mujoco, "deformable")
+
+        mc = dc.mujoco
+        physics = tissue.physics
+
+        flex = ET.SubElement(
+            deformable,
+            "flex",
+            name=f"{tissue.name}_flex",
+            dim="3",
+            radius="0.0",
+            flatskin="false" if mc.smooth_normals else "true",
+            body="world",
+        )
+
+        friction_val = mc.friction
+        solref = mc.solref or "0.01 1"
+        solimp = mc.solimp or "0.95 0.99 0.0001"
+        margin_val = mc.margin
+        ET.SubElement(
+            flex,
+            "contact",
+            condim=str(mc.condim),
+            solref=solref,
+            solimp=solimp,
+            friction=f"{friction_val} 0.005 0.0001",
+            selfcollide="none",
+            margin=str(margin_val),
+        )
+
+        edge_stiff = mc.edge_stiffness or physics.stiffness
+        edge_damp = mc.edge_damping or physics.damping
+        ET.SubElement(flex, "edge", stiffness=str(edge_stiff), damping=str(edge_damp))
+
+        young = mc.youngs_modulus or physics.youngs_modulus
+        poisson = mc.poissons_ratio or physics.poissons_ratio
+        fem_damping = mc.fem_damping or (physics.damping * 0.1)
+        ET.SubElement(
+            flex, "elasticity", young=str(young), poisson=str(poisson), damping=str(fem_damping)
+        )
+
+        vert_str = "\n".join(f"{v[0]:.6f} {v[1]:.6f} {v[2]:.6f}" for v in vertices)
+        ET.SubElement(flex, "vertex").text = vert_str
+
+        elem_str = "\n".join(
+            f"{int(e[0])} {int(e[1])} {int(e[2])} {int(e[3])}" for e in elements
+        )
+        ET.SubElement(flex, "element").text = elem_str
+
+        if dc.boundary_conditions:
+            equality = mujoco.find("equality")
+            if equality is None:
+                equality = ET.SubElement(mujoco, "equality")
+            for bc in dc.boundary_conditions:
+                if bc.type == "pin":
+                    ET.SubElement(
+                        equality,
+                        "weld",
+                        name=f"pin_{bc.name}",
+                        body1=f"{tissue.name}_flex",
+                        body2=bc.anchor_body,
+                        solref="0.01 1",
+                    )
+
+        flex_name = f"{tissue.name}_flex"
+        if not hasattr(self, "_flex_body_names"):
+            self._flex_body_names: list[str] = []
+        if flex_name not in self._flex_body_names:
+            self._flex_body_names.append(flex_name)
+
+        return True
+
     def _add_tissue_to_mjcf(
         self,
         mujoco: ET.Element,
@@ -614,6 +770,15 @@ f 5 4 8
         body.set("pos", pos)
 
         if getattr(tissue, "soft_body", False):
+            deformable = getattr(tissue, "deformable", None)
+            if deformable is not None and deformable.mesh_source == "tetgen":
+                self._add_flex_body_to_mjcf(mujoco, tissue)
+                return
+            elif deformable is not None and deformable.mesh_source == "file":
+                self._add_flex_body_to_mjcf(mujoco, tissue)
+                return
+            # flexcomp_grid or None -> existing flexcomp path (backward compat)
+
             # Soft body tissue using MuJoCo flexcomp (grid-based deformable object)
             dims = tissue.geometry.dimensions or (0.1, 0.1, 0.01)
             # flexcomp generates a 3D grid of vertices

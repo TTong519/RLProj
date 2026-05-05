@@ -48,3 +48,38 @@ def suturing_scene():
     loader = SceneLoader()
     scene_path = Path(__file__).parent.parent / "scenes" / "simple_suturing.json"
     return loader.load(scene_path)
+
+
+@pytest.fixture
+def tetgen_cube_mesh(tmp_path):
+    """Fixture: tetgen .node and .ele files for a small tetrahedralized cube."""
+    node_path = tmp_path / "cube.1.node"
+    ele_path = tmp_path / "cube.1.ele"
+    node_path.write_text(
+        "9  3  0  0\n"
+        "1  0.0 0.0 0.0\n"
+        "2  1.0 0.0 0.0\n"
+        "3  1.0 1.0 0.0\n"
+        "4  0.0 1.0 0.0\n"
+        "5  0.0 0.0 1.0\n"
+        "6  1.0 0.0 1.0\n"
+        "7  1.0 1.0 1.0\n"
+        "8  0.0 1.0 1.0\n"
+        "9  0.5 0.5 0.5\n"
+    )
+    ele_path.write_text(
+        "12  4  0\n"
+        "1  1 2 3 9\n"
+        "2  1 3 4 9\n"
+        "3  1 2 6 9\n"
+        "4  1 6 5 9\n"
+        "5  1 5 8 9\n"
+        "6  1 8 4 9\n"
+        "7  2 3 7 9\n"
+        "8  2 7 6 9\n"
+        "9  3 4 8 9\n"
+        "10 3 8 7 9\n"
+        "11 5 6 7 9\n"
+        "12 5 7 8 9\n"
+    )
+    return node_path, ele_path
