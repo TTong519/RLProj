@@ -5,23 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-05-04)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** Defining v0.3.1 requirements — Audit Gap Closure
+**Current focus:** v0.3.1 completed — ready for next milestone
 
 ## Current Position
 
 Milestone: v0.3.1 — Audit Gap Closure
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-05-04 — Milestone v0.3.1 started
+Phase: 14 completed
+Plan: 14-01 completed
+Status: Milestone audit passed (clean)
+Last activity: 2026-05-04 — v0.3.1 milestone audit
 
-Progress: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0% (v0.3.1)
+Progress: ████████████████████████████████████████ 100% (v0.3.1)
 
 ## Performance Metrics
 
 - **v0.1.0:** Phases 1–5, 12 plans, 607 tests, 33/33 UAT passed
 - **v0.2.0:** Phases 6–9, 19 plans, 775 tests, 0 failures, 7/7 UAT passed
 - **v0.3.0:** Phases 10–13, 18 plans, 826 tests, 23/23 validated
+- **v0.3.1:** Phase 14, 1 plan, 833 tests, 5/5 gaps closed
 
 ## Decisions
 
@@ -43,8 +44,8 @@ Progress: ░░░░░░░░░░░░░░░░░░░░░░░�
 
 ## Todos
 
-- [ ] Fix 5 v0.3.0 audit gaps as v0.3.1 milestone
+- [x] Fix 5 v0.3.0 audit gaps as v0.3.1 milestone
 
 ---
 
-_Updated: 2026-05-04 — v0.3.1 milestone started_
+_Updated: 2026-05-04 — v0.3.1 milestone audited (clean)_
