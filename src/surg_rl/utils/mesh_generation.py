@@ -1,4 +1,4 @@
-"""Pure-NumPy procedural tetrahedral mesh generators.
+"""Procedural tetrahedral mesh generators with tetgen-backed tetrahedralization.
 
 Produces (vertices, tetrahedra) tuples suitable for :func:`write_vtk_unstructured_grid`.
 All generators output pure tetrahedra (VTK cell type 10) with no duplicate vertices.
@@ -12,23 +12,40 @@ logger = logging.getLogger(__name__)
 
 
 def _try_external_tetrahedralization(vertices, faces):
-    """Attempt tetrahedralization using pyvista (optional dependency).
+    """Attempt tetrahedralization using tetgen (required dependency: tetgen>=0.8.4).
 
     Args:
         vertices: Array of shape (N, 3).
         faces: Array of shape (M, 3) with triangular face indices.
 
     Returns:
-        (tet_verts, tet_cells) tuple or None if pyvista is unavailable or fails.
+        (tet_verts_Nx3_float64, tet_cells_Mx4_int32) tuple or None if tetgen
+        is unavailable or the surface is non-manifold.
     """
+    if len(vertices) == 0 or len(faces) == 0:
+        return None
+    if vertices.shape[1] != 3:
+        return None
+    if faces.shape[1] != 3:
+        return None
+    if not np.isfinite(vertices).all():
+        return None
+    if faces.max() >= len(vertices) or faces.min() < 0:
+        return None
+
     try:
-        import pyvista as pv  # type: ignore[import-untyped]
-        face_arr = np.hstack([np.full((len(faces), 1), 3), faces])
-        surface = pv.PolyData(vertices, face_arr)
-        tet_mesh = surface.delaunay_3d()
-        tet_cells = tet_mesh.cells.reshape(-1, 5)[:, 1:]  # skip count column
-        return tet_mesh.points, tet_cells
-    except Exception:
+        import tetgen  # type: ignore[import-untyped]
+    except ImportError:
+        return None
+
+    try:
+        tgen = tetgen.TetGen(
+            vertices.astype(np.float64, copy=False),
+            faces.astype(np.int32, copy=False),
+        )
+        nodes, elems = tgen.tetrahedralize(order=1, quiet=True)[:2]
+        return nodes, elems
+    except RuntimeError:
         return None
 
 

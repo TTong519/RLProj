@@ -79,7 +79,7 @@ llm = [
 ]
 
 meshing = [
-    "pyvista>=0.43",
+    "tetgen>=0.8.4",
 ]
 
 vision = [
