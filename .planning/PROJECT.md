@@ -10,24 +10,22 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 
 ## Current State
 
-**Shipped v0.3.0** (2026-05-04) — 4 phases, 18 plans, 826 tests, 23/23 requirements validated.
+**Shipped v0.3.1** (2026-05-04) — 1 phase, 1 plan, 833 tests, 5/5 audit gaps closed.
 
-**Now building v0.3.1 — Audit Gap Closure.** Fixing 5 integration gaps identified by v0.3.0 milestone audit.
+**Ready for next milestone.**
 
-### Key Deliverables (v0.3.0)
-- PyTorch MPS compute for Apple Silicon + macOS CI runner with test parity
-- Multi-arch Docker images (amd64 + arm64, CUDA + Jetson) on GHCR via docker buildx
-- ros2_control hardware_interface via C++ controller_manager with Python lifecycle management
-- ROS2 .launch.py files with pip+colcon compatibility
-- Production K8s manifests (Job, RayCluster, sidecar, ConfigMap/Secrets/PVC, Kustomize overlays)
+### Key Deliverables (v0.3.1)
+- All 5 v0.3.0 audit integration gaps closed
+- Dockerfile.ros2 wired to GHCR release workflow
+- CUDA image for GPU K8s training nodes; CPU overlay image fallback
+- ROS2 topic probe replacing TCP netcat initContainer health check
+- bridge_node/replay_node console_scripts registered in pyproject.toml
+- Metal detection deduplicated: `_mps_available()` → `gpu._has_metal()`
 
-### Known Gaps (accepted tech debt — v0.3.1 target)
-- `Dockerfile.ros2` image not wired to GHCR release workflow (referenced by K8s manifests)
-- Trainer uses CPU image with GPU request in K8s Job manifest
-- initContainer health check probes TCP instead of DDS
-- No bridge_node/replay_node console_scripts in pyproject.toml
-- `_mps_available()` in `config.py` duplicates `gpu.py` Metal detection logic
-- `_mps_available()` duplicates `gpu.py` Metal detection logic
+### Accepted Tech Debt (deferred)
+- `Dockerfile.ros2` hardcodes `linux/amd64` while `Dockerfile` uses `$TARGETPLATFORM` — intentional, not blocking
+- K8S-05 PVC e2e validation requires real K8s cluster — manual-only, documented prerequisite
+- KubeRay operator must be pre-installed on target cluster — documented prerequisite
 
 ## Requirements
 
@@ -43,8 +41,7 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 
 ### Active (Next Milestone)
 
-- [ ] Fix K8s integration gaps from v0.3.0 audit
-- [ ] TBD — define in next milestone planning
+- [ ] Define next milestone scope — TBD via `/gsd-new-milestone`
 
 ### Out of Scope
 
@@ -64,7 +61,7 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 **Build:** setuptools, pip, pyproject.toml
 **CLI:** Typer + Rich (`surg-rl` command, 12 subcommands)
 **Config:** Pydantic v2 dataclasses + pydantic-settings (.env support)
-**Testing:** pytest (pytest.ini with `pythonpath = src`), 826 tests, 0 failures
+**Testing:** pytest (pytest.ini with `pythonpath = src`), 833 tests, 0 failures
 **Lint/Type:** ruff, black, mypy
 
 ## Key Architecture Decisions
@@ -86,6 +83,7 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 | v0.1.0 | 1–5 | 12 | 607 | Complete |
 | v0.2.0 | 6–9 | 19 | 775 | Complete |
 | v0.3.0 | 10–13 | 18 | 826 | Complete |
+| v0.3.1 | 14 | 1 | 833 | Complete |
 
 ## Evolution
 

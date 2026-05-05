@@ -5,7 +5,7 @@
 - ✅ **v0.1.0 Stabilization** — Phases 1–5 (shipped 2026-05-02)
 - ✅ **v0.2.0 Scaling, Rendering & Real Robot** — Phases 6–9 (shipped 2026-05-03)
 - ✅ **v0.3.0 Production & Cross-Platform** — Phases 10–13 (shipped 2026-05-04)
-- 🚧 **v0.3.1 Audit Gap Closure** — Phase 14 (in progress)
+- ✅ **v0.3.1 Audit Gap Closure** — Phase 14 (shipped 2026-05-04) · [archive](milestones/v0.3.1-ROADMAP.md)
 - 📋 **Next milestone** — TBD
 
 ## Phases
@@ -41,24 +41,15 @@
 
 </details>
 
-## Phase 14: Audit Gap Closure
+<details>
+<summary>✅ v0.3.1 Audit Gap Closure (Phase 14) — SHIPPED 2026-05-04</summary>
 
-**Goal:** Fix the 5 integration gaps identified in the v0.3.0 milestone audit — deployment wiring fixes only.
+- [x] Phase 14: Audit Gap Closure (1/1 plan, 5 gaps closed)
 
-**Requirements mapped:** GAP-01, GAP-02, GAP-03, GAP-04, GAP-05
-
-**Success criteria:**
-1. `release.yml` builds and pushes `Dockerfile.ros2` to GHCR alongside CPU and CUDA images
-2. Training Job uses CUDA image on GPU nodes
-3. initContainer health check uses ROS2 topic probe
-4. `bridge_node`/`replay_node` console_scripts registered in pyproject.toml
-5. `config.py:_mps_available()` imports from `gpu.py`
-
-**Plans:**
-- [ ] 14-01-PLAN.md — All 5 audit gap fixes (GHCR wiring, image fix, health check, console_scripts, MPS refactor)
+</details>
 
 ### 📋 Next Milestone (TBD)
 
 ---
 
-*Roadmap last updated: 2026-05-04 after v0.3.1 milestone initialization*
+*Roadmap last updated: 2026-05-04 after v0.3.1 milestone archival*
