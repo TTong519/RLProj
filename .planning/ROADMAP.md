@@ -60,8 +60,14 @@
 3. VTK/PyVista removed from `[meshing]` extras
 4. All existing mesh-dependent tests pass (soft body, scene builder)
 
-**Plans:**
-- [ ] 15-01-PLAN.md — Integrate tetgen, migrate vtk_io.py internals, update deps
+**Plans:** 1 plan (1 wave)
+
+**Wave 1** *(no dependencies)*
+- [ ] 15-01-PLAN.md — Integrate tetgen, migrate vtk_io.py internals, update deps (TETG-01..04)
+
+**Cross-cutting constraints:**
+- `vtk_io.py` public API (`write_vtk_unstructured_grid`, `read_vtk_unstructured_grid`, `validate_vtk`) must remain unchanged
+- All existing mesh-dependent tests must pass (test_mesh_generation.py, test_vtk_io.py, test_scene_builder.py)
 
 ## Phase 16: Deformable Objects
 
@@ -70,14 +76,18 @@
 **Requirements mapped:** DEFM-01, DEFM-02, DEFM-03, DEFM-04
 
 **Success criteria:**
-1. MuJoCo loads deformable bodies via `mujoco.mesh` + `flexcomp`
-2. PyBullet soft body parameters mapped from `TissueConfig`
-3. `DeformableConfig` in scene schema with backend-specific overrides
-4. Vertex positions observable in `ObservationConfig`
+1. MuJoCo loads deformable bodies via `<deformable>/<flex>` (low-level) from tetgen meshes
+2. PyBullet soft body Neo-Hookean params auto-derived from Young's modulus + Poisson's ratio
+3. `DeformableConfig` in scene schema with MuJoCoFlexConfig / PyBulletFlexConfig backend overrides
+4. Vertex positions (padded) + edge strain observable via dynamic `ObservationSpec`
 
-**Plans:**
-- [ ] 16-01-PLAN.md — MuJoCo FEM deformables + DeformableConfig schema
-- [ ] 16-02-PLAN.md — PyBullet soft body improvements + observation
+**Plans:** 2 plans (2 waves)
+
+**Wave 1** *(no dependencies)*
+- [ ] 16-01-PLAN.md — MuJoCo FEM `<flex>` generation + DeformableConfig schema (DEFM-01, DEFM-03)
+
+**Wave 2** *(depends on Plan 01)*
+- [ ] 16-02-PLAN.md — PyBullet soft body param mapping + deformable observation (DEFM-02, DEFM-04)
 
 ## Phase 17: Volumetric Cutting
 
