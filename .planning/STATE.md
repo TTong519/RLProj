@@ -2,51 +2,39 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-03)
+See: .planning/PROJECT.md (updated 2026-05-04)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** Defining v0.3.0 requirements — Production & Cross-Platform
+**Current focus:** Defining v0.3.1 requirements — Audit Gap Closure
 
 ## Current Position
 
-Milestone: v0.3.0 — Production & Cross-Platform
-Phase: 13 — Kubernetes Deployment ✓
+Milestone: v0.3.1 — Audit Gap Closure
+Phase: Not started (defining requirements)
 Plan: —
-Status: v0.3.0 milestone complete
-Last activity: 2026-05-04 — Phase 13 shipped (5/5 plans, 5/5 reqs)
+Status: Defining requirements
+Last activity: 2026-05-04 — Milestone v0.3.1 started
 
-Progress: ████████████████████████████████████████ 100% (v0.3.0)
-
-Progress: ████████████████████████████████░░░░░░ 75% (v0.3.0)
-
-Progress: ████████████████████░░░░░░░░░░░░░░░░░░ 50% (v0.3.0)
-
-Progress: ████████████░░░░░░░░░░░░░░░░░░░░░░░░░░ 30% (v0.3.0)
+Progress: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0% (v0.3.1)
 
 ## Performance Metrics
 
 - **v0.1.0:** Phases 1–5, 12 plans, 607 tests, 33/33 UAT passed
 - **v0.2.0:** Phases 6–9, 19 plans, 775 tests, 0 failures, 7/7 UAT passed
-- **Test delta:** +168 tests (v0.1.0→v0.2.0)
+- **v0.3.0:** Phases 10–13, 18 plans, 826 tests, 23/23 validated
 
 ## Decisions
 
 <details>
-<summary>v0.2.0 Decisions (click to expand)</summary>
+<summary>v0.3.0 Decisions (click to expand)</summary>
 
-- GPU acceleration as Phase 6 (foundation for rendering)
-- Ray/RLlib as Phase 8 (requires rendering stable + GPU detected)
-- ROS2 as Phase 9 (independent, can be reordered)
-- K8s and multi-platform Docker deferred to v0.3.0
-- HardwareBackend(str, Enum) with 6 members (auto/cuda/rocm/metal/intel/cpu)
-- Intel backend gracefully falls back to CPU (GPU-08 fix)
-- No gl_context kwarg on MuJoCo Renderer (auto-detected)
-- RenderThread daemon + time.sleep for FPS throttle
-- RLlib 2.55: old API stack disabled by default
-- Bridge runs as multiprocessing.Process with multiprocessing.Queue IPC
-- Bridge→controller forwarding wired (G-1 fix)
-- macOS: ROS2 imports warn + disable gracefully
-- [ros2] extra documents apt-only deps (rclpy not on PyPI)
+- Metal MPS compute as Phase 10 (foundation for macOS parity)
+- macOS CI runner to eliminate xfail markers
+- docker buildx multi-arch builds for CPU + GPU images
+- ros2_control via C++ controller_manager with Python lifecycle wrapper
+- ROS2 bridge as K8s sidecar with SURGRL_BRIDGE_SIDECAR detection
+- RLlib RAY_ADDRESS env var for KubeRay cluster joining
+- Kustomize overlays for K8s deployment variants (CPU vs GPU)
 </details>
 
 ## Blockers
@@ -55,8 +43,8 @@ Progress: ████████████░░░░░░░░░░░�
 
 ## Todos
 
-- [ ] Plan v0.3.0 milestone (Kubernetes, multi-platform Docker, ros2_control, ROS2 launch, Metal compute, macOS xfail removal)
+- [ ] Fix 5 v0.3.0 audit gaps as v0.3.1 milestone
 
 ---
 
-_Updated: 2026-05-03 — v0.3.0 milestone started_
+_Updated: 2026-05-04 — v0.3.1 milestone started_

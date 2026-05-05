@@ -12,18 +12,22 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 
 **Shipped v0.3.0** (2026-05-04) — 4 phases, 18 plans, 826 tests, 23/23 requirements validated.
 
-### Key Deliverables
+**Now building v0.3.1 — Audit Gap Closure.** Fixing 5 integration gaps identified by v0.3.0 milestone audit.
+
+### Key Deliverables (v0.3.0)
 - PyTorch MPS compute for Apple Silicon + macOS CI runner with test parity
 - Multi-arch Docker images (amd64 + arm64, CUDA + Jetson) on GHCR via docker buildx
 - ros2_control hardware_interface via C++ controller_manager with Python lifecycle management
 - ROS2 .launch.py files with pip+colcon compatibility
 - Production K8s manifests (Job, RayCluster, sidecar, ConfigMap/Secrets/PVC, Kustomize overlays)
 
-### Known Gaps (accepted tech debt)
+### Known Gaps (accepted tech debt — v0.3.1 target)
 - `Dockerfile.ros2` image not wired to GHCR release workflow (referenced by K8s manifests)
 - Trainer uses CPU image with GPU request in K8s Job manifest
 - initContainer health check probes TCP instead of DDS
 - No bridge_node/replay_node console_scripts in pyproject.toml
+- `_mps_available()` in `config.py` duplicates `gpu.py` Metal detection logic
+- `_mps_available()` duplicates `gpu.py` Metal detection logic
 
 ## Requirements
 
