@@ -29,3 +29,10 @@ patches:
     target:
       kind: Job
       name: surg-rl-training
+  - patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/image
+        value: ghcr.io/surg-rl/surg-rl:v0.3.0
+    target:
+      kind: Job
+      name: surg-rl-training

@@ -60,6 +60,21 @@ class TestJobStructure:
         init = job["spec"]["template"]["spec"]["initContainers"][0]
         assert init["name"] == "wait-for-bridge"
 
+    def test_trainer_cuda_image(self):
+        job = _load("training-job.yaml")
+        for c in job["spec"]["template"]["spec"]["containers"]:
+            if c["name"] == "trainer":
+                assert "cuda" in c["image"]
+                assert "ghcr.io/surg-rl" in c["image"]
+
+    def test_init_container_ros2_topic_probe(self):
+        job = _load("training-job.yaml")
+        init = job["spec"]["template"]["spec"]["initContainers"][0]
+        cmd = " ".join(init["command"])
+        assert "ros2 topic list" in cmd
+        assert "grep" in cmd
+        assert "nc" not in cmd
+
 
 class TestRayManifests:
     """K8S-02: RayCluster and RayJob structure checks."""
@@ -130,7 +145,18 @@ class TestKustomizeOverlays:
         p = K8S_BASE.parent / "overlays" / "cpu" / "kustomization.yaml"
         assert p.exists()
         overlay = yaml.safe_load(p.read_text())
-        assert len(overlay.get("patches", [])) >= 4
+        assert len(overlay.get("patches", [])) >= 5
+
+    def test_cpu_overlay_replaces_image(self):
+        p = K8S_BASE.parent / "overlays" / "cpu" / "kustomization.yaml"
+        overlay = yaml.safe_load(p.read_text())
+        image_patches = [
+            patch for patch in overlay["patches"]
+            if "image" in patch.get("patch", "")
+        ]
+        assert len(image_patches) >= 1
+        for patch in image_patches:
+            assert "cuda" not in patch["patch"]
 
     def test_gpu_overlay_exists(self):
         p = K8S_BASE.parent / "overlays" / "gpu" / "kustomization.yaml"

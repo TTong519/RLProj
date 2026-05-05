@@ -198,3 +198,18 @@ def test_logs_selected_backend(caplog: pytest.LogCaptureFixture):
         with caplog.at_level("INFO", logger="surg_rl.utils.gpu"):
             select_backend(HardwareBackend.auto)
         assert "Selected backend: cuda" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# GAP-05: MPS detection delegation
+# ---------------------------------------------------------------------------
+
+
+def test_mps_available_delegates_to_has_metal():
+    """Verify _mps_available() imports from gpu._has_metal, not duplicating torch logic."""
+    from surg_rl.rl.rllib.config import _mps_available
+
+    with mock.patch("surg_rl.utils.gpu._has_metal", return_value=True):
+        assert _mps_available() is True
+    with mock.patch("surg_rl.utils.gpu._has_metal", return_value=False):
+        assert _mps_available() is False

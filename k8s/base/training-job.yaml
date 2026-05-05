@@ -25,19 +25,19 @@ spec:
           effect: NoSchedule
       initContainers:
         - name: wait-for-bridge
-          image: busybox:1.36
+          image: ghcr.io/surg-rl/surg-rl/ros2:v0.3.0
           command:
             - sh
             - -c
             - |
-              until nc -z localhost 9090; do
+              until ros2 topic list 2>/dev/null | grep -q surg_rl; do
                 echo "Waiting for ROS2 bridge..."
                 sleep 2
               done
               echo "Bridge ready"
       containers:
         - name: trainer
-          image: ghcr.io/surg-rl/surg-rl:v0.3.0
+          image: ghcr.io/surg-rl/surg-rl/cuda:v0.3.0
           imagePullPolicy: IfNotPresent
           command: ["python", "-m", "surg_rl.cli"]
           args: ["train", "--scene", "/etc/surg-rl/scene.json", "--timesteps", "1000000"]
@@ -62,7 +62,7 @@ spec:
             - name: checkpoints
               mountPath: /app/checkpoints
         - name: bridge
-          image: ghcr.io/surg-rl/surg-rl-ros2:v0.3.0
+          image: ghcr.io/surg-rl/surg-rl/ros2:v0.3.0
           imagePullPolicy: IfNotPresent
           command: ["python", "-m", "surg_rl.cli"]
           args: ["ros2-bridge", "--scene", "/etc/surg-rl/scene.json"]

@@ -10,10 +10,12 @@ Architecture:
     - Error validation: NaN/Inf detection, dimension mismatch handling.
 """
 
+from __future__ import annotations
+
+import contextlib
 import multiprocessing
 import queue
 import sys
-from typing import Optional
 
 import numpy as np
 
@@ -41,6 +43,7 @@ else:
 # ── Dummy implementation (no rclpy available) ─────────────────────────
 
 if not _HAS_ROS2:
+
     class Ros2BridgeNode:
         """Dummy bridge node — ROS2 is not available on this platform.
 
@@ -51,10 +54,10 @@ if not _HAS_ROS2:
 
         def __init__(
             self,
-            joint_names: Optional[list[str]] = None,
+            joint_names: list[str] | None = None,
             publisher_topic: str = "/surg_rl/joint_states",
             command_topic: str = "/surg_rl/commands",
-            command_queue: "multiprocessing.Queue | None" = None,
+            command_queue: multiprocessing.Queue | None = None,
             frame_id: str = "world",
             qos_profile: str = "sensor_data",
             on_nan_inf: str = "raise",
@@ -87,7 +90,7 @@ if not _HAS_ROS2:
             self,
             qpos: np.ndarray,
             qvel: np.ndarray,
-            joint_names: Optional[list[str]] = None,
+            joint_names: list[str] | None = None,
         ) -> None:
             """Publish joint state (no-op in dummy mode)."""
             logger.debug(
@@ -97,7 +100,7 @@ if not _HAS_ROS2:
                 qvel.shape,
             )
 
-        def get_latest_command(self) -> Optional[np.ndarray]:
+        def get_latest_command(self) -> np.ndarray | None:
             """Return latest command from the queue (works even in dummy mode).
 
             The command queue uses only Python's queue module, which is always
@@ -119,6 +122,14 @@ if not _HAS_ROS2:
                 f"pub={self._publisher_topic}, "
                 f"sub={self._command_topic})"
             )
+
+    # Dummy main for non-ROS2 platforms
+    def main() -> None:
+        raise RuntimeError(
+            "ROS2 is not available. Install rclpy via apt: "
+            "sudo apt install ros-humble-rclpy ros-humble-sensor-msgs ros-humble-std-msgs"
+        )
+
 
 # ── Real implementation (rclpy available) ─────────────────────────────
 
@@ -162,7 +173,7 @@ else:
             joint_names: list[str],
             publisher_topic: str = "/surg_rl/joint_states",
             command_topic: str = "/surg_rl/commands",
-            command_queue: "multiprocessing.Queue | None" = None,
+            command_queue: multiprocessing.Queue | None = None,
             frame_id: str = "world",
             qos_profile: str = "sensor_data",
             on_nan_inf: str = "raise",
@@ -181,9 +192,7 @@ else:
             from rclpy.qos import qos_profile_sensor_data
 
             qos = qos_profile_sensor_data if self._qos_profile == "sensor_data" else 10
-            self._pub = self.create_publisher(
-                JointState, publisher_topic, qos
-            )
+            self._pub = self.create_publisher(JointState, publisher_topic, qos)
             self._sub = self.create_subscription(
                 Float64MultiArray,
                 command_topic,
@@ -192,8 +201,7 @@ else:
             )
 
             logger.info(
-                "Ros2BridgeNode created. Publisher: %s, Subscriber: %s, "
-                "Joints: %s",
+                "Ros2BridgeNode created. Publisher: %s, Subscriber: %s, " "Joints: %s",
                 publisher_topic,
                 command_topic,
                 joint_names,
@@ -214,7 +222,7 @@ else:
             self,
             qpos: np.ndarray,
             qvel: np.ndarray,
-            joint_names: Optional[list[str]] = None,
+            joint_names: list[str] | None = None,
         ) -> None:
             """Publish a JointState message on the configured topic.
 
@@ -252,7 +260,7 @@ else:
             msg.velocity = qvel.tolist()
             self._pub.publish(msg)
 
-        def get_latest_command(self) -> Optional[np.ndarray]:
+        def get_latest_command(self) -> np.ndarray | None:
             """Return the latest command from the subscriber queue.
 
             Non-blocking: returns None immediately if no command available.
@@ -304,15 +312,29 @@ else:
 
             # Keep-latest semantics: overwrite old command (D-02, T-09-04)
             if self._command_queue.full():
-                try:
+                with contextlib.suppress(queue.Empty):
                     self._command_queue.get_nowait()
-                except queue.Empty:
-                    pass
             self._command_queue.put_nowait(data)
 
         def __repr__(self) -> str:
-            return (
-                f"Ros2BridgeNode("
-                f"pub={self._publisher_topic}, "
-                f"sub={self._command_topic})"
-            )
+            return f"Ros2BridgeNode(" f"pub={self._publisher_topic}, " f"sub={self._command_topic})"
+
+    def main() -> None:
+        """Entry point for ros2 roslaunch — creates and spins Ros2BridgeNode.
+
+        Reads ``scene_path`` and ``use_sim_time`` from ros parameters
+        (declared in ``launch/bridge.launch.py``).
+        """
+        rclpy.init()
+        node = Ros2BridgeNode(
+            joint_names=[],  # populated by setup_joint_names() after env init
+            publisher_topic="/surg_rl/joint_states",
+            command_topic="/surg_rl/commands",
+        )
+        try:
+            rclpy.spin(node)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            node.destroy_node()
+            rclpy.shutdown()

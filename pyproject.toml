@@ -116,6 +116,8 @@ docs = [
 
 [project.scripts]
 surg-rl = "surg_rl.cli:app"
+bridge_node = "surg_rl.ros2.bridge_node:main"
+replay_node = "surg_rl.ros2.replay_node:main"
 
 [project.urls]
 Homepage = "https://github.com/surg-rl/surg-rl"

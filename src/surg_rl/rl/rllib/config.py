@@ -8,21 +8,21 @@ Ray installed — only :meth:`build_rllib_config` triggers the import.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from surg_rl.utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from surg_rl.rl.training import TrainingConfig
 
 logger = get_logger(__name__)
 
 
 def _mps_available() -> bool:
     """Check if Apple Metal MPS is available."""
-    try:
-        import torch
+    from surg_rl.utils.gpu import _has_metal
 
-        return bool(torch.backends.mps.is_available())
-    except Exception:
-        return False
+    return _has_metal()
 
 
 @dataclass
@@ -82,9 +82,9 @@ class RllibConfig:
     @classmethod
     def from_training_config(
         cls,
-        training_config: "surg_rl.rl.training.TrainingConfig",
+        training_config: TrainingConfig,
         env_config: dict[str, Any] | None = None,
-    ) -> "RllibConfig":
+    ) -> RllibConfig:
         """Build from an existing :class:`TrainingConfig`.
 
         GPU distribution is auto-detected via ``torch.cuda.device_count()``.
@@ -125,9 +125,7 @@ class RllibConfig:
             num_env_runners=max(0, training_config.n_envs - 1),
             num_learners=num_learners,
             num_gpus_per_learner=num_gpus_per_learner,
-            train_batch_size_per_learner=max(
-                1, algo.n_steps * training_config.n_envs
-            ),
+            train_batch_size_per_learner=max(1, algo.n_steps * training_config.n_envs),
             lr=algo.learning_rate,
             gamma=algo.gamma,
             lambda_=algo.gae_lambda,

@@ -10,11 +10,11 @@ Requirements for v0.3.1 release. Each maps to roadmap phases.
 
 ### Infrastructure Wiring
 
-- [ ] **GAP-01**: `Dockerfile.ros2` image is built and pushed to GHCR by release workflow (`release.yml`)
-- [ ] **GAP-02**: Training Job uses CUDA image (`ghcr.io/surg-rl/surg-rl/cuda:v0.3.0`) when GPU resources are requested
-- [ ] **GAP-03**: initContainer health check uses ROS2 topic probe instead of TCP port check
-- [ ] **GAP-04**: `bridge_node` and `replay_node` registered as console_scripts in `pyproject.toml` for ros2 launch discovery
-- [ ] **GAP-05**: `config.py:_mps_available()` imports from `gpu.py` instead of duplicating Metal detection logic
+- [x] **GAP-01**: `Dockerfile.ros2` image is built and pushed to GHCR by release workflow (`release.yml`)
+- [x] **GAP-02**: Training Job uses CUDA image (`ghcr.io/surg-rl/surg-rl/cuda:v0.3.0`) when GPU resources are requested
+- [x] **GAP-03**: initContainer health check uses ROS2 topic probe instead of TCP port check
+- [x] **GAP-04**: `bridge_node` and `replay_node` registered as console_scripts in `pyproject.toml` for ros2 launch discovery
+- [x] **GAP-05**: `config.py:_mps_available()` imports from `gpu.py` instead of duplicating Metal detection logic
 
 ## Out of Scope
 

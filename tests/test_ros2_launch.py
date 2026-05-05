@@ -76,3 +76,15 @@ class TestPipColconCompatibility:
             cfg.get("project", {}).get("optional-dependencies", {}).get("ros2", [])
         )
         assert any("launch" in dep for dep in ros2_deps)
+
+    def test_pyproject_has_bridge_console_scripts(self):
+        import tomllib
+
+        path = PROJECT_ROOT / "pyproject.toml"
+        with open(path, "rb") as f:
+            cfg = tomllib.load(f)
+        scripts = cfg.get("project", {}).get("scripts", {})
+        assert "bridge_node" in scripts
+        assert "replay_node" in scripts
+        assert "bridge_node" in scripts["bridge_node"]
+        assert "replay_node" in scripts["replay_node"]

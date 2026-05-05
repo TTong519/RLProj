@@ -92,3 +92,22 @@ jobs:
           push: true
           tags: ${{ steps.meta-cuda.outputs.tags }}
           labels: ${{ steps.meta-cuda.outputs.labels }}
+
+      - name: Docker meta (ROS2)
+        id: meta-ros2
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/ros2
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Build and push ROS2 bridge (amd64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.ros2
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta-ros2.outputs.tags }}
+          labels: ${{ steps.meta-ros2.outputs.labels }}
