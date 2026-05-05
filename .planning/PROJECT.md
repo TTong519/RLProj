@@ -12,7 +12,7 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 
 **Shipped v0.3.1** (2026-05-04) — 1 phase, 1 plan, 833 tests, 5/5 audit gaps closed.
 
-**Ready for next milestone.**
+**Now building v0.3.2 — Advanced Simulation Features.** Cutting, deformable objects, fluids, and platform-agnostic tetgen mesh generation.
 
 ### Key Deliverables (v0.3.1)
 - All 5 v0.3.0 audit integration gaps closed
@@ -41,7 +41,10 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 
 ### Active (Next Milestone)
 
-- [ ] Define next milestone scope — TBD via `/gsd-new-milestone`
+- [ ] **Phase 15: Tetgen Mesh Generation** — Replace VTK with tetgen for platform-agnostic tetrahedral meshes
+- [ ] **Phase 16: Deformable Objects** — FEM deformables in both MuJoCo + PyBullet
+- [ ] **Phase 17: Volumetric Cutting** — Real-time tetrahedral mesh cutting with remeshing
+- [ ] **Phase 18: Grid-based Fluids** — Eulerian grid fluid solver for bleeding/irrigation
 
 ### Out of Scope
 

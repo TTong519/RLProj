@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-05-04)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** v0.3.1 completed — ready for next milestone
+**Current focus:** Defining v0.3.2 requirements — Advanced Simulation Features
 
 ## Current Position
 
-Milestone: v0.3.1 — Audit Gap Closure
-Phase: 14 completed
-Plan: 14-01 completed
-Status: Milestone audit passed (clean)
-Last activity: 2026-05-04 — v0.3.1 milestone audit
+Milestone: v0.3.2 — Advanced Simulation
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-04 — v0.3.2 milestone started
 
-Progress: ████████████████████████████████████████ 100% (v0.3.1)
+Progress: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0% (v0.3.2)
 
 ## Performance Metrics
 
@@ -44,8 +44,8 @@ Progress: ███████████████████████�
 
 ## Todos
 
-- [x] Fix 5 v0.3.0 audit gaps as v0.3.1 milestone
+- [ ] Define v0.3.2 requirements (tetgen, deformables, cutting, fluids)
 
 ---
 
-_Updated: 2026-05-04 — v0.3.1 milestone audited (clean)_
+_Updated: 2026-05-04 — v0.3.2 milestone started_
