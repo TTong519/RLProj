@@ -193,15 +193,49 @@ TISSUE_STATE_SPEC = ObservationSpec(
 )
 
 # Tissue deformation (soft body vertex displacements)
-TISSUE_DEFORMATION_SPEC = ObservationSpec(
-    name="tissue_deformation",
-    obs_type=ObservationType.TISSUE_DEFORMATION,
-    shape=(50, 3),  # 5x5x2 flexcomp grid vertices, 3D displacements
-    low=np.full((50, 3), -1.0),
-    high=np.full((50, 3), 1.0),
-    normalize=False,
-    description="Soft body tissue vertex displacements from rest shape",
-)
+
+def build_deformable_spec(max_vertices: int = 200) -> ObservationSpec:
+    """Build a tissue_deformation ObservationSpec with configurable vertex count."""
+    return ObservationSpec(
+        name="tissue_deformation",
+        obs_type=ObservationType.TISSUE_DEFORMATION,
+        shape=(max_vertices, 3),
+        low=np.full((max_vertices, 3), -1.0, dtype=np.float32),
+        high=np.full((max_vertices, 3), 1.0, dtype=np.float32),
+        normalize=False,
+        description="Soft body tissue vertex displacements from rest shape",
+    )
+
+
+def _pad_deformable_obs(
+    deformation: np.ndarray | None,
+    spec_shape: tuple[int, ...],
+) -> np.ndarray:
+    """Pad or truncate deformation array to match spec shape."""
+    if deformation is None:
+        return np.zeros(spec_shape, dtype=np.float32)
+    if deformation.shape == spec_shape:
+        return deformation.astype(np.float32, copy=False)
+    expected_size = int(np.prod(spec_shape))
+    flat = np.asarray(deformation, dtype=np.float32).flatten()
+    result = np.zeros(expected_size, dtype=np.float32)
+    result[: min(len(flat), expected_size)] = flat[:expected_size]
+    return result.reshape(spec_shape)
+
+
+def compute_per_edge_strain(
+    rest_edges: np.ndarray,
+    current_edges: np.ndarray,
+    epsilon: float = 1e-8,
+) -> np.ndarray:
+    """Compute per-edge strain as normalized length change."""
+    rest = np.asarray(rest_edges, dtype=np.float32)
+    current = np.asarray(current_edges, dtype=np.float32)
+    denom = np.maximum(rest, epsilon)
+    return np.abs(current - rest) / denom
+
+
+TISSUE_DEFORMATION_SPEC = build_deformable_spec(max_vertices=200)
 
 # Task-related
 TARGET_POS_SPEC = ObservationSpec(
@@ -341,7 +375,7 @@ DEFAULT_SPECS: dict[ObservationType, ObservationSpec] = {
     ObservationType.ENDEFFECTOR_QUAT: ENDEFFECTOR_QUAT_SPEC,
     ObservationType.FORCE_TORQUE: FORCE_TORQUE_SPEC,
     ObservationType.TISSUE_STATE: TISSUE_STATE_SPEC,
-    ObservationType.TISSUE_DEFORMATION: TISSUE_DEFORMATION_SPEC,
+    ObservationType.TISSUE_DEFORMATION: build_deformable_spec(max_vertices=200),
     ObservationType.TARGET_POS: TARGET_POS_SPEC,
     ObservationType.TARGET_QUAT: TARGET_QUAT_SPEC,
     ObservationType.DISTANCE_TO_TARGET: DISTANCE_TO_TARGET_SPEC,
@@ -633,16 +667,12 @@ class ObservationBuilder:
             return self._fallback_cache[spec.name]
 
         elif obs_type == ObservationType.TISSUE_DEFORMATION:
-            if observation.custom.get("tissue_deformation") is not None:
-                deformation = np.array(observation.custom["tissue_deformation"])
-                # Pad or truncate to expected shape
-                expected_size = int(np.prod(spec.shape))
-                flat = deformation.flatten()
-                if len(flat) < expected_size:
-                    padded = np.zeros(expected_size, dtype=np.float32)
-                    padded[: len(flat)] = flat
-                    return padded.reshape(spec.shape)
-                return flat[:expected_size].reshape(spec.shape)
+            deformation = observation.custom.get("tissue_deformation")
+            if deformation is not None:
+                return _pad_deformable_obs(
+                    np.asarray(deformation, dtype=np.float32),
+                    spec.shape,
+                )
             return self._fallback_cache[spec.name]
 
         elif obs_type == ObservationType.TARGET_POS:

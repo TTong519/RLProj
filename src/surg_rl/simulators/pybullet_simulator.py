@@ -21,6 +21,22 @@ from .scene_builder import SceneBuilder
 logger = get_logger(__name__)
 
 
+def _derive_neo_hookean_params(
+    youngs_modulus: float,
+    poissons_ratio: float,
+) -> tuple[float, float]:
+    """Derive Neo-Hookean mu and lambda from linear elastic constants.
+
+    mu = E / (2 * (1 + nu))
+    lambda = E * nu / ((1 + nu) * (1 - 2*nu))
+    """
+    mu = youngs_modulus / (2.0 * (1.0 + poissons_ratio))
+    lam = (youngs_modulus * poissons_ratio) / (
+        (1.0 + poissons_ratio) * (1.0 - 2.0 * poissons_ratio)
+    )
+    return mu, lam
+
+
 class PyBulletSimulator(BaseSimulator):
     """PyBullet physics simulator backend.
 
@@ -662,6 +678,29 @@ class PyBulletSimulator(BaseSimulator):
                 if hasattr(dims, "__iter__") and len(list(dims)) == 3:
                     volume = float(dims[0] * dims[1] * dims[2])
                 kwargs["mass"] = density * volume
+
+            dc = getattr(tissue, "deformable", None)
+            if dc is not None:
+                pc = dc.pybullet
+                if pc.solver_type == "neo_hookean":
+                    kwargs["useMassSpring"] = 0
+                    kwargs["useNeoHookean"] = 1
+                    if pc.auto_derive_neo_hookean and physics is not None:
+                        mu, lam = _derive_neo_hookean_params(
+                            physics.youngs_modulus, physics.poissons_ratio
+                        )
+                        kwargs["NeoHookeanMu"] = mu
+                        kwargs["NeoHookeanLambda"] = lam
+                        kwargs["NeoHookeanDamping"] = physics.damping * 0.01
+                else:
+                    kwargs["useMassSpring"] = 1
+                    kwargs["useNeoHookean"] = 0
+                kwargs["repulsionStiffness"] = pc.repulsion_stiffness
+                kwargs["collisionMargin"] = pc.collision_margin
+                kwargs["useSelfCollision"] = 1 if pc.use_self_collision else 0
+                if pc.solver_type == "mass_spring":
+                    kwargs["useBendingSprings"] = 1 if pc.bending_stiffness > 0 else 0
+                    kwargs["springBendingStiffness"] = pc.bending_stiffness
 
         soft_id = self._pb.loadSoftBody(
             fileName=str(mesh_path),
