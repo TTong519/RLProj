@@ -82,6 +82,11 @@ meshing = [
     "tetgen>=0.8.4",
 ]
 
+simulation = [
+    "phiflow>=3.4.0",
+    "scikit-image>=0.21.0",
+]
+
 vision = [
     "torch>=2.0.0",
     "torchvision>=0.15.0",

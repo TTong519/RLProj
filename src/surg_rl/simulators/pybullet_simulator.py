@@ -1265,7 +1265,7 @@ class PyBulletSimulator(BaseSimulator):
         from pybullet import RESET_USE_DEFORMABLE_WORLD
         self._pb.resetSimulation(RESET_USE_DEFORMABLE_WORLD)
         self._soft_body_ids.clear()
-        self.load_scene(self._scene_definition)
+        self.load_scene(self._scene)
 
     def apply_force(
         self,

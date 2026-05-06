@@ -216,6 +216,9 @@ class SurgicalEnv(gym.Env):
         self._last_cut_step: int = -1000  # cooldown tracking
         self._cut_cooldown_steps: int = 25  # ~500ms at 50Hz
 
+        self._fluid_simulator: object | None = None
+        self._init_fluid()
+
         # Eager viewer start (D-01)
         if self.render_mode == "human":
             try:
@@ -618,6 +621,12 @@ class SurgicalEnv(gym.Env):
 
         self._last_observation = obs_dict
 
+        # Step fluid simulation (subsampled at fluid.substep_dt rhythm)
+        if self._fluid_simulator is not None and self._simulator is not None:
+            fluid_interval = max(1, int(self._fluid_simulator.config.substep_dt / (self._scene.physics.timestep if self._scene and self._scene.physics else 0.002)))
+            if self._step_count % fluid_interval == 0:
+                self._fluid_simulator.step()
+
         # Publish joint state via ROS2 bridge (D-19: every step)
         if self._bridge is not None:
             sim_state = self._simulator.get_state()
@@ -669,6 +678,20 @@ class SurgicalEnv(gym.Env):
             self._last_cut_step = self._step_count
             return True
         return False
+
+    def _init_fluid(self) -> None:
+        """Instantiate FluidSimulator if FluidConfig is present and enabled."""
+        fluid_cfg = getattr(self._scene, "fluid", None)
+        if fluid_cfg is None or not fluid_cfg.enabled:
+            return
+        try:
+            from surg_rl.fluids import FluidSimulator
+
+            self._fluid_simulator = FluidSimulator(fluid_cfg)
+            logger.info("Fluid simulator initialized: %s", fluid_cfg.resolution)
+        except Exception as exc:
+            logger.warning("Fluid simulator init failed: %s", exc)
+            self._fluid_simulator = None
 
     def render(self) -> np.ndarray | None:
         """Render the environment.

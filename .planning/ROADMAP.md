@@ -6,7 +6,7 @@
 - ✅ **v0.2.0 Scaling, Rendering & Real Robot** — Phases 6–9 (shipped 2026-05-03)
 - ✅ **v0.3.0 Production & Cross-Platform** — Phases 10–13 (shipped 2026-05-04)
 - ✅ **v0.3.1 Audit Gap Closure** — Phase 14 (shipped 2026-05-04) · [archive](milestones/v0.3.1-ROADMAP.md)
-- 🚧 **v0.3.2 Advanced Simulation** — Phases 15–18 (in progress)
+- ✅ **v0.3.2 Advanced Simulation** — Phases 15–18 (shipped 2026-05-05)
 
 ## Phases
 
@@ -63,7 +63,7 @@
 **Plans:** 1 plan (1 wave)
 
 **Wave 1** *(no dependencies)*
-- [ ] 15-01-PLAN.md — Integrate tetgen, migrate vtk_io.py internals, update deps (TETG-01..04)
+- [x] 15-01-PLAN.md — Integrate tetgen, migrate vtk_io.py internals, update deps (TETG-01..04)
 
 **Cross-cutting constraints:**
 - `vtk_io.py` public API (`write_vtk_unstructured_grid`, `read_vtk_unstructured_grid`, `validate_vtk`) must remain unchanged
@@ -84,10 +84,10 @@
 **Plans:** 2 plans (2 waves)
 
 **Wave 1** *(no dependencies)*
-- [ ] 16-01-PLAN.md — MuJoCo FEM `<flex>` generation + DeformableConfig schema (DEFM-01, DEFM-03)
+- [x] 16-01-PLAN.md — MuJoCo FEM `<flex>` generation + DeformableConfig schema (DEFM-01, DEFM-03)
 
 **Wave 2** *(depends on Plan 01)*
-- [ ] 16-02-PLAN.md — PyBullet soft body param mapping + deformable observation (DEFM-02, DEFM-04)
+- [x] 16-02-PLAN.md — PyBullet soft body param mapping + deformable observation (DEFM-02, DEFM-04)
 
 ## Phase 17: Volumetric Cutting
 
@@ -102,9 +102,9 @@
 4. `CutAction` schema defines cut plane in action space
 
 **Plans:**
-- [ ] 17-01-PLAN.md — Cutting algorithm (intersection, remeshing)
-- [ ] 17-02-PLAN.md — Backend integration (MuJoCo + PyBullet)
-- [ ] 17-03-PLAN.md — Action space + scene schema
+- [x] 17-01-PLAN.md — Cutting algorithm (intersection, remeshing)
+- [x] 17-02-PLAN.md — Backend integration (MuJoCo + PyBullet)
+- [x] 17-03-PLAN.md — Action space + scene schema
 
 ## Phase 18: Grid-based Fluids
 
@@ -119,9 +119,9 @@
 4. Basic particle/surface visualization
 
 **Plans:**
-- [ ] 18-01-PLAN.md — Fluid solver core (MAC grid, pressure projection)
-- [ ] 18-02-PLAN.md — Two-way coupling + scene integration
-- [ ] 18-03-PLAN.md — Schema + visualization
+- [x] 18-01-PLAN.md (inlined) — Fluid solver core (MAC grid, pressure projection)
+- [x] 18-02-PLAN.md (inlined) — Two-way coupling + scene integration
+- [x] 18-03-PLAN.md (inlined) — Schema + visualization
 
 ---
 

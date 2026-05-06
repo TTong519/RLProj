@@ -8,31 +8,31 @@
 
 ### Phase 15: Tetgen Mesh Generation
 
-- [ ] **TETG-01**: Integrate `tetgen` Python package as the primary tetrahedral mesh generator, replacing VTK-based fallback in `vtk_io.py`
-- [ ] **TETG-02**: Generate tetrahedral meshes from surface OBJ/STL inputs via tetgen CLI or Python bindings
-- [ ] **TETG-03**: Remove VTK dependency from project `[meshing]` extras; tetgen becomes platform-agnostic (no PyVista/VTK binary deps)
-- [ ] **TETG-04**: Preserve existing `vtk_io.py` public API (`generate_tetrahedral_mesh`, `write_vtk_mesh`) but redirect internals to tetgen
+- [x] **TETG-01**: Integrate `tetgen` Python package as the primary tetrahedral mesh generator, replacing VTK-based fallback in `vtk_io.py`
+- [x] **TETG-02**: Generate tetrahedral meshes from surface OBJ/STL inputs via tetgen CLI or Python bindings
+- [x] **TETG-03**: Remove VTK dependency from project `[meshing]` extras; tetgen becomes platform-agnostic (no PyVista/VTK binary deps)
+- [x] **TETG-04**: Preserve existing `vtk_io.py` public API (`generate_tetrahedral_mesh`, `write_vtk_mesh`) but redirect internals to tetgen
 
 ### Phase 16: Deformable Objects
 
-- [ ] **DEFM-01**: Add FEM-based deformable objects in MuJoCo via `mujoco.mesh` + `flexcomp` elements in MJCF/XML
-- [ ] **DEFM-02**: Improve PyBullet soft body parameter mapping from `TissueConfig.physics.pybullet` to `loadSoftBody`
-- [ ] **DEFM-03**: Unified `DeformableConfig` in scene schema with backend-specific overrides (MuJoCo stiffness/damping, PyBullet mass/scale)
-- [ ] **DEFM-04**: Deformable state observable via `ObservationConfig` (vertex positions, strain)
+- [x] **DEFM-01**: Add FEM-based deformable objects in MuJoCo via `mujoco.mesh` + `flexcomp` elements in MJCF/XML
+- [x] **DEFM-02**: Improve PyBullet soft body parameter mapping from `TissueConfig.physics.pybullet` to `loadSoftBody`
+- [x] **DEFM-03**: Unified `DeformableConfig` in scene schema with backend-specific overrides (MuJoCo stiffness/damping, PyBullet mass/scale)
+- [x] **DEFM-04**: Deformable state observable via `ObservationConfig` (vertex positions, strain)
 
 ### Phase 17: Volumetric Cutting
 
-- [ ] **CUT-01**: Real-time tetrahedral mesh cutting — detect intersection between cutting tool and tetrahedral mesh
-- [ ] **CUT-02**: Remesh cut faces — split tets along cut plane, generate new boundary faces
-- [ ] **CUT-03**: Integrate with MuJoCo simulation step (pre-step callback for mesh modification) and PyBullet (removeBody + reload)
-- [ ] **CUT-04**: `CutAction` in action space schema — cut plane definition (start point, end point, depth)
+- [x] **CUT-01**: Real-time tetrahedral mesh cutting — detect intersection between cutting tool and tetrahedral mesh
+- [x] **CUT-02**: Remesh cut faces — split tets along cut plane, generate new boundary faces
+- [x] **CUT-03**: Integrate with MuJoCo simulation step (pre-step callback for mesh modification) and PyBullet (removeBody + reload)
+- [x] **CUT-04**: `CutAction` in action space schema — cut plane definition (start point, end point, depth)
 
 ### Phase 18: Grid-based Fluids
 
-- [ ] **FLUD-01**: Eulerian grid-based fluid solver — velocity/pressure fields on staggered grid, marker-and-cell (MAC) method
-- [ ] **FLUD-02**: Two-way fluid-solid coupling — fluid forces on objects, object motion affecting fluid
-- [ ] **FLUD-03**: Scene schema extension — `FluidConfig` with domain bounds, resolution, viscosity, density
-- [ ] **FLUD-04**: Fluid rendering — simple particle or surface visualization for debugging and demo
+- [x] **FLUD-01**: Eulerian grid-based fluid solver — velocity/pressure fields on staggered grid, marker-and-cell (MAC) method
+- [x] **FLUD-02**: Two-way fluid-solid coupling — fluid forces on objects, object motion affecting fluid
+- [x] **FLUD-03**: Scene schema extension — `FluidConfig` with domain bounds, resolution, viscosity, density
+- [x] **FLUD-04**: Fluid rendering — simple particle or surface visualization for debugging and demo
 
 ## Out of Scope
 
@@ -48,10 +48,10 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TETG-01..04 | Phase 15 | Pending |
-| DEFM-01..04 | Phase 16 | Pending |
-| CUT-01..04 | Phase 17 | Pending |
-| FLUD-01..04 | Phase 18 | Pending |
+| TETG-01..04 | Phase 15 | ✅ Complete |
+| DEFM-01..04 | Phase 16 | ✅ Complete |
+| CUT-01..04 | Phase 17 | ✅ Complete |
+| FLUD-01..04 | Phase 18 | ✅ Complete |
 
 **Coverage:**
 - v1 requirements: 16 total

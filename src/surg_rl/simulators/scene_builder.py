@@ -651,33 +651,46 @@ f 5 4 8
         tissue: Any,
         node_path: Path | None = None,
         ele_path: Path | None = None,
+        vertices: "np.ndarray | None" = None,
+        elements: "np.ndarray | None" = None,
     ) -> bool:
         """Add a low-level <flex> FEM body to MJCF from tetgen mesh.
+
+        Supports both in-memory numpy arrays and on-disk .node/.ele files.
+        In-memory arrays take precedence.
 
         Args:
             mujoco: Root <mujoco> element.
             tissue: TissueConfig with soft_body=True and DeformableConfig.
             node_path: Path to tetgen .node file (vertices).
             ele_path: Path to tetgen .ele file (elements).
+            vertices: (N,3) float64 numpy array of vertex positions.
+            elements: (M,4) int32 numpy array of 0-indexed tetrahedral elements.
 
         Returns:
             True if the flex body was added, False if not.
         """
         dc = tissue.deformable
 
-        if node_path is None and dc.mesh_path is not None:
+        if vertices is not None and elements is not None:
+            pass  # in-memory arrays provided, skip file I/O
+        elif node_path is None and dc.mesh_path is not None:
             node_path = Path(str(dc.mesh_path) + ".1.node")
-        if ele_path is None and dc.mesh_path is not None:
-            ele_path = Path(str(dc.mesh_path) + ".1.ele")
-
-        if node_path is None or ele_path is None:
-            return False
-        if not node_path.exists() or not ele_path.exists():
-            self._log_missing_asset(str(node_path), tissue.name)
+            if ele_path is None:
+                ele_path = Path(str(dc.mesh_path) + ".1.ele")
+        elif node_path is None or ele_path is None:
             return False
 
-        vertices = _parse_tetgen_node(node_path)
-        elements = _parse_tetgen_ele(ele_path)
+        if vertices is None or elements is None:
+            if node_path is None or ele_path is None:
+                return False
+            if not node_path.exists() or not ele_path.exists():
+                self._log_missing_asset(str(node_path), tissue.name)
+                return False
+            vertices = _parse_tetgen_node(node_path)
+            elements = _parse_tetgen_ele(ele_path)
+
+        assert vertices is not None and elements is not None
 
         deformable = mujoco.find("deformable")
         if deformable is None:
@@ -772,7 +785,19 @@ f 5 4 8
         if getattr(tissue, "soft_body", False):
             deformable = getattr(tissue, "deformable", None)
             if deformable is not None and deformable.mesh_source == "tetgen":
-                self._add_flex_body_to_mjcf(mujoco, tissue)
+                from surg_rl.utils.mesh_generation import (
+                    _try_external_tetrahedralization,
+                    _generate_box_surface,
+                )
+
+                dims = getattr(tissue.geometry, "dimensions", (0.1, 0.1, 0.01))
+                surf_verts, surf_faces = _generate_box_surface(tuple(dims))
+                result = _try_external_tetrahedralization(surf_verts, surf_faces)
+                if result is not None:
+                    verts, tets = result
+                    self._add_flex_body_to_mjcf(mujoco, tissue, vertices=verts, elements=tets)
+                else:
+                    self._add_flex_body_to_mjcf(mujoco, tissue)
                 return
             elif deformable is not None and deformable.mesh_source == "file":
                 self._add_flex_body_to_mjcf(mujoco, tissue)
