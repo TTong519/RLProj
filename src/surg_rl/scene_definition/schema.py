@@ -1202,6 +1202,11 @@ class SceneDefinition(BaseModel):
         default_factory=dict, description="Additional asset references"
     )
 
+    # Fluid simulation
+    fluid: "FluidConfig | None" = Field(
+        default=None, description="Fluid simulation configuration"
+    )
+
     # Custom parameters
     custom: dict[str, Any] = Field(
         default_factory=dict, description="Custom parameters for extensions"
@@ -1238,3 +1243,40 @@ class SceneDefinition(BaseModel):
     def get_active_cameras(self) -> list[CameraConfig]:
         """Get all active cameras."""
         return [cam for cam in self.environment.cameras if cam.active]
+
+
+class FluidBoundaryType(str, Enum):
+    """Boundary condition types for fluid domain."""
+
+    OPEN = "open"
+    WALL = "wall"
+
+
+class FluidConfig(BaseModel):
+    """Eulerian grid-based fluid simulation configuration (PhiFlow backend)."""
+
+    enabled: bool = Field(default=False, description="Enable fluid simulation")
+    bounds: BoundingBox = Field(description="Physical domain bounds")
+    resolution: tuple[int, int] = Field(
+        default=(32, 32), description="Grid resolution (nx, ny)"
+    )
+    density: float = Field(default=1000.0, ge=1.0, description="Fluid density (kg/m³)")
+    viscosity: float = Field(default=0.004, ge=0.0, description="Dynamic viscosity (Pa·s)")
+    substep_dt: float = Field(default=0.02, gt=0.0, description="Fluid sub-step timestep (s)")
+    boundary_type: FluidBoundaryType = Field(
+        default=FluidBoundaryType.WALL, description="Domain boundary condition"
+    )
+    initial_velocity: Position = Field(
+        default_factory=Position, description="Initial uniform velocity field (m/s)"
+    )
+
+    @field_validator("resolution")
+    @classmethod
+    def _cap_resolution(cls, v: tuple[int, int]) -> tuple[int, int]:
+        if len(v) != 2:
+            raise ValueError("Resolution must be (nx, ny)")
+        if v[0] < 4 or v[1] < 4:
+            raise ValueError("Resolution must be at least 4 in each dimension")
+        if v[0] > 128 or v[1] > 128:
+            raise ValueError("Resolution capped at 128 per dimension")
+        return v
