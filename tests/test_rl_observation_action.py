@@ -68,7 +68,7 @@ class TestObservationBuilderDeep:
         sim_obs = Observation(custom={"tissue_deformation": [0.1, 0.2]})
         result = builder.extract_observation(sim_obs)
         assert "tissue_deformation" in result
-        assert result["tissue_deformation"].shape == (50, 3)
+        assert result["tissue_deformation"].shape == (200, 3)
 
     def test_extract_observation_tool_positions(self):
         # TOOL_POSITIONS is not in DEFAULT_SPECS, so use CUSTOM + custom_specs

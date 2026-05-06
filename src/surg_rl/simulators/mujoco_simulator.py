@@ -1054,6 +1054,94 @@ class MuJoCoSimulator(BaseSimulator):
             # Fallback: flex API may not be available in all MuJoCo versions
             return None
 
+    def _apply_cut(self, cut_action: Any) -> None:
+        """Apply a volumetric cut and rebuild the MuJoCo model.
+
+        Rewrites the MJCF XML with cut mesh data inline, then rebuilds
+        model from the updated XML. Saves/restores qpos/qvel.
+        """
+        from surg_rl.cutting.engine import cut_tetrahedral_mesh
+
+        tissue_name = cut_action.tissue_name
+        flex_name = f"{tissue_name}_flex"
+
+        try:
+            flex_id = self._mujoco.mj_name2id(
+                self._model, self._mujoco.mjtObj.mjOBJ_FLEX, flex_name
+            )
+        except Exception:
+            logger.warning("Cut target '%s' has no flex body", tissue_name)
+            return
+
+        flex_start = self._model.flex_vertadr[flex_id]
+        flex_num = self._model.flex_vertnum[flex_id]
+        current_pos = self._data.flexvert_xpos[flex_start : flex_start + flex_num].copy()
+
+        tet_elem_adr = self._model.flex_elemadr[flex_id]
+        tet_elem_num = self._model.flex_elemnum[flex_id]
+        tetrahedra = self._model.flex_elem[tet_elem_adr : tet_elem_adr + tet_elem_num].reshape(-1, 4)
+
+        cut_origin = np.array([
+            cut_action.surface_point.x, cut_action.surface_point.y, cut_action.surface_point.z
+        ])
+        cut_dir = np.array([
+            cut_action.direction.x, cut_action.direction.y, cut_action.direction.z
+        ])
+
+        new_verts, new_tets, _ = cut_tetrahedral_mesh(
+            current_pos, tetrahedra, cut_origin, cut_dir
+        )
+
+        qpos = self._data.qpos.copy()
+        qvel = self._data.qvel.copy()
+
+        self._rewrite_flex_mesh_in_mjcf(flex_name, new_verts, new_tets)
+
+        self._model = self._mujoco.MjModel.from_xml_path(str(self._mjcf_path))
+        self._data = self._mujoco.MjData(self._model)
+
+        min_len = min(len(qpos), self._data.qpos.shape[0])
+        self._data.qpos[:min_len] = qpos[:min_len]
+        min_vlen = min(len(qvel), self._data.qvel.shape[0])
+        self._data.qvel[:min_vlen] = qvel[:min_vlen]
+        self._mujoco.mj_forward(self._model, self._data)
+
+    def _rewrite_flex_mesh_in_mjcf(
+        self, flex_name: str, vertices: np.ndarray, tetrahedra: np.ndarray
+    ) -> None:
+        """Replace vertex/element text in a <flex> element within the MJCF XML."""
+        import xml.etree.ElementTree as ET
+
+        mjcf_str = self._mjcf_path.read_text()
+        root = ET.fromstring(mjcf_str)
+
+        flex = None
+        for candidate in root.iter("flex"):
+            if candidate.get("name") == flex_name:
+                flex = candidate
+                break
+
+        if flex is None:
+            logger.warning("Flex '%s' not found in MJCF XML", flex_name)
+            return
+
+        vert_str = "\n".join(
+            f"{v[0]:.6f} {v[1]:.6f} {v[2]:.6f}" for v in vertices
+        )
+        for vtx_elem in flex.findall("vertex"):
+            vtx_elem.text = vert_str
+
+        elem_str = "\n".join(
+            f"{int(e[0])} {int(e[1])} {int(e[2])} {int(e[3])}" for e in tetrahedra
+        )
+        for el_elem in flex.findall("element"):
+            el_elem.text = elem_str
+
+        ET.indent(root)
+        self._mjcf_path.write_text(
+            ET.tostring(root, encoding="unicode")
+        )
+
     def apply_force(
         self,
         body_name: str,

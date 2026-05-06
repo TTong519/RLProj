@@ -213,6 +213,8 @@ class SurgicalEnv(gym.Env):
         self._last_observation: dict[str, np.ndarray] | None = None
         self._target_pos: np.ndarray | None = None
         self._target_quat: np.ndarray | None = None
+        self._last_cut_step: int = -1000  # cooldown tracking
+        self._cut_cooldown_steps: int = 25  # ~500ms at 50Hz
 
         # Eager viewer start (D-01)
         if self.render_mode == "human":
@@ -626,6 +628,47 @@ class SurgicalEnv(gym.Env):
             self._controller.step_update(self._simulator)
 
         return obs_dict, reward, terminated, truncated, info
+
+    def trigger_cut(
+        self, tissue_name: str, surface_point: "Position", direction: "Position", depth: float = 0.01
+    ) -> bool:
+        """Trigger a volumetric cut on a soft body tissue.
+
+        Enforces a cooldown (~500ms at 50Hz) to prevent spam cutting.
+
+        Args:
+            tissue_name: Name of the tissue to cut.
+            surface_point: Entry point on tissue surface (world coords).
+            direction: Cut direction vector.
+            depth: Cut depth in meters (default 0.01).
+
+        Returns:
+            True if the cut was applied, False if on cooldown or invalid.
+        """
+        from surg_rl.scene_definition.schema import CutAction, Position as SchemaPosition
+
+        if self._step_count - self._last_cut_step < self._cut_cooldown_steps:
+            return False
+
+        sp = surface_point if isinstance(surface_point, SchemaPosition) else SchemaPosition(
+            x=surface_point.x, y=surface_point.y, z=surface_point.z
+        )
+        di = direction if isinstance(direction, SchemaPosition) else SchemaPosition(
+            x=direction.x, y=direction.y, z=direction.z
+        )
+
+        cut_action = CutAction(
+            tissue_name=tissue_name,
+            surface_point=sp,
+            direction=di,
+            depth=depth,
+        )
+
+        if hasattr(self._simulator, "_apply_cut"):
+            self._simulator._apply_cut(cut_action)
+            self._last_cut_step = self._step_count
+            return True
+        return False
 
     def render(self) -> np.ndarray | None:
         """Render the environment.

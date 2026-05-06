@@ -1,5 +1,8 @@
 """Tests for volumetric tetrahedral mesh cutting."""
 
+import tempfile
+from pathlib import Path
+
 import numpy as np
 
 from surg_rl.cutting.intersection import classify_tet_case, compute_signed_distances, edge_intersection
@@ -155,3 +158,115 @@ class TestCutEngine:
         # All tet indices valid
         assert new_t.max() < new_v.shape[0]
         assert new_t.min() >= 0
+
+
+class TestCutActionSchema:
+    """CUT-03: CutAction Pydantic schema validation."""
+
+    def test_cut_action_basic(self):
+        from surg_rl.scene_definition.schema import CutAction, Position
+
+        ca = CutAction(
+            tissue_name="tissue_1",
+            surface_point=Position(x=0.1, y=0.2, z=0.3),
+            direction=Position(x=1.0, y=0.0, z=0.0),
+        )
+        assert ca.tissue_name == "tissue_1"
+        assert ca.depth == 0.01
+
+    def test_cut_action_normalizes_direction(self):
+        from surg_rl.scene_definition.schema import CutAction, Position
+
+        ca = CutAction(
+            tissue_name="t",
+            surface_point=Position(x=0.0, y=0.0, z=0.0),
+            direction=Position(x=2.0, y=0.0, z=0.0),
+        )
+        d = ca.direction
+        assert abs(d.x - 1.0) < 1e-6
+        assert abs(d.y) < 1e-6
+        assert abs(d.z) < 1e-6
+
+    def test_cut_action_zero_direction_raises(self):
+        import pytest
+        from surg_rl.scene_definition.schema import CutAction, Position
+
+        with pytest.raises(ValueError, match="nonzero"):
+            CutAction(
+                tissue_name="t",
+                surface_point=Position(x=0.0, y=0.0, z=0.0),
+                direction=Position(x=0.0, y=0.0, z=0.0),
+            )
+
+
+class TestMuJoCoRewiteMesh:
+    """CUT-03: _rewrite_flex_mesh_in_mjcf utility."""
+
+    def test_rewrite_updates_vertex_element_text(self):
+        from surg_rl.simulators.mujoco_simulator import MuJoCoSimulator
+
+        verts = np.array([[0.0, 0.0, 0.0], [0.1, 0.0, 0.0], [0.0, 0.1, 0.0], [0.0, 0.0, 0.1],
+                          [0.1, 0.1, 0.0], [0.1, 0.0, 0.1], [0.0, 0.1, 0.1], [0.1, 0.1, 0.1]])
+        tets = np.array([[0, 1, 2, 5], [0, 2, 3, 7], [0, 2, 7, 5], [0, 5, 7, 4], [2, 5, 7, 6]])
+
+        mjcf_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<mujoco model="test">
+  <deformable>
+    <flex name="tissue_flex" dim="3" radius="0.0" flatskin="false" body="world">
+      <contact condim="3" solref="0.01 1" solimp="0.95 0.99 0.0001" friction="1.0 0.005 0.0001" selfcollide="none" margin="0.0"/>
+      <edge stiffness="1e6" damping="50.0"/>
+      <elasticity young="10.0" poisson="0.49" damping="5.0"/>
+      <vertex>0.000000 0.000000 0.000000
+0.100000 0.000000 0.000000
+0.000000 0.100000 0.000000
+0.000000 0.000000 0.100000</vertex>
+      <element>0 1 2 3</element>
+    </flex>
+  </deformable>
+</mujoco>"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False) as f:
+            f.write(mjcf_xml)
+        mjcf_path = Path(f.name)
+
+        try:
+            sim = MuJoCoSimulator.__new__(MuJoCoSimulator)
+            sim._mjcf_path = mjcf_path
+            sim._rewrite_flex_mesh_in_mjcf("tissue_flex", verts, tets)
+
+            updated_text = mjcf_path.read_text()
+            assert "0.000000 0.000000 0.000000" in updated_text
+            assert "2 5 7 6" in updated_text
+        finally:
+            mjcf_path.unlink(missing_ok=True)
+
+
+class TestPyBulletCutStorage:
+    """CUT-03: PyBullet stores tetrahedra at load time for cut reuse."""
+
+    def test_soft_body_tets_stored(self):
+        from surg_rl.simulators.pybullet_simulator import PyBulletSimulator
+        from surg_rl.utils.mesh_generation import generate_box_tet_mesh
+        from surg_rl.utils.vtk_io import write_vtk_unstructured_grid
+
+        sim = PyBulletSimulator.__new__(PyBulletSimulator)
+        sim._soft_body_tet_data = {}
+        sim._soft_body_mesh_paths = {}
+        sim._soft_body_ids = {}
+
+        verts, tets = generate_box_tet_mesh((0.1, 0.1, 0.01), resolution=3)
+        tmp = tempfile.NamedTemporaryFile(suffix=".vtk", delete=False)
+        vtk_path = Path(tmp.name)
+        tmp.close()
+        try:
+            write_vtk_unstructured_grid(vtk_path, verts, tets)
+            sim._soft_body_tet_data["t_tets"] = (verts, tets)
+            sim._soft_body_mesh_paths["t"] = vtk_path
+            sim._soft_body_ids["t"] = 42
+
+            assert "t" in sim._soft_body_ids
+            assert "t_tets" in sim._soft_body_tet_data
+            stored_v, stored_t = sim._soft_body_tet_data["t_tets"]
+            assert stored_v.shape == verts.shape
+            assert stored_t.shape == tets.shape
+        finally:
+            vtk_path.unlink(missing_ok=True)

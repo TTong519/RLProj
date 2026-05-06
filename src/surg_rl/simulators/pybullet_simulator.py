@@ -91,6 +91,8 @@ class PyBulletSimulator(BaseSimulator):
         self._endeffector_target_pos: np.ndarray | None = None
         self._endeffector_target_quat: np.ndarray | None = None
         self._mesh_cache: dict[str, Path] = {}
+        self._soft_body_tet_data: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+        self._soft_body_mesh_paths: dict[str, Path] = {}
 
         # Resolve backend (defaults to auto)
         if backend is None:
@@ -708,6 +710,12 @@ class PyBulletSimulator(BaseSimulator):
         )
         self._soft_body_ids[tissue.name] = soft_id
 
+        from surg_rl.utils.vtk_io import read_vtk_unstructured_grid
+
+        tet_verts, tet_elems = read_vtk_unstructured_grid(mesh_path)
+        self._soft_body_tet_data[tissue.name + "_tets"] = (tet_verts, tet_elems)
+        self._soft_body_mesh_paths[tissue.name] = mesh_path
+
     def _load_instrument(self, instrument: Any) -> None:
         """Load an instrument into the simulation."""
         # Use primitive for instruments
@@ -1216,6 +1224,48 @@ class PyBulletSimulator(BaseSimulator):
             physicsClientId=self._physics_client,
         )
         return True
+
+    def _apply_cut(self, cut_action: Any) -> None:
+        """Apply a volumetric cut to PyBullet soft body.
+
+        Uses stored tetrahedra from load time for remeshing, overwrites the
+        original mesh file, then reloads the full scene.
+        """
+        from surg_rl.cutting.engine import cut_tetrahedral_mesh
+        from surg_rl.utils.vtk_io import write_vtk_unstructured_grid
+
+        tissue_name = cut_action.tissue_name
+        if tissue_name not in self._soft_body_ids:
+            logger.warning("Cut target '%s' is not a soft body", tissue_name)
+            return
+
+        mesh_key = tissue_name + "_tets"
+        if mesh_key not in self._soft_body_tet_data:
+            logger.warning("No tetrahedral mesh data stored for '%s'", tissue_name)
+            return
+
+        vertices, tetrahedra = self._soft_body_tet_data[mesh_key]
+
+        cut_origin = np.array([
+            cut_action.surface_point.x, cut_action.surface_point.y, cut_action.surface_point.z
+        ])
+        cut_dir = np.array([
+            cut_action.direction.x, cut_action.direction.y, cut_action.direction.z
+        ])
+
+        new_verts, new_tets, _ = cut_tetrahedral_mesh(
+            vertices, tetrahedra, cut_origin, cut_dir
+        )
+
+        mesh_path = self._soft_body_mesh_paths.get(tissue_name)
+        if mesh_path is not None:
+            write_vtk_unstructured_grid(mesh_path, new_verts, new_tets)
+            self._soft_body_tet_data[mesh_key] = (new_verts, new_tets)
+
+        from pybullet import RESET_USE_DEFORMABLE_WORLD
+        self._pb.resetSimulation(RESET_USE_DEFORMABLE_WORLD)
+        self._soft_body_ids.clear()
+        self.load_scene(self._scene_definition)
 
     def apply_force(
         self,

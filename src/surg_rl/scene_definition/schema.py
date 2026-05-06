@@ -727,6 +727,39 @@ class CuttingProperties(BaseModel):
     cutting_force: float = Field(default=1.0, ge=0.0, description="Required cutting force (N)")
 
 
+class CutAction(BaseModel):
+    """A volumetric cutting action — represents a surgical cut as a plane.
+
+    Cutting is a discrete event (not continuous control). A `should_cut` flag
+    triggers consumption of cut parameters, with a cooldown enforcement in the
+    environment to prevent spam cutting.
+    """
+
+    tissue_name: str = Field(description="Name of the tissue to cut")
+    surface_point: Position = Field(description="Entry point on tissue surface (world coords)")
+    direction: Position = Field(description="Cut direction vector (must be nonzero)")
+    depth: float = Field(default=0.01, gt=0.0, le=0.05, description="Cut depth (m)")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_direction(cls, data: Any) -> Any:
+        import numpy as np
+
+        direction_raw = data["direction"]
+        if isinstance(direction_raw, dict):
+            dx, dy, dz = direction_raw["x"], direction_raw["y"], direction_raw["z"]
+        else:
+            dx, dy, dz = direction_raw.x, direction_raw.y, direction_raw.z
+        d = np.array([dx, dy, dz], dtype=np.float64)
+        norm = float(np.linalg.norm(d))
+        if norm < 1e-6:
+            raise ValueError("Cut direction vector must be nonzero")
+        if abs(norm - 1.0) > 1e-6:
+            d = d / norm
+            data["direction"] = {"x": float(d[0]), "y": float(d[1]), "z": float(d[2])}
+        return data
+
+
 class GraspingProperties(BaseModel):
     """Properties for grasping instruments (forceps, clamps, etc.)."""
 
