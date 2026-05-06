@@ -17,9 +17,10 @@ python_files = test_*.py
 pythonpath = src                     # auto-adds src/ to PYTHONPATH
 addopts = -v --tb=short              # verbose, short tracebacks
 asyncio_mode = auto                  # automatic async test handling
+asyncio_default_fixture_loop_scope = function
 markers =
-    integration: tests marked as integration (deselect with '-m "not integration"')
-    slow: tests that take >10s
+    integration: marks tests as integration tests (deselect with '-m "not integration"')
+    slow: marks tests as slow (>10s)
 ```
 
 Because `pythonpath = src` is set, running `pytest tests/` works without manually setting
@@ -32,6 +33,9 @@ Because `pythonpath = src` is set, running `pytest tests/` works without manuall
 ```bash
 # pytest.ini auto-adds src/ — no PYTHONPATH needed
 pytest tests/ -v
+
+# Quiet mode (summary only)
+PYTHONPATH=src pytest tests/ -q
 
 # Skip integration tests
 pytest tests/ -m "not integration" -v
@@ -46,6 +50,14 @@ pytest tests/ -m "not slow" -v
 pytest tests/test_simulators.py -v
 pytest tests/test_mesh_generation.py -v
 pytest tests/test_schema.py -v
+pytest tests/test_cutting.py -v
+pytest tests/test_deformable.py -v
+```
+
+### Subdirectory (fluid tests)
+
+```bash
+pytest tests/test_fluids/ -v
 ```
 
 ### From a clean environment (no editable install)
@@ -54,7 +66,7 @@ pytest tests/test_schema.py -v
 PYTHONPATH=src pytest tests/ -v
 ```
 
-### Watch mode
+### Watch / debug mode
 
 ```bash
 pytest tests/ --pdb           # drop into debugger on first failure
@@ -63,56 +75,80 @@ pytest tests/ -m "not integration" --lf   # re-run only last failures
 
 ## Test module inventory
 
+As of the most recent run: **910 passed, 11 skipped**.
+
 | Test file | What it tests | Lines |
 |---|---|---|
-| `test_schema.py` | Pydantic v2 scene definition schema, enums, validators | 687 |
-| `test_simulators.py` | MuJoCo and PyBullet backends, soft body, step/reset | 1,410 |
+| `test_simulators.py` | MuJoCo and PyBullet backends, soft body, step/reset | 1,391 |
 | `test_dynamics.py` | Domain randomization, curriculum, adaptive difficulty | 1,092 |
+| `test_rl.py` | RL module — agents, policies, training loops | 1,005 |
 | `test_scene_generation.py` | LLM parsers, templates, scene composer, error handling | 764 |
+| `test_schema.py` | Pydantic v2 scene definition schema, enums, validators | 687 |
 | `test_loader.py` | SceneLoader (JSON/YAML + cache), asset manager | 629 |
+| `test_ros2_bridge.py` | ROS2 bridge config, import guard, bridge node (mocked) | 573 |
 | `test_rl_environment.py` | SurgicalEnv wrapper, observation/action/config | 484 |
+| `test_deformable.py` | Deformable config schema, MuJoCo FEM, PyBullet flex | 480 |
 | `test_rewards.py` | Reward functions (suturing, dissection, needle passing) | 434 |
-| `test_ros2_bridge.py` | ROS2 bridge config, import guard, bridge node (mocked) | 413 |
+| `unit/test_rendering.py` | Rendering output verification | 399 |
 | `test_ros2_replay.py` | Trajectory replay, speed throttling, ROS2 publishing | 378 |
+| `test_rl_training.py` | TrainingConfig, RllibConfig, environment wrappers | 362 |
 | `test_task_geometry.py` | Task geometry binding to observation fields | 355 |
+| `test_cutting.py` | Volumetric tetrahedral mesh cutting (intersection, engine) | 272 |
 | `test_real_assets.py` | Real asset loading with fallback and deduplicated warnings | 223 |
 | `test_scene_builder.py` | MJCF/URDF generation, asset resolution | 220 |
+| `test_gpu_detector.py` | GPU backend detection (CUDA, Metal, ROCm, Intel) | 215 |
+| `test_tetgen_integration.py` | Tetgen mesh generation and integration | 205 |
+| `test_tracking_callbacks.py` | W&B / MLflow tracking callbacks | 190 |
+| `test_fluids/test_fluid_simulator.py` | Fluid simulator integration | 186 |
+| `test_gpu_integration.py` | GPU integration (Metal on macOS, CUDA path) | 180 |
 | `test_rl_observation_action.py` | ObservationBuilder, ActionBuilder, config coverage | 170 |
-| `test_gpu_detector.py` | GPU backend detection (CUDA, Metal, ROCm, Intel) | 188 |
+| `test_kubernetes_manifests.py` | Kubernetes manifest validation | 165 |
+| `test_cli_integration.py` | Mocked CLI integration (LLM monkey-patching) | 151 |
+| `test_environment_controller.py` | EnvironmentController, mode/policy switching | 150 |
 | `test_task_termination.py` | Task success/failure termination, distance criteria | 148 |
 | `test_rl_callbacks.py` | SB3 callbacks (curriculum, checkpoint, eval, tensorboard) | 141 |
+| `test_action_reconciliation.py` | Action reconciliation between backends | 141 |
 | `test_rllib_env_registration.py` | RLlib env factory, registration (mocked) | 133 |
+| `test_rllib_train.py` | RLlib training entrypoint, GPU auto-config | 129 |
 | `test_mesh_generation.py` | Procedural tetrahedral mesh generators (box/cylinder/sphere) | 128 |
 | `test_rllib_tune.py` | Tune search space building, experiment config | 101 |
+| `test_fluids/test_schema.py` | Fluid configuration schema validation | 96 |
 | `test_rllib_checkpoint.py` | RLlib checkpoint metadata inspection | 93 |
+| `test_ros2_launch.py` | ROS2 launch file generation and validation | 90 |
 | `test_rllib_cli.py` | RLlib CLI commands (train/tune/eval via subprocess) | 90 |
+| `manual/test_pybullet_soft_body.py` | Manual PyBullet soft-body stress tests | 89 |
 | `test_logging.py` | Sensitive data filtering in log records | 88 |
-| `test_rl_training.py` | TrainingConfig, RllibConfig, environment wrappers | 85 |
 | `test_config.py` | Settings singleton, path resolution, env var loading | 85 |
-| `test_rllib_train.py` | RLlib training entrypoint, GPU auto-config | 85 |
 | `test_ros2_controller.py` | EnvironmentController ROS2 mode switching | 80 |
 | `test_vtk_io.py` | VTK unstructured grid read/write roundtrip | 76 |
-| `test_environment_controller.py` | EnvironmentController, mode/policy switching | 71 |
-| `test_gpu_integration.py` | GPU integration (Metal on macOS, CUDA path) | 96 |
-| `test_action_reconciliation.py` | Action reconciliation between backends | ~70 |
-| `test_rl.py` | RL module smoke tests | ~60 |
-| `test_cli_integration.py` | Mocked CLI integration (LLM monkey-patching) | 151 |
-| `test_cli.py` | CLI commands via Tyrer CliRunner | 24 |
-| `test_ros2_cli.py` | ROS2 CLI help output, error cases | 44 |
+| `test_ros2_control.py` | ROS2 control interface and bridge | 73 |
+| `test_ci_config.py` | CI configuration validation | 69 |
 | `test_imports.py` | Package and submodule import verification | 45 |
-| `test_tracking_callbacks.py` | W&B / MLflow tracking callbacks | ~60 |
+| `test_ros2_cli.py` | ROS2 CLI help output, error cases | 44 |
 | `test_rllib_install.py` | `[distributed]` extra resolution check | 37 |
-| `unit/test_rendering.py` | Rendering output verification | ~200 |
-| `manual/test_pybullet_soft_body.py` | Manual PyBullet soft-body stress tests | — |
+| `test_ray_address.py` | Ray address resolution | 30 |
+| `test_release_workflow.py` | Release workflow validation | 27 |
+| `test_cli.py` | CLI commands via Typer CliRunner | 24 |
 
 ## Markers
 
 | Marker | Purpose | Deselect |
 |---|---|---|
-| `integration` | Integration tests (real simulators, LLM calls, subprocess) | `-m "not integration"` |
+| `integration` | Integration tests (real simulators, GPU, LLM calls, subprocess) | `-m "not integration"` |
 | `slow` | Tests exceeding ~10s (install checks, full sims) | `-m "not slow"` |
 
+`@pytest.mark.integration` is applied in:
+- `test_gpu_integration.py` (7 tests — Metal, CUDA paths)
+- `test_scene_generation.py` (2 tests — full LLM pipeline)
+
 ## Test patterns
+
+### Pydantic v2 validation
+
+All schema tests exercise Pydantic v2 quirks:
+- `model_construct()` vs `model_validate()` equivalence
+- `model_validator(mode="after")` uses `self.model_copy(update={...})` — never mutate in place
+- `model_dump()` returns Enum objects, not `.value` strings — convert before YAML serialization
 
 ### Mocked ROS2 tests
 
@@ -223,24 +259,51 @@ obs = sim.step(action)
 sim.close()
 ```
 
+### Fluid simulator tests
+
+Fluid tests live in `tests/test_fluids/` and cover:
+- Fluid configuration schema validation (`test_fluids/test_schema.py`)
+- Fluid simulator integration with the physics backend (`test_fluids/test_fluid_simulator.py`)
+
+### Cutting tests
+
+`test_cutting.py` exercises the volumetric tetrahedral mesh cutting pipeline:
+- Signed distance computation and edge-plane intersection (`CUT-01`)
+- Tet case classification (all-same, 3-1, 2-2 patterns)
+- Full `cut_tetrahedral_mesh` engine end-to-end
+
+### Deformable body tests
+
+`test_deformable.py` validates deformable body configuration:
+- `DeformableConfig` schema validation for `tetgen`, `flexcomp_grid`, `file` mesh sources
+- `MuJoCoFlexConfig` (Young's modulus, Poisson's ratio, condim, friction)
+- `PyBulletFlexConfig` (solver type, auto-derive flags)
+- Boundary condition schema and tissue integration
+
 ## Platform-specific tests
 
-### PyBullet soft body (macOS xfail)
+### PyBullet soft body (macOS skip)
 
-PyBullet soft-body physics is unreliable on macOS and CI runners. Tests are marked
-`xfail` rather than skipped so they can be monitored for eventual pass:
+PyBullet soft-body physics is unreliable on macOS and slower on macOS CI runners.
+Tests are marked `skipif` rather than `xfail` for clean CI signals:
 
 ```python
-@pytest.mark.xfail(
-    sys.platform in ("darwin",) or os.environ.get("CI") == "true",
-    reason="PyBullet soft body fragile on macOS/CI",
+@pytest.mark.skipif(
+    sys.platform == "darwin",
+    reason="macOS PyBullet soft-body reset slower (PERF-01 — platform limitation)",
 )
 def test_soft_body_simulation(self):
     ...
 ```
 
-On macOS this currently produces **XPASS** (the test passes unexpectedly). The `xfail`
-marker is intentionally kept because CI runners remain unstable.
+Anchor-based soft-body APIs are also macOS-incompatible:
+
+```python
+@pytest.mark.skipif(
+    sys.platform == "darwin",
+    reason="PyBullet createSoftBodyAnchor API incompatible on macOS",
+)
+```
 
 ### macOS-specific GPU tests
 
@@ -272,6 +335,7 @@ Shared fixtures live in `tests/conftest.py`:
 | `cli_env` | Copy of `os.environ` with `PYTHONPATH` set |
 | `minimal_scene` | Load `scenes/minimal_scene.json` via `SceneLoader` |
 | `suturing_scene` | Load `scenes/simple_suturing.json` via `SceneLoader` |
+| `tetgen_cube_mesh` | Generate `.node`/`.ele` files for a small tetrahedralized cube in `tmp_path` |
 
 Usage:
 
@@ -302,21 +366,43 @@ pytest tests/ --cov=surg_rl --cov-report=term-missing
 
 ## CI integration
 
-Tests run in CI via `.github/workflows/ci.yml`:
+Tests run in CI via `.github/workflows/ci.yml` with two jobs:
+
+### `test` job — pytest across OS and Python matrix
 
 - **Trigger:** push to `main`, pull requests to `main`
-- **Runner:** `ubuntu-latest`
-- **Matrix:** Python 3.10, 3.11, 3.12
-- **Steps:** lint (ruff) → format check (black) → type check (mypy) → test (pytest)
+- **Strategy:** `fail-fast: false`
+- **Matrix:**
+  - `ubuntu-latest` / Python 3.10, 3.11, 3.12
+  - `macos-latest` / Python 3.11
 
-CI test command:
-
+**Linux steps** (pytest directly):
 ```bash
 pytest tests/ -m "not integration" -v
 ```
 
-Integration tests are excluded in CI because they require real simulators and optional
-dependencies that are not installed in the CI environment.
+**macOS steps** (via `mjpython` to link against MuJoCo's Python):
+```bash
+mjpython -m pytest tests/ \
+  -m "not integration" \
+  -v \
+  --ignore=tests/test_ros2_bridge.py \
+  --ignore=tests/test_ros2_cli.py \
+  --ignore=tests/test_ros2_controller.py \
+  --ignore=tests/test_ros2_replay.py
+```
+ROS2 tests are ignored on macOS because `rclpy` is not available.
+
+Integration tests are excluded in CI because they require real simulators, GPU, and
+optional dependencies not installed in the CI environment.
+
+### `docker-ci` job — multi-arch Docker builds
+
+Builds four Docker flavors (all `push: false`, cached via GitHub Actions cache):
+- **CPU** — `Dockerfile` (linux/amd64, linux/arm64)
+- **CUDA** — `Dockerfile.cuda` (linux/amd64)
+- **ROCm** — `Dockerfile.rocm` (linux/amd64)
+- **Jetson** — `Dockerfile.jetson` (linux/arm64)
 
 ## Writing new tests
 
@@ -325,7 +411,8 @@ dependencies that are not installed in the CI environment.
 - Test files: `tests/test_<module>.py`, matching `test_*.py`
 - Test classes: `Test<Feature>` (PascalCase)
 - Test methods: `test_<behavior>(self)` (snake_case)
-- Feature-specific test files preferred over cross-cutting ones
+- **Feature-specific test files preferred over cross-cutting ones** (e.g., `test_cutting.py` over adding cutting tests to `test_simulators.py`). This reduces merge conflicts and clarifies ownership.
+- Subdirectories for grouped concerns: `tests/test_fluids/`, `tests/unit/`, `tests/manual/`
 
 ### What to test
 

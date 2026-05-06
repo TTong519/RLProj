@@ -221,9 +221,10 @@ Scene definitions are JSON or YAML files validated against Pydantic v2 models at
 | `domain_randomization` | `DomainRandomizationConfig` | `DomainRandomizationConfig()` | Randomization ranges |
 | `simulator` | `SimulatorType` | `"mujoco"` | Preferred backend (`mujoco` / `pybullet`) |
 | `assets` | `dict[str, AssetReference]` | `{}` | Additional asset references |
+| `fluid` | `FluidConfig \| None` | `None` | Fluid simulation configuration (PhiFlow backend) |
 | `custom` | `dict[str, Any]` | `{}` | Extension point for custom parameters |
 
-Key enum types: `SimulatorType` (`mujoco` / `pybullet`), `HardwareBackend` (`auto`, `cuda`, `rocm`, `metal`, `intel`, `cpu`), `RobotType`, `TissueType`, `InstrumentType`, `JointType`, `CameraType`, `LightType`.
+Key enum types: `SimulatorType` (`mujoco` / `pybullet`), `HardwareBackend` (`auto`, `cuda`, `rocm`, `metal`, `intel`, `cpu`), `RobotType`, `TissueType`, `InstrumentType`, `JointType`, `CameraType`, `LightType`, `FluidBoundaryType` (`open` / `wall`).
 
 ### Validation Rules
 
@@ -244,6 +245,193 @@ from surg_rl.scene_definition.loader import SceneLoader
 
 loader = SceneLoader()
 scene = loader.load("scenes/simple_suturing.json")
+```
+
+---
+
+## Deformable Body Configuration
+
+`DeformableConfig` (Pydantic `BaseModel`) at `src/surg_rl/scene_definition/schema.py` provides unified deformable body configuration. It is attached to `TissueConfig` via the `deformable` field when `soft_body=True`.
+
+### DeformableConfig Fields
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `mesh_source` | `Literal["tetgen", "flexcomp_grid", "file"]` | `"tetgen"` | How the deformable mesh is generated |
+| `mesh_path` | `str \| None` | `None` | Path to mesh file or tetgen prefix (without extension). Required for `tetgen` and `file` sources |
+| `mesh_resolution` | `int` | `4` | Mesh resolution hint (coarser=faster, finer=accurate). `≥1` |
+| `max_vertices` | `int` | `200` | Maximum vertex count (for observation padding). `≥1` |
+| `mujoco` | `MuJoCoFlexConfig` | `MuJoCoFlexConfig()` | MuJoCo FEM override parameters |
+| `pybullet` | `PyBulletFlexConfig` | `PyBulletFlexConfig()` | PyBullet soft body override parameters |
+| `boundary_conditions` | `list[BoundaryCondition]` | `[]` | Attachment/pin boundary conditions |
+| `observe_vertex_positions` | `bool` | `True` | Include vertex positions in observation |
+| `observe_strain` | `bool` | `False` | Include per-element strain in observation |
+| `observe_stress` | `bool` | `False` | Include per-element stress in observation |
+
+**Validation**: `mesh_path` is required when `mesh_source != "flexcomp_grid"`. A `ValueError` is raised at model construction if missing.
+
+### MuJoCoFlexConfig
+
+MuJoCo-specific FEM parameters. All fields are optional (default `None`) except `condim` and `friction`:
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `youngs_modulus` | `float \| None` | `None` | Override Young's modulus (Pa). `≥0` |
+| `poissons_ratio` | `float \| None` | `None` | Override Poisson's ratio. `[0, 0.5]` |
+| `fem_damping` | `float \| None` | `None` | Rayleigh damping for FEM (units: time). `≥0` |
+| `edge_stiffness` | `float \| None` | `None` | Edge spring stiffness (N/m). `≥0` |
+| `edge_damping` | `float \| None` | `None` | Edge spring damping. `≥0` |
+| `condim` | `int` | `3` | Contact dimensionality (1, 3, 4, or 6) |
+| `solref` | `str \| None` | `None` | Solver reference string (e.g., `"0.02 1"`) |
+| `solimp` | `str \| None` | `None` | Solver impedance string |
+| `friction` | `float` | `0.5` | Contact friction coefficient. `≥0` |
+| `margin` | `float` | `0.001` | Contact margin (m). `≥0` |
+| `smooth_normals` | `bool` | `True` | Use smooth shading for flex surface |
+
+### PyBulletFlexConfig
+
+PyBullet-specific soft body parameters:
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `solver_type` | `Literal["mass_spring", "neo_hookean"]` | `"mass_spring"` | PyBullet soft body solver type |
+| `auto_derive_neo_hookean` | `bool` | `True` | Auto-derive Neo-Hookean `μ`/`λ` from `SoftBodyPhysics` `E`, `ν` |
+| `repulsion_stiffness` | `float` | `800.0` | Contact repulsion stiffness. `≥0` |
+| `use_self_collision` | `bool` | `False` | Enable self-collision |
+| `bending_stiffness` | `float` | `0.1` | Bending stiffness (mass-spring only). `≥0` |
+| `collision_margin` | `float` | `0.006` | Collision margin (m). `>0` |
+
+### BoundaryCondition
+
+A single boundary condition for a deformable body (e.g., clamped vertices). Attached via `DeformableConfig.boundary_conditions`:
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `name` | `str` | — | BC name (e.g., `"clamp_left"`) |
+| `type` | `Literal["pin", "fixed_displacement", "force"]` | `"pin"` | Boundary condition type |
+| `anchor_body` | `str` | — | Name of the rigid body to attach to |
+| `vertex_indices` | `list[int]` | `[]` | Vertex indices to constrain (empty = full weld) |
+| `stiffness` | `float` | `1e6` | Attachment stiffness. `≥0` |
+
+### Usage Example
+
+```json
+{
+  "tissues": [{
+    "name": "liver",
+    "type": "organ",
+    "soft_body": true,
+    "soft_body_physics": {
+      "stiffness": 1500.0,
+      "youngs_modulus": 12000.0,
+      "density": 1100.0
+    },
+    "deformable": {
+      "mesh_source": "tetgen",
+      "mesh_path": "meshes/liver",
+      "mesh_resolution": 6,
+      "max_vertices": 300,
+      "mujoco": {
+        "condim": 4,
+        "friction": 0.7,
+        "edge_stiffness": 5000.0
+      },
+      "pybullet": {
+        "solver_type": "neo_hookean",
+        "repulsion_stiffness": 1000.0
+      },
+      "boundary_conditions": [{
+        "name": "posterior_anchor",
+        "type": "pin",
+        "anchor_body": "world",
+        "vertex_indices": [0, 1, 2, 3],
+        "stiffness": 2e6
+      }]
+    }
+  }]
+}
+```
+
+---
+
+## Volumetric Cutting (CutAction)
+
+`CutAction` (Pydantic `BaseModel`) at `src/surg_rl/scene_definition/schema.py` represents a volumetric surgical cut as a plane. Cutting is a **discrete event** (not continuous control). A `should_cut` flag triggers consumption of cut parameters, with a cooldown enforced in the environment to prevent spam cutting.
+
+### CutAction Fields
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `tissue_name` | `str` | — | Name of the tissue to cut |
+| `surface_point` | `Position` | — | Entry point on tissue surface (world coordinates) |
+| `direction` | `Position` | — | Cut direction vector (normalized to unit length automatically) |
+| `depth` | `float` | `0.01` | Cut depth in meters. `(0, 0.05]` |
+
+**Validation**: The `direction` vector is automatically normalized to unit length if its magnitude differs from `1.0` by more than `1e-6`. A `ValueError` is raised if the direction is a zero vector.
+
+### Usage Example
+
+```python
+from surg_rl.scene_definition.schema import CutAction, Position
+
+cut = CutAction(
+    tissue_name="liver",
+    surface_point=Position(x=0.0, y=0.05, z=0.02),
+    direction=Position(x=0.0, y=0.0, z=-1.0),
+    depth=0.015,
+)
+```
+
+---
+
+## Fluid Simulation Configuration
+
+`FluidConfig` (Pydantic `BaseModel`) at `src/surg_rl/scene_definition/schema.py` configures Eulerian grid-based fluid simulation using the **PhiFlow** backend. It appears as an optional `fluid` field on `SceneDefinition`.
+
+### FluidBoundaryType Enum
+
+| Value | Description |
+|---|---|
+| `open` | Open boundary — fluid flows freely through domain boundaries |
+| `wall` | Wall boundary — fluid is contained within domain boundaries |
+
+### FluidConfig Fields
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | `bool` | `False` | Enable fluid simulation |
+| `bounds` | `BoundingBox` | — | Physical domain bounds (required) |
+| `resolution` | `tuple[int, int]` | `(32, 32)` | Grid resolution `(nx, ny)`. Must be between `[4, 128]` in each dimension |
+| `density` | `float` | `1000.0` | Fluid density (kg/m³). `≥1.0` |
+| `viscosity` | `float` | `0.004` | Dynamic viscosity (Pa·s). `≥0` |
+| `substep_dt` | `float` | `0.02` | Fluid sub-step timestep (s). `>0` |
+| `boundary_type` | `FluidBoundaryType` | `FluidBoundaryType.WALL` | Domain boundary condition |
+| `initial_velocity` | `Position` | `Position(0,0,0)` | Initial uniform velocity field (m/s) |
+
+**Validation**: Resolution is capped to `128×128` maximum, minimum `4×4`. Values outside this range raise a `ValueError`.
+
+**Dependencies**: Requires the `[simulation]` optional dependency group (see [Per-Environment Overrides](#per-environment-overrides)):
+```bash
+pip install -e ".[simulation]"
+```
+
+This installs `phiflow>=3.4.0` and `scikit-image>=0.21.0`.
+
+### Usage Example
+
+```json
+{
+  "fluid": {
+    "enabled": true,
+    "bounds": {"min": {"x": 0.0, "y": 0.0, "z": 0.0}, "max": {"x": 0.1, "y": 0.1, "z": 0.1}},
+    "resolution": [64, 64],
+    "density": 1000.0,
+    "viscosity": 0.004,
+    "substep_dt": 0.02,
+    "boundary_type": "wall",
+    "initial_velocity": {"x": 0.0, "y": 0.0, "z": 0.0}
+  }
+}
 ```
 
 ---
@@ -390,8 +578,23 @@ Surg-RL does not ship with separate `.env.development` or `.env.production` file
    # Production with tracking
    pip install -e ".[tracking]"
 
+   # With fluid simulation (PhiFlow)
+   pip install -e ".[simulation]"
+
+   # With tetrahedral meshing (TetGen)
+   pip install -e ".[meshing]"
+
    # With ROS2 (on a ROS2 system)
    pip install -e ".[ros2]"
+
+   # With distributed training (Ray/RLlib)
+   pip install -e ".[distributed]"
+
+   # With vision models (PyTorch, Transformers)
+   pip install -e ".[vision]"
+
+   # All optional dependencies combined
+   pip install -e ".[dev,simulation,meshing,tracking,vision]"
    ```
 
 ---

@@ -97,6 +97,15 @@ src/surg_rl/
 │   ├── curriculum.py             # Progressive difficulty scheduling
 │   └── adaptive_difficulty.py    # Performance-based adjustments
 │
+├── cutting/               # Tetrahedral mesh cutting engine
+│   ├── engine.py         # Tet subdivision (3-1 and 2-2 cases) + boundary extraction
+│   └── intersection.py   # Signed distance, edge intersection, plane classification
+│
+├── fluids/                # Eulerian fluid simulation (bleeding/irrigation)
+│   ├── fluid_simulator.py     # PhiFlow-based 2D grid simulation with obstacle coupling
+│   ├── force_computation.py   # Pressure gradient integration → obstacle forces
+│   └── visualizer.py          # 2D colormesh rendering of pressure field
+│
 ├── ros2/                  # ROS2 bridge (ros2 extra)
 │   ├── bridge_node.py     # ROS2 node (joint states + actions)
 │   ├── config.py          # ROS2 topic/qos configuration
@@ -283,6 +292,24 @@ pip install -e ".[dev,distributed,vision,llm,tracking]"
 6. Add JSON/YAML example scenes in `scenes/`.
 7. Add tests in `tests/test_schema.py` and loader tests in `tests/test_loader.py`.
 
+### Adding Cutting or Fluid Features
+
+The `cutting/` and `fluids/` packages are self-contained, pure NumPy modules. Follow these conventions:
+
+**Cutting package** (`src/surg_rl/cutting/`):
+- `intersection.py` — computational geometry primitives: signed distances, edge-plane intersections, tet classification by case number (0–4).
+- `engine.py` — mesh subdivision logic (`cut_tetrahedral_mesh`) consuming intersection primitives; handles both 3-1 and 2-2 tet splits with boundary face extraction.
+- Export all public functions via `__init__.py`.
+- All functions accept and return `np.ndarray` — no simulator coupling.
+- Tests in `tests/test_cutting.py` verify exact vertex counts and cut-face geometry against known reference cases.
+
+**Fluids package** (`src/surg_rl/fluids/`):
+- `fluid_simulator.py` — `FluidSimulator` class wrapping PhiFlow's `StaggeredGrid`; accepts a `FluidConfig` Pydantic model, manages obstacle arrays and time stepping.
+- `force_computation.py` — `compute_obstacle_forces` integrates pressure gradients over obstacle masks to produce force vectors for two-way coupling.
+- `visualizer.py` — `render_fluid_2d` produces RGB arrays from pressure fields using scikit-image resize.
+- Lazy-imports PhiFlow at constructor time (not module level) to avoid hard dependency.
+- Tests in `tests/test_deformable.py` verify force directions and simulation stepping.
+
 ## Branch Conventions
 
 - **Main branch:** `main`
@@ -319,7 +346,7 @@ git commit -m "feat: add NVIDIA Isaac Sim simulator backend"
    - Link to any related issues
    - Note breaking changes or new dependencies
 
-4. **CI will run automatically** — GitHub Actions executes the same checks (ruff, black, mypy, pytest) across Python 3.10, 3.11, and 3.12. All must pass before merge.
+4. **CI will run automatically** — GitHub Actions executes the same checks (ruff, black, mypy, pytest) on Ubuntu (Python 3.10, 3.11, 3.12) and macOS (Python 3.11). All must pass before merge.
 
 5. **Review process:**
    - At least one maintainer must approve
@@ -334,15 +361,33 @@ GitHub Actions workflow: `.github/workflows/ci.yml`
 
 **Trigger:** Push to `main` and pull requests against `main`
 
-**Matrix:** Python 3.10, 3.11, 3.12 (runs all three in parallel)
+**Jobs:**
 
-**Steps (per Python version):**
+### test (matrix)
+
+| OS | Python Versions |
+|----|-----------------|
+| Ubuntu | 3.10, 3.11, 3.12 |
+| macOS | 3.11 |
+
+**Steps (per job):**
 
 | Step | Command |
 |------|---------|
-| Lint | `ruff check src/ tests/` |
-| Format | `black --check src/ tests/` |
-| Type check | `mypy src/surg_rl` |
-| Test | `pytest tests/ -m "not integration" -v` |
+| Lint | `ruff check src/ tests/` (Linux only) |
+| Format | `black --check src/ tests/` (Linux only) |
+| Type check | `mypy src/surg_rl` (Linux only) |
+| Test | `pytest tests/ -m "not integration" -v` (Linux: standard; macOS: uses `mjpython` with ROS2 tests ignored) |
 
-CI also caches pip dependencies keyed on `pyproject.toml` hash. Integration tests are explicitly excluded from CI due to LLM API and hardware requirements.
+### docker-ci
+
+Builds four Docker images in parallel (no push):
+
+| Dockerfile | Platforms |
+|-----------|-----------|
+| `Dockerfile` | linux/amd64, linux/arm64 |
+| `Dockerfile.cuda` | linux/amd64 |
+| `Dockerfile.rocm` | linux/amd64 |
+| `Dockerfile.jetson` | linux/arm64 |
+
+CI caches pip dependencies (keyed on `pyproject.toml` hash) and Docker layers (GitHub Actions cache). Integration tests are explicitly excluded from CI due to LLM API and hardware requirements.

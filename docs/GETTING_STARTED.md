@@ -39,7 +39,25 @@ source .venv/bin/activate  # Linux/macOS
 pip install -e ".[dev]"
 ```
 
-This editable install registers the `surg-rl` CLI command and includes all development tools (pytest, ruff, black, mypy).
+This editable install registers the `surg-rl` CLI command and includes all development tools (pytest, pytest-cov, pytest-asyncio, ruff, black, mypy, pre-commit).
+
+For additional capabilities, use the extras from `pyproject.toml`:
+
+```bash
+pip install -e ".[simulation]"   # PhiFlow fluid simulation backend
+pip install -e ".[meshing]"      # TetGen tetrahedral mesh generation
+pip install -e ".[vision]"       # Vision-based scene parsing (torch, transformers)
+pip install -e ".[llm]"          # LLM-based scene generation (openai, anthropic)
+pip install -e ".[tracking]"     # W&B / MLflow experiment tracking
+pip install -e ".[distributed]"  # Ray/RLlib distributed training
+pip install -e ".[ros2]"         # ROS2 bridge (Linux + apt deps required)
+```
+
+Combine multiple extras:
+
+```bash
+pip install -e ".[dev,simulation,meshing,vision,llm,tracking]"
+```
 
 **Without editable install**, prefix all commands with `PYTHONPATH=src`:
 
@@ -113,7 +131,7 @@ A scene describes everything in the surgical environment — robots, tissues, in
 
 ### Simulators
 
-Surg-RL supports two physics backends behind a unified `BaseSimulator` interface. **MuJoCo** (default) delivers high-fidelity rigid-body simulation with GPU-accelerated rendering. **PyBullet** supports soft-body deformable tissue with procedural tetrahedral mesh generation. Switch backends with `--backend pybullet` on the CLI or set `DEFAULT_SIMULATOR=pybullet` in `.env`.
+Surg-RL supports two physics backends behind a unified `BaseSimulator` interface. **MuJoCo** (default) delivers high-fidelity rigid-body simulation with GPU-accelerated rendering and supports MuJoCo flexcomp deformables. **PyBullet** supports soft-body deformable tissue with procedural tetrahedral mesh generation and volumetric cutting. An optional **PhiFlow**-based Eulerian fluid simulator is available for bleeding/irrigation scenarios via `fluids/`. Switch backends with `--backend pybullet` on the CLI or set `DEFAULT_SIMULATOR=pybullet` in `.env`.
 
 ### Environments
 
@@ -136,24 +154,15 @@ Switch at runtime:
 surg-rl train --backend pybullet --scene scenes/simple_suturing.json --algorithm PPO
 ```
 
-## Optional Extras
+## v0.3.2 Features
 
-Install additional capabilities with pip extras syntax:
+Version 0.3.2 introduced three major simulation enhancements built on top of the core MuJoCo/PyBullet backends:
 
-```bash
-pip install -e ".[distributed]"   # Ray/RLlib distributed training
-pip install -e ".[vision]"        # Vision-based scene parsing (torch, transformers)
-pip install -e ".[llm]"           # LLM-based scene generation (openai, anthropic)
-pip install -e ".[tracking]"      # W&B / MLflow experiment tracking
-pip install -e ".[ros2]"          # ROS2 bridge (Linux + apt deps required)
-pip install -e ".[meshing]"       # PyVista mesh manipulation
-```
-
-Combine multiple extras:
-
-```bash
-pip install -e ".[dev,distributed,vision,llm,tracking]"
-```
+| Feature | Description | Extra required |
+|---|---|---|
+| **Deformable tissue** | MuJoCo flexcomp and PyBullet soft-body tetrahedral meshes via TetGen | `[meshing]` |
+| **Volumetric cutting** | Plane-based surgical cuts (scalpel, scissors); configurable cooldown | built-in (PyBullet) |
+| **Fluid simulation** | Eulerian grid-based fluid (PhiFlow) for bleeding/irrigation scenarios | `[simulation]` |
 
 ## Common Setup Issues
 
@@ -174,8 +183,8 @@ For more issues, see [Troubleshooting](TROUBLESHOOTING.md).
 |---|---|
 | [Architecture](ARCHITECTURE.md) | System design, data flow, key abstractions, backend strategy |
 | [Configuration](CONFIGURATION.md) | Environment variables, training config, scene schema, overrides |
+| [Development Guide](DEVELOPMENT.md) | Local setup, build commands, code style, PR process |
 | [Testing](TESTING.md) | Running tests, writing new tests, coverage, CI integration |
-| [Development Guide](DEVELOPMENT_GUIDE.md) | Local setup, build commands, code style, PR process |
 | [Scene Format](SCENE_FORMAT.md) | Detailed JSON/YAML scene definition reference |
 | [Dynamics API](DYNAMICS_API.md) | Domain randomization, curriculum learning, adaptive difficulty |
 

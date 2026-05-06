@@ -4,7 +4,7 @@
 
 **AI-powered surgical robotics scene generation and RL training system.**
 
-End-to-end pipeline from a text description or JSON/YAML scene definition to a trained RL policy in a realistic surgical simulation. Generate scenes via LLM/VLM, train agents with Stable-Baselines3 or Ray/RLlib across MuJoCo and PyBullet backends, with domain randomization, curriculum learning, and adaptive difficulty.
+End-to-end pipeline from a text description or JSON/YAML scene definition to a trained RL policy in a realistic surgical simulation. Generate scenes via LLM/VLM, train agents with Stable-Baselines3 or Ray/RLlib across MuJoCo and PyBullet backends, with advanced simulation (deformable objects, volumetric cutting, grid-based fluids), domain randomization, curriculum learning, and adaptive difficulty.
 
 [![Python](https://img.shields.io/badge/python-%E2%89%A53.10-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -15,6 +15,8 @@ End-to-end pipeline from a text description or JSON/YAML scene definition to a t
 - **Dual physics backends** — MuJoCo 3.x for high-fidelity simulation and PyBullet 3.x for soft-body/deformable tissue with unified API
 - **RL training** — PPO, SAC, TD3, DDPG, and A2C via Stable-Baselines3 with Gymnasium environments
 - **Distributed training** — Scale across clusters with Ray/RLlib, hyperparameter tuning, and checkpoint inspection
+- **Advanced simulation** — Deformable objects (MuJoCo flex + PyBullet Neo-Hookean soft bodies), volumetric tetrahedral mesh cutting, and grid-based Eulerian fluids (PhiFlow backend)
+- **Tetgen mesh generation** — Platform-agnostic procedural tetrahedral mesh generation replacing PyVista with tetgen >=0.8.4
 - **Domain randomization** — Physics, visual, and dynamics randomization for robust policy transfer
 - **Curriculum & adaptive learning** — Progressive difficulty scheduling and performance-based adjustment
 - **GPU acceleration** — Auto-detect CUDA, ROCm, Metal, Intel, or CPU with graceful fallback. Full Metal MPS compute on Apple Silicon for RL training
@@ -67,7 +69,7 @@ surg-rl evaluate --scene scenes/simple_suturing.json --model logs/training/final
 | Backend | Best for | Key Capability |
 |---------|----------|----------------|
 | **MuJoCo** | High-fidelity rigid-body simulation | Fast, accurate physics with GPU-accelerated rendering |
-| **PyBullet** | Soft-body / deformable tissue | Tetrahedral mesh simulation with procedural VTK generation |
+| **PyBullet** | Soft-body / deformable tissue | Tetrahedral mesh simulation with tetgen mesh generation |
 
 Switch backends via CLI flag or config:
 
@@ -85,6 +87,7 @@ Install additional capabilities with extras syntax:
 
 ```bash
 pip install -e ".[distributed]"   # Ray/RLlib for distributed training
+pip install -e ".[simulation]"     # Advanced simulation: fluids + cutting (phiflow, scikit-image)
 pip install -e ".[ros2]"          # ROS2 bridge (requires apt deps on Linux)
 pip install -e ".[vision]"        # Vision-based scene parsing (torch, transformers)
 pip install -e ".[llm]"           # LLM-based scene generation (openai, anthropic)
@@ -101,6 +104,7 @@ pip install -e ".[dev,distributed,vision,llm,tracking]"
 | Extra | Package | Description |
 |-------|---------|-------------|
 | `distributed` | `ray[rllib]` | Multi-node RL training and hyperparameter tuning |
+| `simulation` | `phiflow`, `scikit-image` | Grid-based fluids and volumetric cutting |
 | `ros2` | `PyYAML` | ROS2 bridge (requires system ROS2 installation) |
 | `vision` | `torch`, `transformers` | Image-based scene parsing |
 | `llm` | `openai`, `anthropic` | Text-based scene generation |
@@ -150,7 +154,7 @@ Full documentation is available in the [`docs/`](docs/) directory:
 | [Configuration](docs/CONFIGURATION.md) | Environment variables and config options |
 | [Dynamics API](docs/DYNAMICS_API.md) | Domain randomization, curriculum, adaptive difficulty |
 | [Testing](docs/TESTING.md) | Test framework, running tests, coverage |
-| [Development Guide](docs/DEVELOPMENT_GUIDE.md) | Local setup, build, code style, PR process |
+| [Development Guide](docs/DEVELOPMENT.md) | Local setup, build, code style, PR process |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues and solutions |
 
 ## Contributing
