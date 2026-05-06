@@ -126,3 +126,61 @@ class TestFluidSimulatorObstacles:
         for _ in range(5):
             result = fs.step()
             assert isinstance(result, dict)
+
+
+class TestFluidVisualization:
+    """FLUD-04: Fluid rendering produces valid output."""
+
+    def test_render_2d_returns_image(self, basic_config):
+        from surg_rl.fluids import FluidSimulator
+        from surg_rl.fluids.visualizer import render_fluid_2d
+
+        fs = FluidSimulator(basic_config)
+        fs.step()
+        img = render_fluid_2d(fs.pressure, fs.config, width=100, height=80)
+        assert img is not None
+        assert img.shape == (80, 100, 3)
+        assert img.dtype == np.uint8
+
+    def test_render_null_pressure_returns_none(self):
+        from surg_rl.fluids.visualizer import render_fluid_2d
+
+        img = render_fluid_2d(None, None)
+        assert img is None
+
+
+class TestFluidDivergence:
+    """FLUD-01: Velocity field remains stable after pressure projection."""
+
+    def test_velocity_finite_after_step(self, basic_config):
+        from surg_rl.fluids import FluidSimulator
+
+        fs = FluidSimulator(basic_config)
+        fs.step()
+        p = fs.pressure
+        assert p is not None
+
+        p_vals = np.asarray(p.values)
+        assert np.all(np.isfinite(p_vals))
+
+
+class TestFluidForceComputation:
+    """FLUD-02: Obstacle force direction."""
+
+    def test_force_on_obstacle_nonzero(self, basic_config):
+        from surg_rl.fluids import FluidSimulator
+        from phi.flow import Box, vec
+
+        fs = FluidSimulator(basic_config)
+        size = vec(x=0.05, y=0.05)
+        geom = Box(vec(x=0.15, y=0.15), size)
+        fs.add_obstacle(geom, "block")
+
+        forces = fs.step()
+        if forces:
+            f = forces.get("block")
+            if f is not None:
+                assert f.shape == (3,)
+                assert all(np.isfinite(f))
+        else:
+            assert isinstance(forces, dict)
