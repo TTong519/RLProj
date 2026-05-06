@@ -2,20 +2,20 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-04)
+See: .planning/PROJECT.md (updated 2026-05-05)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** v0.3.2 Advanced Simulation — Phase 16 (Deformable Objects) planned
+**Current focus:** v0.3.2 shipped. Ready for next milestone planning.
 
 ## Current Position
 
-Milestone: v0.3.2 — Advanced Simulation
-Phase: 16 — Deformable Objects
-Plans: 2/2 planned (4 tasks total, 2 waves)
-Status: Ready to execute
-Last activity: 2026-05-04 — Phase 16 planned (2 plans, 4 tasks)
+Milestone: v0.3.2 — Advanced Simulation ✅ SHIPPED
+Phases: 15-18 all complete
+Plans: 9/9 executed
+Tests: 910 passed, 11 skipped
+Last activity: 2026-05-05 — v0.3.2 milestone audit verified clean
 
-Progress: █████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 12% (v0.3.2, Phases 15-16 of 18 planned)
+Progress: ████████████████████████████████████████████ 100% (v0.3.2, all 4 phases complete)
 
 ## Performance Metrics
 
@@ -23,6 +23,7 @@ Progress: █████░░░░░░░░░░░░░░░░░░�
 - **v0.2.0:** Phases 6–9, 19 plans, 775 tests, 0 failures, 7/7 UAT passed
 - **v0.3.0:** Phases 10–13, 18 plans, 826 tests, 23/23 validated
 - **v0.3.1:** Phase 14, 1 plan, 833 tests, 5/5 gaps closed
+- **v0.3.2:** Phases 15–18, 9 plans, 910 tests, 16/16 requirements, Nyquist compliant
 
 ## Decisions
 
@@ -44,6 +45,8 @@ Progress: █████░░░░░░░░░░░░░░░░░░�
 
 - **Phase 15 (tetgen):** Replace PyVista/VTK with tetgen 0.8.4 for platform-agnostic tet meshing
 - **Phase 16 (deformables):** MuJoCo low-level `<deformable>/<flex>` (not `<flexcomp>`) for tetgen mesh consumption; auto-derive PyBullet Neo-Hookean μ/λ from E,ν; configurable `max_vertices` (default 200) for observation padding
+- **Phase 17 (cutting):** Pure NumPy tetrahedral mesh cutting with 5 canonical tet-plane cases; MuJoCo model reload via MJCF XML inline rewrite; PyBullet safe reload (RESET_USE_DEFORMABLE_WORLD); discrete trigger with 500ms cooldown
+- **Phase 18 (fluids):** PhiFlow 3.4.0 for MAC staggered grid on 2D xz-plane; CPU-first (GPU deferred); 2D visualization via skimage; sub-sampled step hook in SurgicalEnv
 
 </details>
 
@@ -54,11 +57,18 @@ Progress: █████░░░░░░░░░░░░░░░░░░�
 ## Todos
 
 - [x] Define v0.3.2 requirements (tetgen, deformables, cutting, fluids)
-- [x] Plan Phase 15: Tetgen Mesh Generation (1 plan, 3 tasks)
-- [x] Plan Phase 16: Deformable Objects (2 plans, 4 tasks)
-- [ ] Plan Phase 17: Volumetric Cutting
-- [ ] Plan Phase 18: Grid-based Fluids
+- [x] Plan Phase 15: Tetgen Mesh Generation
+- [x] Plan Phase 16: Deformable Objects
+- [x] Plan Phase 17: Volumetric Cutting
+- [x] Plan Phase 18: Grid-based Fluids
+- [x] Ship Phase 15
+- [x] Ship Phase 16
+- [x] Ship Phase 17
+- [x] Ship Phase 18
+- [x] Nyquist validation audit
+- [x] Milestone integration audit
+- [ ] Complete milestone (gsd-complete-milestone)
 
 ---
 
-_Updated: 2026-05-04 — Phase 15 planned_
+_Updated: 2026-05-05 — v0.3.2 milestone audit verified clean, 910 tests_
