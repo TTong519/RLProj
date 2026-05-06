@@ -48,81 +48,16 @@
 
 </details>
 
-## Phase 15: Tetgen Mesh Generation
+<details>
+<summary>✅ v0.3.2 Advanced Simulation (Phases 15–18) — SHIPPED 2026-05-05</summary>
 
-**Goal:** Replace VTK-based tetrahedral mesh generation with platform-agnostic `tetgen` Python package.
+- [x] Phase 15: Tetgen Mesh Generation (1/1 plan) — [archive](milestones/v0.3.2-ROADMAP.md)
+- [x] Phase 16: Deformable Objects (2/2 plans)
+- [x] Phase 17: Volumetric Cutting (3/3 plans)
+- [x] Phase 18: Grid-based Fluids (3/3 plans, inlined)
 
-**Requirements mapped:** TETG-01, TETG-02, TETG-03, TETG-04
-
-**Success criteria:**
-1. Tetgen generates tetrahedral meshes from OBJ/STL surface inputs
-2. `vtk_io.py` public API preserved but internals redirected to tetgen
-3. VTK/PyVista removed from `[meshing]` extras
-4. All existing mesh-dependent tests pass (soft body, scene builder)
-
-**Plans:** 1 plan (1 wave)
-
-**Wave 1** *(no dependencies)*
-- [x] 15-01-PLAN.md — Integrate tetgen, migrate vtk_io.py internals, update deps (TETG-01..04)
-
-**Cross-cutting constraints:**
-- `vtk_io.py` public API (`write_vtk_unstructured_grid`, `read_vtk_unstructured_grid`, `validate_vtk`) must remain unchanged
-- All existing mesh-dependent tests must pass (test_mesh_generation.py, test_vtk_io.py, test_scene_builder.py)
-
-## Phase 16: Deformable Objects
-
-**Goal:** FEM-based deformable objects in MuJoCo + improved PyBullet soft body support.
-
-**Requirements mapped:** DEFM-01, DEFM-02, DEFM-03, DEFM-04
-
-**Success criteria:**
-1. MuJoCo loads deformable bodies via `<deformable>/<flex>` (low-level) from tetgen meshes
-2. PyBullet soft body Neo-Hookean params auto-derived from Young's modulus + Poisson's ratio
-3. `DeformableConfig` in scene schema with MuJoCoFlexConfig / PyBulletFlexConfig backend overrides
-4. Vertex positions (padded) + edge strain observable via dynamic `ObservationSpec`
-
-**Plans:** 2 plans (2 waves)
-
-**Wave 1** *(no dependencies)*
-- [x] 16-01-PLAN.md — MuJoCo FEM `<flex>` generation + DeformableConfig schema (DEFM-01, DEFM-03)
-
-**Wave 2** *(depends on Plan 01)*
-- [x] 16-02-PLAN.md — PyBullet soft body param mapping + deformable observation (DEFM-02, DEFM-04)
-
-## Phase 17: Volumetric Cutting
-
-**Goal:** Real-time tetrahedral mesh cutting with remeshing, integrated with both simulator backends.
-
-**Requirements mapped:** CUT-01, CUT-02, CUT-03, CUT-04
-
-**Success criteria:**
-1. Tool-mesh intersection detection finds cut plane
-2. Tetrahedral elements split along cut plane with boundary face regeneration
-3. MuJoCo pre-step callback + PyBullet remove/reload cycle handle mesh changes
-4. `CutAction` schema defines cut plane in action space
-
-**Plans:**
-- [x] 17-01-PLAN.md — Cutting algorithm (intersection, remeshing)
-- [x] 17-02-PLAN.md — Backend integration (MuJoCo + PyBullet)
-- [x] 17-03-PLAN.md — Action space + scene schema
-
-## Phase 18: Grid-based Fluids
-
-**Goal:** Eulerian grid-based fluid solver with two-way solid coupling for surgical bleeding/irrigation.
-
-**Requirements mapped:** FLUD-01, FLUD-02, FLUD-03, FLUD-04
-
-**Success criteria:**
-1. MAC staggered grid solver with velocity, pressure, and free surface
-2. Fluid exerts forces on scene objects; objects displace fluid
-3. `FluidConfig` schema (bounds, resolution, viscosity, density)
-4. Basic particle/surface visualization
-
-**Plans:**
-- [x] 18-01-PLAN.md (inlined) — Fluid solver core (MAC grid, pressure projection)
-- [x] 18-02-PLAN.md (inlined) — Two-way coupling + scene integration
-- [x] 18-03-PLAN.md (inlined) — Schema + visualization
+</details>
 
 ---
 
-*Roadmap last updated: 2026-05-04 after v0.3.2 milestone initialization*
+*Roadmap last updated: 2026-05-05 after v0.3.2 milestone archived*
