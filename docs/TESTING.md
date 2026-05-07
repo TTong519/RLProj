@@ -7,7 +7,7 @@
 The project uses **pytest** (>=7.0.0) with **pytest-asyncio** and **pytest-cov**. Configuration lives in two places:
 
 - **`pytest.ini`** — primary configuration file at the project root
-- **`pyproject.toml`** `[tool.pytest.ini_options]` — mirrors the same settings
+- **`pyproject.toml`** `[tool.pytest.ini_options]` — contains testpaths, python_files, addopts, and asyncio_mode, but does NOT mirror pythonpath, asyncio_default_fixture_loop_scope, or markers from pytest.ini
 
 ```ini
 # pytest.ini

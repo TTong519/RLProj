@@ -112,10 +112,6 @@ src/surg_rl/
 │   ├── hardware_bridge.py # ros2_control lifecycle manager
 │   └── replay.py          # Trajectory replay via ROS2
 │
-├── k8s/                    # Kubernetes manifests
-│   ├── base/               # Base resources (Job, RayCluster, PVC, RBAC)
-│   └── overlays/           # Kustomize overlays (cpu/gpu)
-│
 └── utils/                 # Shared utilities
     ├── config.py          # Pydantic-settings configuration
     ├── logging.py         # Rich-based structured logging
@@ -133,6 +129,7 @@ demos/          # Demo scripts (demo.py for interactive visualization)
 examples/       # Example scripts and notebooks
 configs/        # YAML configuration files
 docs/           # Project documentation
+k8s/            # Kubernetes manifests (base + overlays)
 ```
 
 ## Build Commands
@@ -229,7 +226,7 @@ PYTHONPATH=src pytest tests/ -v
 PYTHONPATH=src pytest tests/test_simulators.py -v
 
 # Single test function
-PYTHONPATH=src pytest tests/test_schema.py::test_scene_validation -v
+PYTHONPATH=src pytest tests/test_loader.py::test_scene_validation_error -v
 
 # With coverage
 PYTHONPATH=src pytest tests/ --cov=surg_rl --cov-report=term-missing
@@ -261,7 +258,7 @@ pip install -e ".[dev,distributed,vision,llm,tracking]"
 | `vision` | `pip install -e ".[vision]"` | Vision-based scene parsing (torch, torchvision, transformers) |
 | `llm` | `pip install -e ".[llm]"` | LLM-based scene generation (openai, anthropic) |
 | `tracking` | `pip install -e ".[tracking]"` | Weights & Biases and MLflow experiment tracking |
-| `meshing` | `pip install -e ".[meshing]"` | PyVista for advanced mesh I/O and manipulation |
+| `meshing` | `pip install -e ".[meshing]"` | TetGen for tetrahedral mesh generation (tetgen>=0.8.4) |
 | `docs` | `pip install -e ".[docs]"` | Sphinx documentation toolchain with rtd theme and MyST parser |
 
 ## Adding New Features
@@ -269,7 +266,7 @@ pip install -e ".[dev,distributed,vision,llm,tracking]"
 ### Adding a Simulator Backend
 
 1. Create a new module in `src/surg_rl/simulators/` (e.g., `isaac_simulator.py`).
-2. Subclass `BaseSimulator` (ABC) and implement all abstract methods: `load_scene()`, `reset()`, `step()`, `get_observation()`, `close()`, `render()`, `get_state()`, `set_state()`, and `get_visual_meshes()`.
+2. Subclass `BaseSimulator` (ABC) and implement all abstract methods: `load_scene()`, `reset()`, `step()`, `render()`, `get_state()`, `set_state()`, `close()`, `start_viewer()`, `stop_viewer()`, `get_joint_states()`, and `_apply_action()`.
 3. Data carriers (`Observation`, `State`, `StepResult`, `SimulationStatus`) are defined in `base_simulator.py` — use them directly.
 4. Test for backend identity with a unique attribute (pattern: `MuJoCoSimulator` uses `_model`, `PyBulletSimulator` uses `_physics_client`).
 5. Add tests in `tests/` — follow existing simulator test patterns. Register in `.githooks/pre-commit` under the `check_tests` calls.

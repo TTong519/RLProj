@@ -131,7 +131,7 @@ A scene describes everything in the surgical environment — robots, tissues, in
 
 ### Simulators
 
-Surg-RL supports two physics backends behind a unified `BaseSimulator` interface. **MuJoCo** (default) delivers high-fidelity rigid-body simulation with GPU-accelerated rendering and supports MuJoCo flexcomp deformables. **PyBullet** supports soft-body deformable tissue with procedural tetrahedral mesh generation and volumetric cutting. An optional **PhiFlow**-based Eulerian fluid simulator is available for bleeding/irrigation scenarios via `fluids/`. Switch backends with `--backend pybullet` on the CLI or set `DEFAULT_SIMULATOR=pybullet` in `.env`.
+Surg-RL supports two physics backends behind a unified `BaseSimulator` interface. **MuJoCo** (default) delivers high-fidelity rigid-body simulation with GPU-accelerated rendering and supports MuJoCo flexcomp deformables. **PyBullet** supports soft-body deformable tissue with procedural tetrahedral mesh generation and volumetric cutting. An optional **PhiFlow**-based Eulerian fluid simulator is available for bleeding/irrigation scenarios via `src/surg_rl/fluids/`. Switch backends with `--simulator pybullet` on the CLI or set `DEFAULT_SIMULATOR=pybullet` in `.env`.
 
 ### Environments
 
@@ -151,7 +151,7 @@ Three dynamics controllers run alongside the simulator to improve training robus
 Switch at runtime:
 
 ```bash
-surg-rl train --backend pybullet --scene scenes/simple_suturing.json --algorithm PPO
+surg-rl train --simulator pybullet --scene scenes/simple_suturing.json --algorithm PPO
 ```
 
 ## v0.3.2 Features
@@ -170,7 +170,7 @@ Version 0.3.2 introduced three major simulation enhancements built on top of the
 |---|---|---|
 | `surg-rl: command not found` | Editable install not run, or venv not active | `source .venv/bin/activate && pip install -e ".[dev]"` |
 | `ModuleNotFoundError: No module named 'surg_rl'` | Direct Python invocation without `PYTHONPATH` | Prefix with `PYTHONPATH=src` |
-| MuJoCo crashes on headless machine | No display available | Use `--headless` flag or set `RENDER_MODE=none` |
+| MuJoCo crashes on headless machine | No display available | Use `--headless` flag |
 | PyBullet soft body fails silently | `resetSimulation` not called with `RESET_USE_DEFORMABLE_WORLD` | Internal; reload the scene and retry |
 | LLM generation fails | API key not set or placeholder value in use | Edit `.env` with a real API key (placeholder values like `sk-xxxxxxxx` are rejected) |
 | OpenGL errors on macOS | MuJoCo rendering backend mismatch | Install `mujoco` with `pip install mujoco`; macOS uses the `glfw` backend by default |
