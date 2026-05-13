@@ -1,216 +1,697 @@
-# Pitfalls Research
+# Domain Pitfalls — v0.4.0: Training Infrastructure & Realism
 
-**Domain:** Surgical-robotics reinforcement learning training system
-**Researched:** 2026-04-29
+**Domain:** Surgical robotics RL training system
+**Researched:** 2026-05-13
 **Confidence:** HIGH
+**Source coverage:** Context7 (PettingZoo, DreamerV3) + codebase audit + existing research
 
-## Critical Pitfalls
+## Executive Summary
 
-### Pitfall 1: PyBullet Quaternion Order Bug
+Five new feature areas are being added to a 910-test, dual-backend system. The core integration hazards are: (1) PettingZoo's API is **fundamentally incompatible** with the existing Gymnasium-based `SurgicalEnv` — it uses dict-based step/reset returns, per-agent method-based spaces, and agent-key semantics instead of positional tuples; (2) DreamerV3 uses `embodied.env.Env`, not Gymnasium, with a completely different step protocol that bakes reset into the action dict; (3) real mesh assets will collide with the primitive-fallback architecture that 910 tests assume; (4) the existing curriculum system must be extended (not replaced) to avoid regressing the already-fixed `apply_parameters` flow; (5) cross-backend determinism is impossible — benchmarking must treat MuJoCo and PyBullet as separate "hardware" targets.
 
-**What goes wrong:** Primitive robot fallbacks in PyBullet are silently mis-oriented because `createMultiBody` expects `[x, y, z, w]` but the code passes `[w, x, y, z]`. This means any scene relying on primitive robot geometry has incorrect orientation.
-
-**Why it happens:** MuJoCo and PyBullet use different quaternion conventions. The MuJoCo convention (`[w, x, y, z]`) leaked into PyBullet primitive creation.
-
-**How to avoid:** Audit all quaternion handoff points. Use namedtuple or dataclass with clear field names (`qx, qy, qz, qw`). Add unit tests that verify orientation after `reset()`.
-
-**Warning signs:** Robots appear rotated 90° in PyBullet but correct in MuJoCo. Tests pass orientation checks on MuJoCo but fail on PyBullet.
-
-**Phase to address:** Phase 1 (Critical Bugs) — this is a correctness bug affecting all PyBullet users.
+Each feature section below maps specific code-level gotchas, warning signs, and prevention strategies.
 
 ---
 
-### Pitfall 2: Simulator State Leakage Between Episodes
+## Feature 1: Real Surgical Assets (Instrument Meshes + Organ Geometries)
 
-**What goes wrong:** PyBullet `reset()` never resets joint positions/velocities. The next episode starts with stale joint state from the previous episode, biasing training data.
+### Critical Pitfalls
 
-**Why it happens:** `pybullet_simulator.py:reset()` only resets base poses but skips `resetJointState` calls for all movable joints.
+#### Pitfall 1.1: Mesh Format Incompatibility Across Backends
 
-**How to avoid:** Every `reset()` must iterate all joints and call `resetJointState` with initial qpos/qvel. Add a regression test that asserts zero joint velocity after reset.
+**What goes wrong:** Real surgical meshes arrive as `.stl`, `.dae`, `.glTF`, or `.fbx`. MuJoCo's MJCF only loads `.obj` and `.stl` via `<mesh>`, while PyBullet only loads `.obj` and `.urdf`-embedded meshes. Loading a `.glTF` liver model silently falls back to a primitive box in one backend while partially working in the other.
 
-**Warning signs:** Training loss plateaus unexpectedly. Agent actions have diminishing effect over episodes.
+**Why it happens:** `SceneBuilder.resolve_asset_path()` checks file existence but not format compatibility. `get_mesh_or_primitive()` falls back to primitives on any mesh load failure — format errors and missing files are indistinguishable.
 
-**Phase to address:** Phase 1 (Critical Bugs) — this corrupts RL training data silently.
+**Consequences:** Different backends see different geometries. Training results are non-comparable. The `_missing_assets` deduplication set (line 119) masks format errors as "missing file" warnings.
 
----
+**Prevention:**
+1. Add a `MeshAsset.supported_formats` validator that rejects unsupported extensions before load
+2. Add a `build_mesh_asset()` method to `SceneBuilder` that converts between formats (`.stl` → `.obj` via trimesh)
+3. Distinguish "file missing" from "format unsupported" in warning messages
+4. Add cross-backend integration test: assert both backends load the same mesh with the same vertex count
 
-### Pitfall 3: Collision Penalty Sign Inversion
+**Detection:** Warnings contain "Asset missing" but file exists on disk. One backend shows detailed geometry, the other shows primitive box.
 
-**What goes wrong:** The reward function factory uses `abs()` to guard negative weights, but the root cause is that `RewardConfig` allows negative config values to be passed as positive weights. This inverts the intended penalty into a bonus.
-
-**Why it happens:** Sign contract between config schema and reward factory is unclear. `RewardConfig` has no validator ensuring `collision_penalty >= 0`.
-
-**How to avoid:** Add Pydantic validators to `RewardConfig` that reject negative penalty values. Make the factory fail fast on invalid signs instead of silently patching with `abs()`.
-
-**Warning signs:** Agent learns to collide (higher reward) rather than avoid collisions. `CollisionPenalty` tests may not catch this if only the weight sign is tested, not the composite behavior.
-
-**Phase to address:** Phase 1 (Critical Bugs) — this breaks reward semantics.
+**Phase:** Real Assets (Phase 2 recommended — after schema changes, before curriculum)
 
 ---
 
-### Pitfall 4: VecEnv API Mismatch in Evaluation
+#### Pitfall 1.2: High-Poly Meshes Blow Up `reset()` Time
 
-**What goes wrong:** `TrainingManager.evaluate()` assumes 5-tuple Gymnasium `step()` API (`obs, reward, terminated, truncated, info`) but SB3 `VecEnv` returns 4-tuple (`obs, reward, done, info`). This crashes when `n_envs > 1`.
+**What goes wrong:** Medical-grade organ meshes (e.g., segmented liver from CT) can have 200K+ triangles. The existing soft-body pipeline already has O(n) scene reload in PyBullet (Pitfall 5 from v0.1.0 research). Adding real meshes makes `reset()` take seconds per episode.
 
-**Why it happens:** `evaluate()` was tested only with `DummyVecEnv(n_envs=1)` where the 4-tuple/5-tuple behavior coincides. No multi-env evaluation tests exist.
+**Why it happens:** `PyBulletSimulator.reset()` reloads the full scene when `_soft_body_ids` is non-empty (line ~680). High-poly meshes multiply simulation time (PyBullet soft body is CPU-bound, quadratic in vertex count).
 
-**How to avoid:** Detect env type (`isinstance(env, VecEnv)`) and branch accordingly. Add integration tests that evaluate with `n_envs=2`.
+**Consequences:** Training throughput drops from 50+ FPS to 5-10 FPS. `reset()` dominates profiling output. Curriculum advancement becomes painful (100 episodes × 2s reset = 200s overhead).
 
-**Warning signs:** Crash on `evaluate()` after training with multiple workers. Error: `_queue.Empty` or tuple unpack failure.
+**Prevention:**
+1. Add mesh decimation pipeline (trimesh `simplify_quadratic_decimation`) that auto-generates LOD versions
+2. Add `max_faces` validation in `SceneBuilder` — reject meshes > 50K faces with actionable error
+3. Cache decimated meshes in `self._primitive_meshes` (like box/sphere/cylinder are already cached)
+4. Add performance benchmark test: `reset()` must complete in < 500ms with up to 10K vertex soft body
 
-**Phase to address:** Phase 1 (Critical Bugs) — this breaks multi-environment evaluation.
+**Detection:** `git status` shows large `.obj` files (>5MB). `reset()` time measured in seconds. Training progress bar stalls at episode boundaries.
 
----
-
-### Pitfall 5: PyBullet Soft-Body Scene Reload Cost
-
-**What goes wrong:** `PyBulletSimulator.reset()` reloads the entire scene when soft bodies exist because `removeBody()` is unsafe for soft bodies. This is O(n) per episode and becomes a bottleneck at scale.
-
-**Why it happens:** PyBullet soft-body API lacks a safe remove operation. The workaround (full reload) is correct but expensive.
-
-**How to avoid:** Cache soft-body mesh data in memory to avoid re-reading `.vtk`/`.obj` files. Use PyBullet's `changeDynamics()` to reset soft-body state without reloading. If neither works, document the limitation and provide a "rigid tissue" mode.
-
-**Warning signs:** Episode time increases linearly with scene complexity. `reset()` dominates profiling output.
-
-**Phase to address:** Phase 3 (Simulator Robustness) — optimization, not correctness.
+**Phase:** Real Assets (Phase 2)
 
 ---
 
-### Pitfall 6: Unimplemented Action Types Surviving to Runtime
+#### Pitfall 1.3: Breaking the Primitive Fallback Contract in 910 Tests
 
-**What goes wrong:** `ActionBuilder` defines `JOINT_TORQUES`, `ENDEFFECTOR_POSE`, `ENDEFFECTOR_DELTA` but they raise `NotImplementedError` at runtime. Users configuring these action types get cryptic crashes.
+**What goes wrong:** 910 tests across 53 files build `SceneDefinition` objects with `TissueMeshDefinition(primitive="box", dimensions=(...))` and no `mesh` field. Adding mandatory mesh fields or changing `TissueMeshDefinition` validation could break all of them at once.
 
-**Why it happens:** Early alpha placeholders that were never prioritized. No validation blocks them at config time.
+**Why it happens:** `TissueMeshDefinition.validate_geometry()` (schema.py:641-648) currently requires "either mesh or primitive." If real asset support adds a "mesh is required when assets_dir is set" validator, every existing test scene becomes invalid.
 
-**How to avoid:** Add a Pydantic validator to `ActionConfig` that rejects unsupported `ActionType` values. Or implement them. Either way, fail at scene load time, not during `step()`.
+**Consequences:** Mass test failures. Potentially 500+ tests need updating. CI goes red for days.
 
-**Warning signs:** User reports "my config is valid but training crashes on step 1."
+**Prevention:**
+1. Never make `mesh` required — keep `TissueMeshDefinition.mesh` optional
+2. Add `prefer_mesh: bool = True` config field that controls resolution priority, not validation
+3. Write migration test: assert all 53 test files still pass after schema changes
+4. Use `model_construct()` in test factories to avoid triggering new validators early
 
-**Phase to address:** Phase 2 (Gripper + Action Types) — complete the action space.
+**Detection:** PR CI failure with > 100 test failures. `pydantic.ValidationError` in `SceneDefinition` construction.
 
----
-
-### Pitfall 7: API Key Exposure via `.env.example`
-
-**What goes wrong:** `.env.example` contains `LLM_API_KEY=your_api_key_here`. Users copy it without replacing the placeholder, and the literal string leaks to LLM provider error logs.
-
-**Why it happens:** No validation that the key is non-empty or a real-looking key before use. No masking in logs.
-
-**How to avoid:** Replace `.env.example` with `LLM_API_KEY=` (empty). Add validator in `Settings` that rejects placeholder values. Mask key in all logs (only show last 4 chars).
-
-**Warning signs:** Anthropic/OpenAI error logs contain literal `"your_api_key_here"`. Security audit flags credential exposure.
-
-**Phase to address:** Phase 1 (Critical Bugs) — security.
+**Phase:** Real Assets (Phase 1 schema prep)
 
 ---
 
-### Pitfall 8: Curriculum `apply_parameters` No-Op
+#### Pitfall 1.4: Asset Path Fragility in Docker/K8s
 
-**What goes wrong:** `CurriculumScheduler.apply_parameters()` returns `True` without actually applying stage overrides. The curriculum advances, but the simulation parameters never change.
+**What goes wrong:** Real meshes stored as relative paths (`assets/liver.obj`) resolve correctly on developer machines but fail in Docker containers (`/app/assets/` vs `/workspace/assets/`) and K8s pods (PVC mount points vary).
 
-**Why it happens:** The method was stubbed during early implementation and never completed. Since it returns `True`, no test catches it as a failure.
+**Why it happens:** `SceneBuilder.resolve_asset_path()` (line 133) searches relative to `assets_dir`, CWD, and absolute — but none of these survive containerization. The `assets_dir` constructor param defaults to `None` — no default search path.
 
-**How to avoid:** Implement the override logic (stage → parameter mapping). Add a test that asserts a parameter value changes after `apply_parameters()`.
+**Consequences:** All real meshes become primitive fallbacks in production deployments. Training silently uses simpler geometry.
 
-**Warning signs:** Agent trains at the same difficulty regardless of curriculum stage. Success rate doesn't improve as expected.
+**Prevention:**
+1. Add `ASSETS_DIR` environment variable (pydantic-settings)
+2. Add asset checksum verification at `load_scene()` time — fail early if mesh doesn't match expected hash
+3. Generate a manifest file (`assets_manifest.json`) with expected checksums during build
+4. In Dockerfile, bake mesh files into the image (not mounted at runtime) with a fixed `/app/assets` path
 
-**Phase to address:** Phase 3 (Simulator Robustness) — dynamics layer gap.
+**Detection:** `_missing_assets` set grows in production but not locally. Hash mismatches in logs.
 
-## Technical Debt Patterns
+**Phase:** Real Assets (Phase 2), with Infrastructure tie-in
 
-| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|----------|-------------------|----------------|-----------------|
-| Primitive mesh fallbacks | No asset licensing, lightweight repo | Low visual fidelity, no realistic tissue | v1 only; replace with real meshes in v2 |
-| `hasattr` backend detection | Simple, no enums needed | Breaks if backend internals change | v1; add `BackendType` enum in v2 |
-| `abs()` in reward factory | Prevents crash on bad config | Hides sign contract violations | Never — fix root cause in config validators |
-| Unimplemented action types in enum | Future-proof API | Runtime crashes for users | Never — either implement or remove from enum |
-| `.env.example` with placeholder | Self-documenting template | Security exposure | Never — use empty value + validator |
+---
 
-## Integration Gotchas
+### Moderate Pitfalls
 
-| Integration | Common Mistake | Correct Approach |
-|-------------|----------------|------------------|
-| Ollama local server | Forget to start Ollama before running `surg-rl generate` | Check connection in `generate` command; warn user if unreachable |
-| MuJoCo renderer | Call `render()` in headless environment without checking `DISPLAY` | Check `mujoco.Renderer` availability; degrade to no-render mode |
-| PyBullet soft body | Load soft body before `resetSimulation(RESET_USE_DEFORMABLE_WORLD)` | Always call `resetSimulation` with deformable flag first |
-| SB3 `VecEnv` | Use `env.step()` directly with `SubprocVecEnv` | Use SB3's `make_vec_env()` helper; handle 4-tuple vs 5-tuple |
-| Pydantic `model_dump()` | Serialize to YAML without converting enums | Use `model_dump(mode="json")` first; then pass to `yaml.dump` |
+#### Pitfall 1.5: Color/Material Mismatch After Mesh Replacement
 
-## Performance Traps
+**What goes wrong:** Real instrument meshes come with embedded materials (Phong, PBR). Replacing primitives (which use `DEFAULT_COLORS` dict, line 91) with real meshes changes rendering appearance silently. The RL agent trained on primitive colors may fail on real-color mesh scenes.
 
-| Trap | Symptoms | Prevention | When It Breaks |
-|------|----------|------------|----------------|
-| ASCII VTK writer | Scene save takes seconds for large meshes | Switch to binary VTK or skip ASCII intermediate | Soft-body scenes with >10k tetrahedra |
-| Python loop mesh generation | Procedural mesh creation stalls for high-res shapes | Vectorize with NumPy or use trimesh | Resolutions >64³ cells |
-| Synchronous rendering | Training loop blocked by `render()` calls | Use offscreen renderer; decouple render from step | Any training with `render_freq > 0` |
-| Fresh env per evaluation | `evaluate()` creates new env each call | Reuse vectorized env across evaluations | Evaluation frequency >0 with `n_envs > 1` |
+**Why it happens:** MuJoCo `<geom type="mesh">` inherits material from the mesh file if present, ignoring the `rgba` attribute. PyBullet `createMultiBody` uses visual shape color.
 
-## Security Mistakes
+**Consequences:** Visual domain gap. Agent trained with blue boxes fails on silver-metallic instruments. Observation distributions shift.
 
-| Mistake | Risk | Prevention |
-|---------|------|------------|
-| API key in `.env.example` | Leaks to logs, version control | Empty value + validator + log masking |
-| No key validation | Placeholder sent to providers, causing billing surprises | Regex validate key format per provider |
-| Key in error messages | Anthropic/OpenAI exceptions include key in traceback | Sanitize exceptions before logging |
-| No rate limiting | Accidental infinite loop in generation exhausts API budget | Add built-in rate limit (max requests/minute) |
+**Prevention:**
+1. Force material override: set `rgba` on `<geom>` in MJCF regardless of mesh material
+2. Add visual consistency test: render both backends, assert pixel similarity within tolerance
+3. Document that real meshes may change visual observations
 
-## UX Pitfalls
+**Detection:** Side-by-side rendering shows different colors. Pixel difference test fails.
 
-| Pitfall | User Impact | Better Approach |
-|---------|-------------|-----------------|
-| Static demos | Demo shows nothing moving; user thinks it's broken | Add animated primitive movement or document "joint control not yet implemented" |
-| `NotImplementedError` at runtime | User's config passes validation but crashes on first step | Validate action types at config load time |
-| No progress indicator during training | Long training looks frozen | Add SB3 callback with Rich progress bar |
-| Missing assets silently fail | Scene loads with boxes instead of robot mesh | Warn user: "Mesh X not found; using primitive fallback" |
+**Phase:** Real Assets (Phase 2)
 
-## "Looks Done But Isn't" Checklist
+---
 
-- [ ] **Gripper actuation:** TODO comment exists at `pybullet_simulator.py:1094`; not implemented
-- [ ] **Joint control in demos:** README says "objects remain static" — true but not obvious to new users
-- [ ] **Action types:** 3 of 6 action types raise `NotImplementedError`
-- [ ] **Task geometry binding:** Observation fields (`needle_pos`, `entry_point`) are stubs
-- [ ] **Curriculum apply_parameters:** Returns `True` but does nothing
-- [ ] **evaluate() with VecEnv:** Only tested with `n_envs=1`
-- [ ] **PyBullet state restore:** `get_state()` stores less than MuJoCo; not equivalent across backends
-- [ ] **Soft-body remove safety:** `removeBody()` unsafe; workaround is full scene reload
+## Feature 2: Surgical Task Curriculum (Progressive Difficulty + Task Chains)
+
+### Critical Pitfalls
+
+#### Pitfall 2.1: Regressing the `apply_parameters` Fix
+
+**What goes wrong:** The existing `CurriculumScheduler.apply_parameters()` was a no-op (returned `True` without applying overrides) until Phase 3 fixed it. Adding `difficulty_level` to `TaskConfig` risks creating a second parameter path that bypasses the fixed `apply_parameters()` — or worse, introducing a similar bug where difficulty advances but parameters don't change.
+
+**Why it happens:** Two parameter systems will exist: (1) `CurriculumStageConfig.parameter_overrides` (existing, now working), (2) new `TaskConfig.difficulty_level` + `difficulty_params`. If the v0.4.0 curriculum reads from the new field, the existing curriculum tests won't catch regressions in the old system.
+
+**Consequences:** Curriculum silently stops working. Agent trains at same difficulty forever. Success rate plateaus.
+
+**Prevention:**
+1. Extend `CurriculumStageConfig` — do NOT create a parallel difficulty system
+2. Add `task_chain: list[str]` to `CurriculumStageConfig` for task composition
+3. Write regression test: `apply_parameters()` must change observable values after `advance_stage()`
+4. Keep existing curriculum tests, extend with new assertion patterns
+
+**Detection:** `surg-rl train --use-curriculum` shows same difficulty metrics across stages. Regression test fails: parameter values unchanged after curriculum advance.
+
+**Phase:** Curriculum (Phase 3 — must come after Real Assets since tasks reference asset names)
+
+---
+
+#### Pitfall 2.2: Task Chain State Bleed Between Subtasks
+
+**What goes wrong:** A procedure chain like "grasp → cut → suture" shares the same simulator instance across subtasks. If `reset()` between subtasks doesn't fully clear state, the needle from suturing is still embedded in the tissue from the cutting phase — the simulator is in an impossible state.
+
+**Why it happens:** `SurgicalEnv.reset()` (line 474) does `simulator.reset()` + controller reset, but `get_state()`/`set_state()` are backend-specific and incomplete (Pitfall 7 in v0.1.0 research: "PyBullet state restore stores less than MuJoCo").
+
+**Consequences:** Subtask 3 starts with phantom forces, embedded objects, or collision state from subtask 2. Agent learns to exploit state leakage.
+
+**Prevention:**
+1. Task chain transitions must call `simulator.reset()` (full reload), NOT `set_state()` (partial restore)
+2. Add `assert env.simulator._simulation_time == 0.0` after chain transition
+3. Add integration test: run chain 3 times, assert same initial observation on each run
+4. For PyBullet, chain transition = full `load_scene()` + `reset()` (same as soft-body reset pattern)
+
+**Detection:** Observations differ between chain runs. Episodic reward varies by chain position.
+
+**Phase:** Curriculum (Phase 3)
+
+---
+
+#### Pitfall 2.3: Cross-Backend Difficulty Semantics Diverge
+
+**What goes wrong:** "Easy" means different things in MuJoCo vs PyBullet. MuJoCo flex FEM uses `youngs_modulus` for stiffness; PyBullet Neo-Hookean uses `mu`/`lambda`. A difficulty level that sets `stiffness=500` on both backends produces drastically different tissue behavior.
+
+**Why it happens:** `CurriculumStageConfig.parameter_overrides` is a flat dict — values are backend-agnostic strings. There's no per-backend parameter mapping.
+
+**Consequences:** "Hard" in MuJoCo may be "Medium" in PyBullet. Cross-backend benchmark comparison is meaningless.
+
+**Prevention:**
+1. Add `mujoco_overrides` and `pybullet_overrides` sub-dicts to `CurriculumStageConfig`
+2. Write difficulty calibration test: same difficulty level must produce similar deformation magnitude (within 20%) across backends
+3. Document which parameters are backend-specific
+
+**Detection:** Tissue deforms 3x more in PyBullet than MuJoCo at same difficulty. Agent success rate diverges by backend at same curriculum stage.
+
+**Phase:** Curriculum (Phase 3)
+
+---
+
+### Moderate Pitfalls
+
+#### Pitfall 2.4: `TaskConfig` Schema Bloat Breaking Scene Files
+
+**What goes wrong:** Adding `difficulty`, `chain`, `prerequisites` fields to `TaskConfig` (schema.py:1047) requires updating all existing scene JSON/YAML files and all test scenes. Old scene files silently get default values — which may not be sensible (e.g., `difficulty=0.0` meaning "trivial").
+
+**Why it happens:** Pydantic v2 provides defaults, so old files parse successfully — but the behavior changes.
+
+**Consequences:** Existing demo scenes (`scenes/simple_suturing.json`) behave differently. Users report "my scene worked before, now it's too easy."
+
+**Prevention:**
+1. Use `Field(default=None)` for new optional fields — explicitly check for `None` at runtime
+2. Add `@model_validator(mode="after")` that warns when new fields are missing (opt-in migration messaging)
+3. Version scenes: add `schema_version` to `Metadata`, validate compatibility
+
+**Detection:** Old scene files parse successfully but produce different simulation behavior. Success rate jumps.
+
+**Phase:** Real Assets schema prep (Phase 1)
+
+---
+
+## Feature 3: Reproducible Benchmarking (Experiment Runner + Reports)
+
+### Critical Pitfalls
+
+#### Pitfall 3.1: Cross-Backend Nondeterminism Makes "Reproducible" Impossible
+
+**What goes wrong:** Setting `seed=42` on both MuJoCo and PyBullet produces different trajectories. MuJoCo's constraint solver is deterministic for a given seed; PyBullet's soft-body solver is nondeterministic due to internal threading. Benchmarking "reproducibility" across backends is a false promise.
+
+**Why it happens:** Physics engines are not identical — different contact models, integrators, solver tolerances. PyBullet `setTimeStep()` and `setRealTimeSimulation()` interact with thread scheduling.
+
+**Consequences:** Reports claiming "reproducible results" are misleading. Users compare MuJoCo vs PyBullet benchmarks expecting identical behavior.
+
+**Prevention:**
+1. Treat MuJoCo and PyBullet as separate benchmark targets — never compare them directly
+2. Within a single backend, guarantee determinism: set `PYTHONHASHSEED`, `OMP_NUM_THREADS=1`, `CUBLAS_WORKSPACE_CONFIG`
+3. Run each benchmark 3+ times, report mean ± std (not single-run results)
+4. Add seed reproducibility test: 3 runs with `seed=42` must produce identical cumulative reward (within float tolerance)
+
+**Detection:** Same seed, same backend produces different benchmark results across runs.
+
+**Phase:** Benchmarking (Phase 4 — after curriculum, since tasks drive benchmarks)
+
+---
+
+#### Pitfall 3.2: Hardware-Dependent Metrics Poisoning Comparisons
+
+**What goes wrong:** Training speed (FPS) depends on GPU, Metal, or CPU. A benchmark showing "PPO converges in 100K steps" on an A100 is meaningless on an M1 Mac. Users compare numbers without understanding hardware context.
+
+**Why it happens:** `TrainingConfig.device` defaults to `"auto"` (line 108). Metal, CUDA, CPU produce different wall-clock times for identical algorithm configurations.
+
+**Consequences:** GitHub README benchmarks are misleading. "SAC is faster than PPO" depends entirely on hardware.
+
+**Prevention:**
+1. Benchmarks must report wall-clock time, NOT just step counts
+2. Report hardware in benchmark output (GPU model, CPU model, RAM)
+3. Add `--benchmark-tag hardware=<id>` to CLI for categorizing results
+4. Never publish single-hardware benchmarks as general claims
+
+**Detection:** Benchmark report doesn't mention hardware. Two users with different machines report contradictory findings.
+
+**Phase:** Benchmarking (Phase 4)
+
+---
+
+#### Pitfall 3.3: Breaking Existing Training Config Save/Load
+
+**What goes wrong:** `TrainingConfig.save()` (line 140) serializes the dataclass to JSON. Adding `algorithm` fields for DreamerV3 (which doesn't use SB3-style hyperparams) breaks `TrainingConfig.load()` because the AlgorithmConfig schema doesn't know about `world_model`, `imagination_horizon`, etc.
+
+**Why it happens:** `AlgorithmConfig` is SB3-specific (learning_rate, gamma, gae_lambda, etc.). DreamerV3 has a completely different hyperparameter schema.
+
+**Consequences:** Old config files fail to load. Training runs crash on startup.
+
+**Prevention:**
+1. Make `AlgorithmConfig` a base class with SB3-specific and Dreamer-specific subclasses
+2. Use discriminated union via a `framework: Literal["sb3", "dreamerv3"]` field
+3. Add `version` field to serialized configs, implement migration logic
+4. Test: round-trip save/load for both SB3 and DreamerV3 configs
+
+**Detection:** `json.JSONDecodeError` or `KeyError` when loading old config files.
+
+**Phase:** Benchmarking (Phase 4) — needs DreamerV3 integration completed first
+
+---
+
+### Moderate Pitfalls
+
+#### Pitfall 3.4: Metric Name Collisions Between SB3 and DreamerV3
+
+**What goes wrong:** SB3 logs `rollout/ep_rew_mean`; DreamerV3 logs `episode/return`. The benchmark report generator must normalize these, or comparison tables show N/A for half the fields.
+
+**Why it happens:** No shared metric ontology exists. Each framework names things differently.
+
+**Consequences:** Benchmark reports are inconsistent. "Mean return" column has mixed sources.
+
+**Prevention:**
+1. Define a `BenchmarkMetric` enum with canonical names (RETURN_MEAN, RETURN_STD, WALL_TIME, STEPS)
+2. Add `MetricNormalizer` that maps SB3 and DreamerV3 names to canonical names
+3. Test: run PPO and DreamerV3, assert both produce `RETURN_MEAN` in report
+
+**Detection:** Benchmark CSV has NaN columns. Report plot has only one line when two should exist.
+
+**Phase:** Benchmarking (Phase 4)
+
+---
+
+## Feature 4: Full MARL Framework (PettingZoo, Dual-Arm Coordination)
+
+### Critical Pitfalls
+
+#### Pitfall 4.1: PettingZoo ParallelEnv Has an Incompatible API
+
+**What goes wrong:** The single most dangerous pitfall. PettingZoo `ParallelEnv.step(actions)` returns `(observations: dict, rewards: dict, terminations: dict, truncations: dict, infos: dict)` — FIVE dictionaries keyed by agent ID. Gymnasium `Env.step(action)` returns `(obs, reward, terminated, truncated, info)` — FIVE values in a tuple.
+
+Directly expecting Gymnasium-style tuple unpacking on PettingZoo steps will silently assign dictionaries to tuple positions, producing bizarre bugs.
+
+**Specific code-level incompatibilities:**
+
+| Concern | Gymnasium Env | PettingZoo ParallelEnv |
+|---------|---------------|------------------------|
+| `reset()` return | `(obs, info)` | `(observations: dict, infos: dict)` |
+| `step()` return | `(obs, rew, term, trunc, info)` tuple | `(obs, rew, term, trunc, info)` dicts |
+| Observation space | `self.observation_space` (property) | `env.observation_space(agent)` (method) |
+| Action space | `self.action_space` (property) | `env.action_space(agent)` (method) |
+| Agents | Single implicit agent | `env.agents` list, can change at runtime |
+| Action shape | `np.ndarray` | `{agent_id: np.ndarray}` |
+| Observation shape | `np.ndarray` or `dict` | `{agent_id: np.ndarray}` |
+
+**Consequences:** `obs.shape` fails because `obs` is actually a dict keyed by "robot_left". Training loop silently trains on wrong data. 910 existing Gymnasium-based tests are irrelevant for MARL — need completely new test suite.
+
+**Prevention:**
+1. Never subclass `SurgicalEnv` for MARL — create a NEW class: `MultiAgentSurgicalEnv(ParallelEnv)`
+2. Use `parallel_to_aec()` / `aec_to_parallel()` wrappers for SB3 compatibility
+3. Add a `SurgicalEnv.to_pettingzoo()` conversion method that builds the PettingZoo environment from a Gymnasium environment config
+4. Write MARL-specific tests from scratch — do not try to adapt existing single-agent tests
+
+**Detection:** `AttributeError: 'dict' object has no attribute 'shape'`. Code does `obs, reward, done, _, info = env.step(action)` with PettingZoo env.
+
+**Phase:** MARL (Phase 5 — last, due to API incompatibility risk)
+
+---
+
+#### Pitfall 4.2: Asymmetric Action/Observation Spaces Break Current Builders
+
+**What goes wrong:** Dual-arm surgery needs different action spaces for each arm (left arm: 7-DOF joint positions + gripper, right arm: 7-DOF joint positions + scalpel). The existing `ActionBuilder` (action.py) and `ObservationBuilder` (observation.py) are single-agent — they assume one `ActionConfig`, one `ObservationConfig`.
+
+**Why it happens:** `ActionBuilder.__init__()` takes one `ActionConfig`. `ObservationBuilder.extract_observation()` takes one `target_pos`. The builders have no concept of per-agent configuration.
+
+**Consequences:** Both arms get identical action/observation spaces. Left arm gets scalpel action space even though it's holding forceps. Agent never learns coordinated behavior.
+
+**Prevention:**
+1. Add `AgentActionConfig` and `AgentObservationConfig` that wrap per-agent configs
+2. `MultiAgentSurgicalEnv` instantiates one `(ActionBuilder, ObservationBuilder)` per agent
+3. `action_space(agent)` method returns the appropriate space for that agent
+4. Test: assert left and right action spaces differ when configured differently
+
+**Detection:** Both arms have identical action dimension. Training reward never exceeds single-arm baseline.
+
+**Phase:** MARL (Phase 5)
+
+---
+
+#### Pitfall 4.3: Agent Death/Removal Handling Missing
+
+**What goes wrong:** In a dual-arm procedure, one arm completes its subtask (e.g., grasping) and should be "done." PettingZoo expects you to set `terminations[agent] = True` and remove the agent from `self.agents`. If the "done" arm keeps receiving actions and producing observations, the replay buffer fills with dead-agent noise.
+
+**Why it happens:** The current system has no concept of partial completion — `terminated` is a single boolean for the whole episode. `TaskConfig.objectives` are per-task, not per-agent.
+
+**Consequences:** Dead agent's policy keeps training on meaningless transitions. Replay buffer is contaminated. Learning slows.
+
+**Prevention:**
+1. Map objectives to agents: `TaskObjective.responsible_agent: str`
+2. When an agent's objectives are complete, set `terminations[agent] = True` and remove from `env.agents`
+3. Only the remaining agent's observations/rewards are produced
+4. Add test: two-agent episode where agent 0 finishes first, assert only agent 1 transitions after that point
+
+**Detection:** Both agents active for full episode even when one clearly finished. Replay buffer has transitions with `reward=0, done=False` for completed agent.
+
+**Phase:** MARL (Phase 5)
+
+---
+
+### Moderate Pitfalls
+
+#### Pitfall 4.4: `__getattr__` on ParallelEnv Causing Silent Bugs
+
+**What goes wrong:** PettingZoo ParallelEnv implements `__getattr__` that falls through to the underlying AEC environment. Code that does `if hasattr(env, 'observation_space')` gets `True` but the value is a dict `{agent: space}`, not a flat `Space` — breaking SB3 compatibility wrappers.
+
+**Consequences:** SB3's `check_env()` passes but `model.learn()` crashes on first batch.
+
+**Prevention:** Always use `observation_space(agent)` method, never `env.observation_space` property. Add type-checking assertions before passing to SB3.
+
+**Detection:** `TypeError: 'dict' is not a valid gym.Space`. SB3 internal `preprocess_obs()` fails.
+
+**Phase:** MARL (Phase 5)
+
+---
+
+## Feature 5: DreamerV3 World Models
+
+### Critical Pitfalls
+
+#### Pitfall 5.1: DreamerV3 Uses `embodied.env.Env` — Not Gymnasium
+
+**What goes wrong:** DreamerV3's environment interface (`embodied.env.Env`) is completely different from Gymnasium. `env.step(action)` returns a DICT with keys `('image', 'reward', 'is_first', 'is_last', 'is_terminal', ...)` — not a tuple. The action dict itself contains a `'reset': bool` key that controls episode reset inline. There is no separate `reset()` method.
+
+**The DreamerV3 step protocol:**
+
+```python
+# Reset (is baked into action dict)
+action = {'action': np.array(0, dtype=np.int32), 'reset': np.array(True)}
+obs = env.step(action)  # Returns dict, not tuple
+# obs = {'image': np.ndarray, 'reward': np.float32(0), 'is_first': True, ...}
+
+# Normal step
+action = {'action': np.array(5, dtype=np.int32), 'reset': np.array(False)}
+obs = env.step(action)
+# obs = {'image': ndarray, 'reward': float, 'is_first': False, 'is_last': False, ...}
+```
+
+**Consequences:** `SurgicalEnv` cannot be wrapped for DreamerV3 without a full adapter. Wrapping Gymnasium → embodied requires translating tuple returns to dict returns and implementing the reset-in-action protocol.
+
+**Prevention:**
+1. Build a `GymToEmbodiedWrapper` class that translates Gymnasium Env → embodied Env
+2. Handle frame stacking, action repeat, and reset signal in the wrapper
+3. Test the wrapper against DreamerV3's `wrap_env()` pipeline
+4. NEVER try to make DreamerV3 talk Gymnasium natively — always go through the adapter
+
+**Detection:** DreamerV3 crashes on first `env.step()`. `KeyError: 'reset'` in action dict.
+
+**Phase:** DreamerV3 (Phase 6 — after benchmarking, which needs it for comparison)
+
+---
+
+#### Pitfall 5.2: JAX + PyTorch GPU Memory Conflict
+
+**What goes wrong:** DreamerV3 uses JAX internally (world model, RSSM, policy). SB3 uses PyTorch. On the same process, JAX pre-allocates 90% of GPU memory by default (`XLA_PYTHON_CLIENT_MEM_FRACTION=0.9`), leaving nothing for PyTorch SB3 models. Running both frameworks' benchmarks sequentially crashes the second framework.
+
+**Why it happens:** JAX and PyTorch both allocate GPU memory eagerly but don't coordinate. JAX's allocator doesn't release memory until process exit.
+
+**Consequences:** Benchmark comparing SB3 PPO to DreamerV3 on the same script crashes on GPU out-of-memory after the first run.
+
+**Prevention:**
+1. Set `XLA_PYTHON_CLIENT_MEM_FRACTION=0.4` before importing DreamerV3
+2. Run SB3 and DreamerV3 benchmarks in separate subprocesses (multiprocessing)
+3. Use CPU mode for DreamerV3 benchmarks when GPU is shared (`--jax.platform cpu`)
+4. Detect GPU memory pressure and warn before launching second framework
+
+**Detection:** `RuntimeError: CUDA out of memory` when running both SB3 and DreamerV3 benchmarks. Second benchmark crashes.
+
+**Phase:** DreamerV3 (Phase 6) — but prevention code needs to go into Phase 4 (Benchmarking)
+
+---
+
+#### Pitfall 5.3: Image Observation Encoding Mismatch
+
+**What goes wrong:** DreamerV3 expects uint8 images in [0, 255] range, shape `(H, W, 3)`. `SurgicalEnv` produces float32 normalized observations (`normalize=True` in `ObservationConfig`, line ~305). Feeding normalized float images to DreamerV3's CNN encoder produces garbage latents.
+
+**Why it happens:** `ObservationBuilder` normalizes by default. DreamerV3's world model encoder expects raw pixels.
+
+**Consequences:** World model reconstructions are meaningless. DreamerV3 training diverges. Latent space is degenerate.
+
+**Prevention:**
+1. Add `raw_pixels` output mode to `ObservationConfig` (uint8, 0-255)
+2. `GymToEmbodiedWrapper` must convert observation dtypes to DreamerV3 expectations
+3. Add assertion in wrapper: image observations must be `uint8` dtype
+4. Test: DreamerV3 reconstructs image within 0.05 MSE after 10K training steps
+
+**Detection:** DreamerV3 reconstruction loss is 100x higher than expected. Image latent stddev → 0.
+
+**Phase:** DreamerV3 (Phase 6)
+
+---
+
+#### Pitfall 5.4: DreamerV3 Config Complexity = Integration Minefield
+
+**What goes wrong:** DreamerV3's config is enormous — RSSM with 8K deter units, 32 stoch × 64 classes, encoder/decoder with multiple resolutions, symexp_twohot value network, 15-step imagination horizon, etc. Default configs are tuned for Atari/DMC. Surgical robot control with 7-DOF continuous actions + tissue interaction is a completely different domain that needs careful hyperparameter selection.
+
+**Why it happens:** DreamerV3's "fixed hyperparameters" claim applies to the training procedure (learning rate, loss scales), NOT to model architecture. Architecture choices (RSSM size, encoder capacity) massively impact performance.
+
+**Consequences:** Default DreamerV3 config fails to learn surgical tasks. "DreamerV3 doesn't work" becomes the takeaway — but the config was wrong.
+
+**Prevention:**
+1. Start with `dmc_vision` config (continuous control + images), NOT `atari` (discrete actions)
+2. Reduce RSSM size for surgical domains (fewer degrees of freedom than Atari)
+3. Increase `imag_length` for long-horizon surgical procedures (default 15 → 30)
+4. Document which config parameters were tuned and why
+5. Run hyperparameter sweep on a simple reaching task before attempting full surgical procedure
+
+**Detection:** DreamerV3 reward curve flatlines. World model prediction error doesn't decrease. Policy entropy collapses to zero.
+
+**Phase:** DreamerV3 (Phase 6)
+
+---
+
+### Moderate Pitfalls
+
+#### Pitfall 5.5: Throughput Gap Between DreamerV3 and SB3
+
+**What goes wrong:** DreamerV3 trains on trajectories of length `batch_length=64` with `train_ratio=32` (32 model updates per env step). This requires much higher data throughput than SB3's `n_steps=2048` rollout buffer. If `SurgicalEnv.step()` takes 20ms (physics + rendering), DreamerV3 needs 100+ parallel environments to saturate the learner.
+
+**Consequences:** DreamerV3 training is 10x slower than SB3 on the same hardware. "DreamerV3 is slow" becomes user perception.
+
+**Prevention:**
+1. Implement `AsyncPettingZooVecEnv` or DreamerV3's parallel runner
+2. Disable rendering during world model training
+3. Use frame-skip > 1 for DreamerV3 (action repeat = 2-4)
+4. Benchmark throughput (env steps/second) before and after integration
+5. Document realistic training time expectations
+
+**Detection:** DreamerV3 GPU utilization < 20%. Training progress bar slow. Learner idle waiting for data.
+
+**Phase:** DreamerV3 (Phase 6)
+
+---
+
+## Cross-Cutting Pitfalls (All Features)
+
+### Critical
+
+#### Pitfall X.1: Dependency Hell
+
+**What goes wrong:** Adding PettingZoo, DreamerV3, trimesh (mesh decimation), and gymnasium-robotics triggers dependency conflicts. PettingZoo requires Gymnasium >= 0.29 (already satisfied). DreamerV3 requires `embodied`, `elements`, JAX — all new. JAX may require specific CUDA/cuDNN versions that conflict with PyTorch's requirements.
+
+**Expected dependency explosion:**
+
+| New Package | Minimum | Conflicts With |
+|-------------|---------|----------------|
+| `pettingzoo` | >=1.24 | Nothing (Gymnasium ≥0.29 already satisfied) |
+| `dreamerv3` | git | `embodied`, `elements`, `jax`, `jaxlib`, `optax`, `tensorflow` (for TF datasets) |
+| `trimesh` | >=4.0 | Nothing (pure Python + numpy) |
+| `jax` / `jaxlib` | >=0.4 | PyTorch GPU memory (see 5.2); cuDNN version lock |
+| `embodied` | git | Nothing (pure Python) |
+| `elements` | git | Nothing (pure Python) |
+
+**Consequences:** `pip install` failures. CUDA version mismatch at runtime. "It works on my machine" syndrome.
+
+**Prevention:**
+1. Add `[marl]` optional dep group: `pettingzoo>=1.24`
+2. Add `[world_model]` optional dep group: `dreamerv3` (via git), `jax`, `jaxlib`
+3. Both groups are OPTIONAL — core install still works without them
+4. Test installation matrix: `pip install -e ".[marl]"`, `pip install -e ".[world_model]"`, `pip install -e ".[marl,world_model]"`
+5. Pin exact versions in CI requirements lock file
+
+**Detection:** `pip install` fails with version conflict. `import jax` crashes. CI failure on dependency resolution.
+
+**Phase:** All phases — dependency groups defined in Phase 1 (schema prep), installed per-phase
+
+---
+
+#### Pitfall X.2: Test Explosion (910 → 1500+ Tests)
+
+**What goes wrong:** Each new feature adds 100+ tests. MARL alone needs parallel env tests, dual-agent tests, coordination tests, agent-death tests. DreamerV3 needs wrapper tests, image encoding tests, config tests, integration tests. CI runtime grows from ~2 minutes to 8-10 minutes.
+
+**Consequences:** Developer iteration slows. CI becomes a bottleneck. `pre-commit` hooks time out.
+
+**Prevention:**
+1. Mark MARL tests with `@pytest.mark.marl`
+2. Mark DreamerV3 tests with `@pytest.mark.world_model`
+3. Default CI (`pytest -m "not integration and not marl and not world_model"`) stays fast
+4. Full suite only on PR merge or nightly
+5. Use test parallelization: `pytest -n auto` (pytest-xdist)
+
+**Detection:** `time pytest` grows from 2s to 60s. CI pipeline duration doubles.
+
+**Phase:** All phases — test organization in Phase 1, per-feature tests in respective phases
+
+---
+
+#### Pitfall X.3: Cross-Backend Test Coverage Gap
+
+**What goes wrong:** 80 tests in `test_simulators.py` test both backends. New MARL and DreamerV3 features will likely be developed and tested against MuJoCo first (it's simpler). PyBullet testing for these features will be incomplete, creating a coverage gap that's invisible until users hit it.
+
+**Consequences:** MARL works on MuJoCo but silently fails on PyBullet. DreamerV3 image observations work with MuJoCo renderer but not PyBullet renderer.
+
+**Prevention:**
+1. Require at least ONE PyBullet integration test per feature before phase completion
+2. Add `@pytest.mark.parametrize("backend", ["mujoco", "pybullet"])` to all new integration tests
+3. CI matrix must include both backends
+4. Flag tests that are MuJoCo-only with explicit `@pytest.mark.skip(reason=...)`
+
+**Detection:** `test_simulators.py:80` tests but `test_marl.py` has 0 PyBullet tests. `pytest --backend=pybullet tests/test_marl.py` returns 0 collected.
+
+**Phase:** All phases — enforcement in code review, not a specific phase
+
+---
+
+### Moderate
+
+#### Pitfall X.4: `model_dump()` Enum Serialization in MARL/DreamerV3 Configs
+
+**What goes wrong:** Pydantic v2 `model_dump()` returns Enum objects, not `.value` strings (documented in AGENTS.md). New configs for PettingZoo agents and DreamerV3 will hit this when serializing to YAML/JSON for checkpointing and benchmarking.
+
+**Consequences:** `yaml.dump` raises `RepresenterError`. Config save/load round-trips fail.
+
+**Prevention:**
+1. Always use `model_dump(mode="json")` before YAML serialization
+2. Add `ConfigBase` mixin with `to_dict()` that handles enum conversion
+3. Test: serialize + deserialize every new config class
+
+**Detection:** `RepresenterError: cannot represent ... Enum`. Config load produces dict instead of typed object.
+
+**Phase:** All phases with new config classes
+
+---
+
+#### Pitfall X.5: Mypy Explosion with PettingZoo Generics
+
+**What goes wrong:** PettingZoo uses `AgentID`, `ObsType`, `ActionType` type variables heavily. When combined with the existing `Observation`, `ActionConfig` types, mypy will produce hundreds of new errors — especially around dict typing (`dict[AgentID, ObsType]` vs `dict[str, np.ndarray]`).
+
+**Consequences:** `pre-commit run mypy` fails with 50+ new errors. Type checking becomes a blocker.
+
+**Prevention:**
+1. Add `# type: ignore[assignment]` strategically on PettingZoo API boundaries
+2. Create typed wrapper methods that resolve generic types to concrete types
+3. Run mypy incrementally: add PettingZoo, fix types, THEN add DreamerV3
+
+**Detection:** `mypy src/surg_rl` output grows from 0 errors to 50+. CI fails on type check step.
+
+**Phase:** MARL (Phase 5) and DreamerV3 (Phase 6)
+
+---
+
+## Phase-Specific Warnings
+
+| Phase | Topic | Most Likely Pitfall | Mitigation |
+|-------|-------|---------------------|------------|
+| Phase 1 | Schema prep (all features) | `TissueMeshDefinition` changes breaking 910 tests (1.3) | Keep `mesh` optional; add `model_construct()` factories in tests |
+| Phase 1 | Schema prep | `TaskConfig` schema bloat (2.4) | All new fields default `None`; add `schema_version` |
+| Phase 2 | Real Assets | High-poly meshes exploding `reset()` time (1.2) | Mesh decimation pipeline + `max_faces` validation |
+| Phase 2 | Real Assets | Asset path fragility in Docker/K8s (1.4) | `ASSETS_DIR` env var + checksum manifest |
+| Phase 3 | Task Curriculum | Regressing `apply_parameters` (2.1) | Extend, don't replace; add regression test |
+| Phase 3 | Task Curriculum | Task chain state bleed (2.2) | Full `load_scene()` between chain transitions |
+| Phase 4 | Benchmarking | Cross-backend nondeterminism (3.1) | Treat backends as separate targets; run 3+ trials |
+| Phase 4 | Benchmarking | Metric name collisions (3.4) | Canonical `BenchmarkMetric` enum |
+| Phase 5 | MARL | PettingZoo API incompatibility (4.1) | New `MultiAgentSurgicalEnv`; never subclass `SurgicalEnv` |
+| Phase 5 | MARL | Asymmetric spaces not supported (4.2) | Per-agent `(ActionBuilder, ObservationBuilder)` |
+| Phase 6 | DreamerV3 | Embodied Env vs Gymnasium (5.1) | `GymToEmbodiedWrapper` adapter layer |
+| Phase 6 | DreamerV3 | JAX + PyTorch GPU conflict (5.2) | Subprocess isolation; `XLA_PYTHON_CLIENT_MEM_FRACTION` |
+| Phase 6 | DreamerV3 | Image dtype mismatch (5.3) | `raw_pixels` output mode; wrapper dtype conversion |
+
+---
 
 ## Recovery Strategies
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Quaternion order bug | LOW | Swap quaternion component order in `pybullet_simulator.py:195-200`. Add regression test. |
-| State leakage | LOW | Add `resetJointState` loop in `reset()`. Test zero velocity after reset. |
-| Collision sign | LOW | Add Pydantic validator. Remove `abs()` from factory. Fix existing configs. |
-| VecEnv evaluate | MEDIUM | Handle 4-tuple in `evaluate()`. Add multi-env integration test. |
-| Soft-body reload | MEDIUM | Cache mesh data. Explore `changeDynamics` reset. Document limitation. |
-| Unimplemented actions | MEDIUM | Implement or remove from enum. Add config-time validation. |
-| API key exposure | LOW | Change `.env.example`. Add validator. Mask logs. |
-| Curriculum no-op | LOW | Implement parameter mapping. Add test for value change. |
+| Mesh format incompatibility (1.1) | MEDIUM | Add format validator + trimesh conversion; existing asset tests still pass |
+| High-poly reset time (1.2) | HIGH | Must add decimation pipeline; affects all real-mesh users |
+| Breaking 910 tests (1.3) | HIGH | Roll back schema change; redesign as optional fields |
+| Asset path fragility (1.4) | MEDIUM | Add env var + manifest; re-test Docker images |
+| Regressing curriculum (2.1) | LOW | Extend test assertions; fix is local to `curriculum.py` |
+| Task chain state bleed (2.2) | MEDIUM | Add `load_scene()` call at chain boundaries; test coverage needed |
+| PettingZoo API mismatch (4.1) | VERY HIGH | Potential rewrite of `SurgicalEnv` for MARL; must be architecturally separate |
+| Asymmetric spaces (4.2) | MEDIUM | Refactor builders to support per-agent config |
+| Embodied Env vs Gymnasium (5.1) | HIGH | Must write adapter from scratch; no off-the-shelf solution exists |
+| JAX+PyTorch conflict (5.2) | MEDIUM | Subprocess isolation is reliable but adds complexity |
+| Image dtype mismatch (5.3) | LOW | Add `raw_pixels` config flag; wrapper converts dtype |
+| Dependency hell (X.1) | MEDIUM | Define optional groups early; test install matrix |
+| Test explosion (X.2) | MEDIUM | Add marker-based test selection; CI parallelization |
 
-## Pitfall-to-Phase Mapping
+---
 
-| Pitfall | Prevention Phase | Verification |
-|---------|------------------|--------------|
-| Quaternion order bug | Phase 1 | Run all simulator tests on PyBullet; verify orientation correctness |
-| State leakage | Phase 1 | Regression test: reset → assert zero joint velocity |
-| Collision sign | Phase 1 | Test that `CollisionPenalty` produces negative reward with positive config |
-| VecEnv evaluate | Phase 1 | Integration test with `SubprocVecEnv(n_envs=2)` |
-| API key exposure | Phase 1 | Security scan: grep logs for key patterns |
-| Unimplemented actions | Phase 2 | Test all `ActionType` values with real simulator |
-| Gripper actuation | Phase 2 | Demo shows gripper closing/opening |
-| Soft-body reload | Phase 3 | Benchmark `reset()` time; target <100ms |
-| Curriculum no-op | Phase 3 | Test parameter delta after curriculum advance |
-| Task geometry binding | Phase 4 | E2E test with suturing scene; assert needle_pos observation |
+## "Looks Done But Isn't" Checklist for v0.4.0
+
+- [ ] **Real assets:** Both backends render the same mesh (not primitive fallback on one)
+- [ ] **Real assets:** `reset()` with 10K-vertex organ completes in < 500ms
+- [ ] **Real assets:** Docker container resolves mesh paths without developer's filesystem
+- [ ] **Curriculum:** `apply_parameters()` still changes simulation state (regression test passes)
+- [ ] **Curriculum:** Task chain "grasp → cut → suture" produces identical initial state on each chain run
+- [ ] **Benchmarking:** Same seed × 3 runs produces identical cumulative reward
+- [ ] **Benchmarking:** SB3 and DreamerV3 metrics appear in same comparison table
+- [ ] **MARL:** `env.step(actions)` returns dicts (not tuples) — agent code doesn't unpack tuple-style
+- [ ] **MARL:** Left and right arm action spaces differ when configured differently
+- [ ] **MARL:** Dead agent removed from `env.agents` after completing its objectives
+- [ ] **DreamerV3:** `GymToEmbodiedWrapper` handles reset-in-action protocol correctly
+- [ ] **DreamerV3:** Image observations are uint8 [0, 255] before entering world model encoder
+- [ ] **DreamerV3:** JAX and PyTorch coexist without GPU OOM (subprocess or memory limit)
+- [ ] **Dependencies:** `pip install -e ".[marl]"` and `pip install -e ".[world_model]"` both succeed independently
+- [ ] **Tests:** `pytest -m "not marl and not world_model"` runs existing 910 tests and passes
+- [ ] **Type check:** `mypy src/surg_rl` passes with PettingZoo imports present
+
+---
 
 ## Sources
 
-- `CONCERNS.md` (codebase map) — 39 documented gaps and critical bugs
-- `BUGFIX_LOG.md` — 24 historical bug commits
-- `docs/superpowers/plans/` — 5 unexecuted fix plans (critical bugs, simulator robustness, RL pipeline, dynamics, scene-gen CLI)
-- PyBullet forums — quaternion convention and soft-body API limitations
-- MuJoCo forums — `mjOBJ_FLEX` experimental status
-- AGENTS.md — testing conventions and field guard notes
+### High confidence (Context7 + official docs)
+- `Context7: /farama-foundation/pettingzoo` — ParallelEnv API, AECEnv, SB3 wrapper, `__getattr__` behavior
+- `Context7: /danijar/dreamerv3` — embodied Env interface, Agent API, config structure, step protocol
+- `AGENTS.md` — Pydantic v2 quirks, simulator backend conventions, field guard notes
+- `CONCERNS.md` (v0.1.0 codebase map) — 39 documented gaps, historical pitfalls
+
+### Medium confidence (codebase audit)
+- `src/surg_rl/scene_definition/schema.py` — `TissueMeshDefinition`, `TaskConfig`, `MeshAsset`, `AssetReference`
+- `src/surg_rl/simulators/scene_builder.py` — `get_mesh_or_primitive()`, `resolve_asset_path()`, primitive cache
+- `src/surg_rl/simulators/base_simulator.py` — `Observation` dataclass, `State` dataclass
+- `src/surg_rl/rl/environment.py` — `SurgicalEnv.reset()`, `step()`, action mode propagation
+- `src/surg_rl/rl/training.py` — `TrainingConfig`, `AlgorithmConfig`, save/load
+- `src/surg_rl/rl/observation.py` — `ObservationConfig`, `ObservationBuilder`
+- `src/surg_rl/rl/action.py` — `ActionConfig`, `ActionBuilder`
+- `src/surg_rl/dynamics/curriculum.py` — `CurriculumStageConfig`, `apply_parameters()`
+- `tests/` — 53 test files, 910 tests, test structure and patterns
+
+### Community/ecosystem knowledge
+- PettingZoo GitHub issues — SB3 MARL wrappers, `__getattr__` behavior
+- DreamerV3 GitHub issues — GPU memory, image normalization
+- PyBullet forum — soft-body performance, mesh loading limitations
+- MuJoCo documentation — MJCF `<mesh>` format support
 
 ---
-*Pitfalls research for: surgical-robotics RL training system*
-*Researched: 2026-04-29*
+
+*Pitfalls research for: Surg-RL v0.4.0 Training Infrastructure & Realism*
+*Researched: 2026-05-13*
+*Previous pitfalls (v0.1.0-v0.3.2): All 8 original pitfalls shipped & fixed; 3 accepted tech-debt items still open*
