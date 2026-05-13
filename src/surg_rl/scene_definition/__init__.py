@@ -27,12 +27,14 @@ from .schema import (
     # Assets
     AssetReference,
     BoundingBox,
+    BenchmarkConfig,
     # Environment
     CameraConfig,
     CameraType,
     ConstraintConfig,
     CuttingProperties,
     DomainRandomizationConfig,
+    DreamerConfig,
     DynamicsRandomization,
     EndEffectorConfig,
     EnvironmentConfig,
@@ -52,6 +54,7 @@ from .schema import (
     MeshAsset,
     # Scene
     Metadata,
+    MultiAgentConfig,
     NeedleDriverProperties,
     Orientation,
     PhysicsConfig,
@@ -102,6 +105,7 @@ __all__ = [
     "Pose",
     "RgbColor",
     "BoundingBox",
+    "BenchmarkConfig",
     # Assets
     "AssetReference",
     "MeshAsset",
@@ -143,9 +147,11 @@ __all__ = [
     "PhysicsRandomization",
     "VisualRandomization",
     "DynamicsRandomization",
+    "DreamerConfig",
     "DomainRandomizationConfig",
     # Scene
     "Metadata",
+    "MultiAgentConfig",
     "SceneDefinition",
     # Loader exceptions
     "SceneLoaderError",
