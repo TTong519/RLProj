@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A comprehensive surgical-robotics reinforcement learning training system with production deployment infrastructure. It generates and simulates surgical scenes from text/images via LLM/VLM, then trains RL agents (PPO, SAC, TD3, DDPG, A2C) in MuJoCo or PyBullet with domain randomization, curriculum learning, and adaptive difficulty. Supports Apple Silicon Metal GPU compute, multi-arch Docker images, ROS2 ros2_control integration, and Kubernetes deployment. Built for robotics researchers and surgical training simulators.
+A comprehensive surgical-robotics reinforcement learning training system with production deployment infrastructure and advanced simulation capabilities. Generates and simulates surgical scenes from text/images via LLM/VLM, trains RL agents (PPO, SAC, TD3, DDPG, A2C) in MuJoCo or PyBullet with domain randomization, curriculum learning, adaptive difficulty. Features platform-agnostic tetgen mesh generation, FEM deformable objects, real-time volumetric tetrahedral mesh cutting, and Eulerian grid fluid simulation (bleeding/irrigation). Supports Apple Silicon Metal GPU compute, multi-arch Docker images, ROS2 ros2_control integration, and Kubernetes deployment. Built for robotics researchers and surgical training simulators.
 
 ## Core Value
 
@@ -10,41 +10,39 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 
 ## Current State
 
-**Shipped v0.3.1** (2026-05-04) — 1 phase, 1 plan, 833 tests, 5/5 audit gaps closed.
+**Shipped v0.3.2** (2026-05-06) — 4 phases (15-18), 9 plans, 910 tests, 16/16 requirements. Milestone complete and archived.
 
-**v0.3.2 shipped — Advanced Simulation Features.** (2026-05-05) Cutting, deformable objects, fluids, and platform-agnostic tetgen mesh generation.
+Next: planning the next milestone. All v0.1.0 through v0.3.2 milestones shipped.
 
-### Key Deliverables (v0.3.1)
-- All 5 v0.3.0 audit integration gaps closed
-- Dockerfile.ros2 wired to GHCR release workflow
-- CUDA image for GPU K8s training nodes; CPU overlay image fallback
-- ROS2 topic probe replacing TCP netcat initContainer health check
-- bridge_node/replay_node console_scripts registered in pyproject.toml
-- Metal detection deduplicated: `_mps_available()` → `gpu._has_metal()`
+### Key Deliverables (v0.3.2)
+- Platform-agnostic tetgen 0.8.4 tetrahedral mesh generation replacing PyVista/VTK
+- FEM deformable objects: MuJoCo flex MJCF + PyBullet Neo-Hookean with auto-derived params
+- Real-time volumetric tetrahedral mesh cutting engine (5 canonical cases) with cross-backend integration
+- Eulerian grid fluid solver (PhiFlow 3.4.0) with two-way solid coupling for bleeding/irrigation
+- In-memory tetgen → MJCF flex bridge, Phase 18→env FluidSimulator wiring, PyBullet cut bug fix
+- 910 tests, 3 low-risk items deferred
 
 ### Accepted Tech Debt (deferred)
-- `Dockerfile.ros2` hardcodes `linux/amd64` while `Dockerfile` uses `$TARGETPLATFORM` — intentional, not blocking
-- K8S-05 PVC e2e validation requires real K8s cluster — manual-only, documented prerequisite
-- KubeRay operator must be pre-installed on target cluster — documented prerequisite
+- Per-tet generation counter for degenerate tets after multiple cuts (Phase 17) — single cut per episode typical
+- Cut cooldown unit test (Phase 17) — requires full env lifecycle, cooldown is simple arithmetic
+- Fluid step hook in base_simulator.py (Phase 18) — env-level hook sufficient for v0.3.2
+- PhiFlow multi-obstacle union() bug requires merged SDF workaround — documented pitfall
+- 2D fluids only (xz-plane); 3D behind dim_3d=True flag, not yet implemented
+- Previous v0.3.1 deferred: Dockerfile.ros2 amd64 hardcode, K8S PVC e2e, KubeRay prerequisite
 
 ## Requirements
 
-### Validated (v0.3.0)
+### Validated (v0.3.2)
 
-- ✓ All v0.2.0 features (GPU acceleration, real-time rendering, Ray/RLlib distributed training, ROS2 bridge)
-- ✓ **Metal GPU compute** — MPS device resolution on Apple Silicon, unified memory logging, single-warning CPU fallback (METAL-01..03)
-- ✓ **macOS test parity** — macOS CI runner in matrix, all PyBullet soft-body xfails removed, mjpython support, ROS2 exclusion documented (MACOS-01..04)
-- ✓ **Multi-platform Docker** — CPU amd64+arm64, CUDA/ROCm amd64, Jetson arm64, ROS2 bridge via docker buildx with GHCR push (DOCKR-01..04)
-- ✓ **ros2_control integration** — ControllerBridge managing C++ controller_manager, URDF ros2_control tags, lifecycle integration, CLI command (R2CTL-01..04)
-- ✓ **ROS2 launch files** — bridge.launch.py + replay.launch.py, pip+colcon compatibility, launch arguments (LAUNCH-01..03)
-- ✓ **Kubernetes deployment** — Training Job, KubeRay RayCluster/RayJob, bridge sidecar, ConfigMap/Secret/PVC/RBAC, RAY_ADDRESS env var, Kustomize overlays (K8S-01..05)
+- ✓ All v0.3.0 features (Metal GPU, macOS parity, multi-arch Docker, ros2_control, Kubernetes)
+- ✓ **Tetgen Mesh Generation** — Platform-agnostic tetrahedral meshes, VTK-free (TETG-01..04)
+- ✓ **Deformable Objects** — MuJoCo FEM flex, PyBullet Neo-Hookean, dynamic observation (DEFM-01..04)
+- ✓ **Volumetric Cutting** — Real-time tet mesh cutting, 5 canonical cases, cross-backend (CUT-01..04)
+- ✓ **Grid-based Fluids** — PhiFlow Eulerian solver, two-way coupling, 2D viz (FLUD-01..04)
 
 ### Active (Next Milestone)
 
-- [x] **Phase 15: Tetgen Mesh Generation** — Replace VTK with tetgen for platform-agnostic tetrahedral meshes
-- [x] **Phase 16: Deformable Objects** — FEM deformables in both MuJoCo + PyBullet
-- [x] **Phase 17: Volumetric Cutting** — Real-time tetrahedral mesh cutting with remeshing
-- [x] **Phase 18: Grid-based Fluids** — Eulerian grid fluid solver for bleeding/irrigation
+- _None yet — run `/gsd-new-milestone` to define the next milestone_
 
 ### Out of Scope
 
@@ -56,7 +54,8 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 - Linux-only ROS2 subscriber e2e tests — Requires real ROS2 runtime; mock coverage is sufficient for macOS
 - Helm chart — Kustomize overlays sufficient for v0.3.0; Helm can be added later
 - Real-time ROS2 DDS router for K8s multicast — DDS multicast issue is platform-level; document workaround, don't solve
-- MoveIt integration — Beyond scope of ros2_control; raw command/state interfaces are sufficient
+- 3D fluid simulation — 2D xz-plane slice is sufficient for surgical bleeding/irrigation; 3D behind dim_3d=True flag
+- GPU fluid acceleration — PhiFlow CPU-first; GPU acceleration can be added when needed
 
 ## Context
 
@@ -64,7 +63,7 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 **Build:** setuptools, pip, pyproject.toml
 **CLI:** Typer + Rich (`surg-rl` command, 12 subcommands)
 **Config:** Pydantic v2 dataclasses + pydantic-settings (.env support)
-**Testing:** pytest (pytest.ini with `pythonpath = src`), 833 tests, 0 failures
+**Testing:** pytest (pytest.ini with `pythonpath = src`), 910 tests, 0 failures
 **Lint/Type:** ruff, black, mypy
 
 ## Key Architecture Decisions
@@ -78,6 +77,12 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 - Observation dataclass as cross-backend contract for RL layer
 - Simulator owns threads/processes; env owns lifecycle via start/stop
 - Kustomize overlays for K8s deployment variants (CPU vs GPU)
+- Tetgen replaces VTK entirely for platform-agnostic meshing (not side-by-side)
+- MuJoCo `<flex>` (not `<flexcomp>`) for arbitrary tetgen meshes
+- Cutting is discrete trigger (not continuous action) with 500ms cooldown
+- PyBullet cuts use RESET_USE_DEFORMABLE_WORLD + full reload (removeBody() unsafe)
+- PhiFlow over Mantaflow for Eulerian fluids (Mantaflow abandoned since 2022)
+- CPU-first fluids (GPU deferred); in-memory tetgen → MJCF bridge for zero-file-I/O path
 
 ## Recent Milestones
 
@@ -87,6 +92,7 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 | v0.2.0 | 6–9 | 19 | 775 | Complete |
 | v0.3.0 | 10–13 | 18 | 826 | Complete |
 | v0.3.1 | 14 | 1 | 833 | Complete |
+| v0.3.2 | 15–18 | 9 | 910 | Complete |
 
 ## Evolution
 
@@ -107,4 +113,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-05-04 after v0.3.0 milestone archival*
+*Last updated: 2026-05-06 after v0.3.2 milestone archival*
