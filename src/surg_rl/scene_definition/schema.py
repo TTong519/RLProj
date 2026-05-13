@@ -1076,6 +1076,85 @@ class TaskConfig(BaseModel):
     success_threshold: float = Field(
         default=0.9, ge=0.0, le=1.0, description="Success threshold (0-1)"
     )
+    task_type: Literal[
+        "suturing", "knot_tying", "needle_insertion", "grasping", "cutting", "dissection"
+    ] | None = Field(
+        default=None,
+        description="Surgical task type (None = generic/unspecified)",
+    )
+
+
+class BenchmarkConfig(BaseModel):
+    """Skeletal benchmark configuration — Phase 23 fills in details."""
+
+    algorithms: list[Literal["PPO", "SAC", "TD3", "DDPG", "A2C"]] | None = Field(
+        default=None, description="SB3 algorithms to compare (None = all available)"
+    )
+    seeds: list[int] | None = Field(
+        default=None, description="Random seeds for reproducibility (None = single seed)"
+    )
+    output_dir: str | None = Field(
+        default=None, description="Output directory for reports and plots"
+    )
+    render_plots: bool = Field(
+        default=True, description="Generate publication-quality plots"
+    )
+    statistical_tests: bool = Field(
+        default=True, description="Run rliable IQM + stratified bootstrap CI"
+    )
+    backend_reporting: bool = Field(
+        default=True, description="Report results per-backend (never cross-backend aggregate)"
+    )
+    dreamer_comparison: bool = Field(
+        default=False, description="Include DreamerV3 comparison (Phase 24 integration point)"
+    )
+
+
+class MultiAgentConfig(BaseModel):
+    """Skeletal multi-agent configuration — Phase 22 fills in details."""
+
+    num_agents: int = Field(
+        default=2, ge=1, le=4, description="Number of agents in the multi-agent scene"
+    )
+    shared_policy: bool = Field(
+        default=True,
+        description="True: single SB3 model for all agents; False: per-agent policies (per MARL-03)",
+    )
+    agent_roles: dict[str, Literal["surgeon", "assistant", "camera"]] | None = Field(
+        default=None, description="Agent role assignments (None = auto-assign)"
+    )
+    cooperative: bool = Field(
+        default=True, description="True: shared reward; False: competitive/adversarial"
+    )
+    observation_sharing: bool = Field(
+        default=False, description="Whether agents share observations"
+    )
+
+
+class DreamerConfig(BaseModel):
+    """Skeletal DreamerV3 configuration — Phase 24 fills in details."""
+
+    obs_type: Literal["pixels", "state"] | None = Field(
+        default=None, description="Observation modality (per DMV3-04, None = state default)"
+    )
+    pixel_resolution: tuple[int, int] | None = Field(
+        default=None, description="Render resolution for pixel observations (w, h)"
+    )
+    process_isolation: bool = Field(
+        default=True, description="Run DreamerV3 in isolated JAX subprocess (per DMV3-03)"
+    )
+    memory_fraction: float = Field(
+        default=0.4,
+        ge=0.1,
+        le=0.9,
+        description="XLA_PYTHON_CLIENT_MEM_FRACTION for JAX subprocess",
+    )
+    dreamer_variant: Literal["dreamerv3"] = Field(
+        default="dreamerv3", description="Dreamer variant to use"
+    )
+    reconstruction_metric: Literal["mse", "ssim", "psnr"] = Field(
+        default="mse", description="Reconstruction quality metric for feasibility spike (DMV3-01)"
+    )
 
 
 # ============================================================================
