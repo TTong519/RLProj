@@ -228,6 +228,19 @@ class MeshAsset(AssetReference):
         default=(1.0, 1.0, 1.0), description="Scale factors (x, y, z)"
     )
     material: str | None = Field(default=None, description="Optional material reference")
+    target_face_count: int | None = Field(
+        default=None,
+        ge=1,
+        description="Target face count after decimation (None = no decimation, per ASET-04)",
+    )
+    fallback_enabled: bool = Field(
+        default=True,
+        description="Silently fall back to primitive geometry when mesh file missing (per ASET-03)",
+    )
+    mesh_origin: "Position | None" = Field(
+        default=None,
+        description="Origin offset for mesh asset (None = use mesh file origin)",
+    )
 
 
 class TextureAsset(AssetReference):
