@@ -10,9 +10,19 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 
 ## Current State
 
-**Shipped v0.3.2** (2026-05-06) — 4 phases (15-18), 9 plans, 910 tests, 16/16 requirements. Milestone complete and archived.
+**Shipped v0.3.2** (2026-05-06) — Advanced Simulation Features. All v0.1.0 through v0.3.2 milestones shipped.
 
-Next: planning the next milestone. All v0.1.0 through v0.3.2 milestones shipped.
+## Current Milestone: v0.4.0 Training Infrastructure & Realism
+
+**Goal:** Transform Surg-RL from a simulation framework into a competitive RL research platform with real surgical assets, comprehensive task curriculum, systematic benchmarking, multi-agent support, and DreamerV3 world models.
+
+**Target features:**
+- Real surgical instrument meshes + organ geometries replacing all primitive fallbacks
+- Full surgical task suite: suturing, knot-tying, needle insertion, grasping, cutting, dissection with progressive difficulty levels
+- Task chain/sequence system compositing subtasks into procedures (e.g., grasp → cut → suture)
+- Reproducible experiment runner producing benchmark plots, tables, and reports (SB3 + DreamerV3)
+- Full MARL framework via PettingZoo: dual-arm coordination, asymmetric observation/action spaces
+- DreamerV3 world model integration for planning in surgical scenes from pixels or low-dim state
 
 ### Key Deliverables (v0.3.2)
 - Platform-agnostic tetgen 0.8.4 tetrahedral mesh generation replacing PyVista/VTK
@@ -42,7 +52,11 @@ Next: planning the next milestone. All v0.1.0 through v0.3.2 milestones shipped.
 
 ### Active (Next Milestone)
 
-- _None yet — run `/gsd-new-milestone` to define the next milestone_
+- [ ] **Real Surgical Assets** — Instrument meshes (forceps, scalpels, needle drivers, retractors, trocars) + organ geometries (liver, kidney, gallbladder, stomach)
+- [ ] **Surgical Task Curriculum** — Multi-task suite with progressive difficulty, task chain/sequence composer
+- [ ] **Performance Benchmarking** — Reproducible experiment runner with SB3 + DreamerV3 comparison reports
+- [ ] **Multi-Agent Framework** — PettingZoo MARL with dual-arm coordination, asymmetric obs/act spaces
+- [ ] **DreamerV3 World Models** — Planning in surgical scenes from pixels or low-dim state
 
 ### Out of Scope
 
@@ -113,4 +127,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-05-06 after v0.3.2 milestone archival*
+*Last updated: 2026-05-13 after v0.4.0 milestone start*
