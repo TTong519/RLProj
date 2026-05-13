@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-05-13T21:07:34Z",
+  "phase": "19",
+  "phase_name": "schema-foundation",
+  "phase_dir": ".planning/phases/19-schema-foundation",
+  "status": "paused",
+  "completed_plans": [
+    {"id": "01", "name": "Extend schema models", "status": "done", "tasks": 3, "commits": 4}
+  ],
+  "remaining_plans": [
+    {"id": "02", "name": "LazyImport + per-package guards", "status": "not_started", "tasks": 2},
+    {"id": "03", "name": "pyproject.toml optional groups", "status": "not_started", "tasks": 1}
+  ],
+  "completed_waves": [],
+  "current_wave": 1,
+  "total_waves": 1,
+  "blockers": [],
+  "human_actions_pending": [],
+  "decisions": [
+    {"decision": "D-01..D-08 locked in CONTEXT.md", "rationale": "Discuss-phase already resolved all gray areas", "phase": "19"}
+  ],
+  "uncommitted_files": [".planning/ROADMAP.md"],
+  "next_action": "Spawn gsd-executor agents for plans 19-02 and 19-03 in parallel worktrees, merge, test, verify",
+  "context_notes": "Worktree-based parallel execution (execute-phase). Plan 01 completed and merged. Plans 02/03 were enqueued but never dispatched before interruption."
+}
