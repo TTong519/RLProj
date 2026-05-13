@@ -63,6 +63,19 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Real surgical mesh assets — OBJ loading + decimation
+assets = [
+    "trimesh>=4.5.0",
+]
+
+# Performance benchmarking — plots, statistics, reports
+benchmark = [
+    "matplotlib>=3.7.0",
+    "seaborn>=0.12.0",
+    "pandas>=2.0.0",
+    "rliable>=1.0.8",
+]
+
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
@@ -76,6 +89,12 @@ dev = [
 llm = [
     "openai>=1.0.0",
     "anthropic>=0.18.0",
+]
+
+# Multi-agent RL — PettingZoo ParallelEnv + SuperSuit SB3 wrappers
+marl = [
+    "pettingzoo>=1.24.0",
+    "supersuit>=3.9.0",
 ]
 
 meshing = [
@@ -102,6 +121,14 @@ tracking = [
 distributed = [
     "ray[rllib]>=2.10",
     "tune-sklearn>=0.4.6",
+]
+
+# DreamerV3 world models — JAX subprocess training (process-isolated)
+# jax + dreamerv3 use ~= (volatile APIs per RESEARCH Phase 24 findings)
+dreamer = [
+    "jax~=0.4.20",
+    "optax>=0.1.7",
+    "dreamerv3~=1.5.0",
 ]
 
 # ros2: apt deps required (rclpy, sensor-msgs, geometry-msgs, std-msgs)
