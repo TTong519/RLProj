@@ -10,6 +10,12 @@ from rich.console import Console
 from rich.table import Table
 
 from surg_rl import __version__
+from surg_rl.assets.download import (
+    ALL_INSTRUMENT_NAMES,
+    ALL_ORGAN_NAMES,
+    download_meshes,
+    list_local_meshes,
+)
 from surg_rl.scene_definition.schema import HardwareBackend
 from surg_rl.scene_generation import TextParser, VisionParser, get_template
 from surg_rl.utils.config import get_settings
@@ -28,6 +34,84 @@ app = typer.Typer(
     help="Surgical Robotics RL Training System",
     add_completion=False,
 )
+
+assets_app = typer.Typer(help="Manage surgical mesh assets")
+app.add_typer(assets_app, name="assets")
+
+
+@assets_app.command("download")
+def assets_download(
+    instruments: str = typer.Option(
+        "", "--instruments", "-i",
+        help="Comma-separated instrument names to download",
+    ),
+    organs: str = typer.Option(
+        "", "--organs", "-o",
+        help="Comma-separated organ names to download",
+    ),
+    all_meshes: bool = typer.Option(
+        False, "--all", "-a",
+        help="Download all available meshes",
+    ),
+    output_dir: str = typer.Option(
+        "assets/meshes", "--output", help="Output directory for OBJ files",
+    ),
+):
+    """Download real surgical mesh OBJ files from public datasets."""
+    names: list[str] = []
+    if instruments:
+        names.extend(n.strip() for n in instruments.split(",") if n.strip())
+    if organs:
+        names.extend(n.strip() for n in organs.split(",") if n.strip())
+    if all_meshes:
+        names = list(set(ALL_INSTRUMENT_NAMES + ALL_ORGAN_NAMES))
+    if not names:
+        typer.echo(
+            "Specify meshes to download: --instruments forceps,scalpel "
+            "or --organs liver,kidney or --all"
+        )
+        typer.echo(f"Available instruments: {', '.join(ALL_INSTRUMENT_NAMES)}")
+        typer.echo(f"Available organs: {', '.join(ALL_ORGAN_NAMES)}")
+        raise typer.Exit(1)
+
+    typer.echo(f"Downloading {len(names)} mesh(es)...")
+    try:
+        downloaded = download_meshes(names, output_dir=output_dir)
+    except ImportError as e:
+        typer.echo(f"Error: {e}")
+        raise typer.Exit(1)
+
+    if downloaded:
+        typer.echo(f"Downloaded {len(downloaded)}/{len(names)} file(s):")
+        for f in downloaded:
+            typer.echo(f"  ✓ {f}")
+    else:
+        typer.echo("No files downloaded. Check internet connection and URLs.")
+
+
+@assets_app.command("info")
+def assets_info(
+    meshes_dir: str = typer.Option(
+        "assets/meshes", "--dir", help="Meshes directory",
+    ),
+):
+    """Show available and downloaded surgical meshes."""
+    status = list_local_meshes(meshes_dir)
+    present = [k for k, v in status.items() if v]
+    missing = [k for k, v in status.items() if not v]
+
+    typer.echo(f"Local meshes in {meshes_dir}/")
+    typer.echo(f"  Present: {len(present)}/{len(status)}")
+    for name in present:
+        typer.echo(f"    ✓ {name}.obj")
+    typer.echo(f"  Available for download:")
+    for name in missing:
+        typer.echo(f"    ○ {name}.obj")
+    if missing:
+        typer.echo(
+            f"\nRun 'surg-rl assets download --all' to download all "
+            f"{len(missing)} missing mesh(es)."
+        )
 
 console = Console()
 
