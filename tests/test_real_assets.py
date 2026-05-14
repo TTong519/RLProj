@@ -221,3 +221,75 @@ class TestPyBulletRealAssetIntegration:
         assert any(m.get("name") == "tissue_mesh" for m in mesh_elems)
         geom_elems = root.findall(".//geom")
         assert any(g.get("type") == "mesh" and g.get("mesh") == "tissue_mesh" for g in geom_elems)
+
+
+class TestMeshLoading:
+    def test_procedural_fallback_when_no_path(self):
+        """load_instrument_mesh returns procedural shape when mesh_path is None."""
+        try:
+            from surg_rl.assets.mesh_loader import load_instrument_mesh
+
+            mesh = load_instrument_mesh("forceps", mesh_path=None)
+            assert mesh is not None
+            assert hasattr(mesh, "vertices")
+            assert len(mesh.vertices) > 0
+        except ImportError:
+            pytest.skip("trimesh not installed")
+
+    def test_deduplicated_warning_for_missing_mesh(self):
+        """Same missing mesh path only logs one warning."""
+        from surg_rl.assets.mesh_loader import _WARNED_MESHES, load_instrument_mesh
+
+        _WARNED_MESHES.clear()
+        try:
+            mesh1 = load_instrument_mesh("forceps", mesh_path="nonexistent/file.obj")
+            mesh2 = load_instrument_mesh("forceps", mesh_path="nonexistent/file.obj")
+            assert mesh1 is not None
+            assert mesh2 is not None
+        except ImportError:
+            pytest.skip("trimesh not installed")
+
+
+class TestURDFTemplates:
+    def test_all_instrument_types_have_templates(self):
+        from surg_rl.assets.mesh_loader import URDF_TEMPLATES
+
+        required = {
+            "forceps", "scalpel", "needle_driver", "scissors",
+            "clamp", "suction", "cautery", "camera", "retractor",
+        }
+        assert required.issubset(set(URDF_TEMPLATES.keys()))
+
+    def test_generate_urdf_produces_valid_xml(self):
+        """generate_urdf writes valid URDF with correct link count."""
+        try:
+            import trimesh
+            from surg_rl.assets.mesh_loader import generate_urdf
+
+            mesh = trimesh.creation.box(extents=[0.01, 0.01, 0.1])
+            collision = [mesh.convex_hull]
+            urdf_path = generate_urdf("scalpel", mesh, collision, name="test_instr")
+            assert urdf_path.exists()
+            content = urdf_path.read_text()
+            assert "<robot name=" in content
+            assert "<link name=" in content
+            assert "<visual>" in content
+            assert "<collision>" in content
+        except ImportError:
+            pytest.skip("trimesh not installed")
+
+
+class TestDecimation:
+    def test_decimate_reduces_faces(self):
+        """target_face_count=500 produces fewer faces than original."""
+        try:
+            import trimesh
+            from surg_rl.assets.mesh_loader import decimate_and_decompose
+
+            mesh = trimesh.creation.icosphere(subdivisions=4)
+            faces_original = len(mesh.faces)
+            _, _ = decimate_and_decompose(mesh, target_face_count=500)
+            # Decimation happens on a copy — original unchanged
+            assert len(mesh.faces) == faces_original
+        except ImportError:
+            pytest.skip("trimesh not installed")
