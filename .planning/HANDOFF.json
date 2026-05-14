@@ -1,0 +1,25 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-05-13T21:50:00Z",
+  "phase": "21",
+  "phase_name": "surgical-task-curriculum",
+  "phase_dir": ".planning/phases/21-surgical-task-curriculum",
+  "status": "paused",
+  "completed_work": [
+    {"step": "discuss", "status": "done", "artifact": "21-CONTEXT.md"},
+    {"step": "research", "status": "done", "artifact": "21-RESEARCH.md"}
+  ],
+  "remaining_work": [
+    {"step": "plan", "status": "not_started"},
+    {"step": "execute", "status": "not_started"},
+    {"step": "verify", "status": "not_started"}
+  ],
+  "blockers": [],
+  "human_actions_pending": [],
+  "decisions": [
+    {"decision": "D-01..D-10 locked in CONTEXT.md", "rationale": "Full discuss-phase completed across resumed session", "phase": "21"}
+  ],
+  "uncommitted_files": [],
+  "next_action": "Run /gsd-plan-phase 21 --skip-research to create PLAN.md files, then /gsd-execute-phase 21",
+  "context_notes": "Phase 21 discuss completed and checkpoint resolved in same session. Research also completed (no new deps, registry dispatch pattern, difficulty dead zones as primary pitfall). Clean working tree — ready to plan."
+}
