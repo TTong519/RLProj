@@ -15,6 +15,11 @@ from surg_rl.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+try:
+    from surg_rl.assets.mesh_loader import load_and_generate_urdf  # noqa: F401
+except ImportError:
+    load_and_generate_urdf = None  # type: ignore[assignment]
+
 
 class AssetMissingError(Exception):
     """Exception raised when a required asset file is missing."""
@@ -166,6 +171,34 @@ class SceneBuilder:
             f"Asset missing for '{entity_name}': {asset_path}. "
             f"Using primitive fallback."
         )
+
+    def _load_instrument_geometry(self, instrument_config) -> str:
+        """Load instrument mesh and generate URDF, returning the path."""
+        if load_and_generate_urdf is None:
+            logger.warning(
+                "trimesh not installed — using primitive fallback for instrument "
+                f"'{instrument_config.name}'. Install with: pip install surg-rl[assets]"
+            )
+            return ""
+        try:
+            mesh_path = None
+            target_faces = None
+            if instrument_config.mesh is not None:
+                mesh_path = instrument_config.mesh.path
+                target_faces = instrument_config.mesh.target_face_count
+            urdf_path = load_and_generate_urdf(
+                instrument_type=instrument_config.type.value,
+                mesh_path=mesh_path,
+                target_face_count=target_faces,
+                name=instrument_config.name,
+            )
+            return str(urdf_path)
+        except ImportError:
+            logger.warning(
+                "trimesh not installed — using primitive fallback for instrument "
+                f"'{instrument_config.name}'. Install with: pip install surg-rl[assets]"
+            )
+            return ""
 
     def _get_primitive_color(
         self,
@@ -888,7 +921,12 @@ f 5 4 8
         index: int,
         asset: ET.Element,
     ) -> None:
-        """Add instrument to MJCF structure."""
+        """Add instrument to MJCF structure.
+
+        Attempts to load real mesh via trimesh → URDF path first,
+        falling back to primitive box if trimesh is unavailable
+        or mesh files are missing.
+        """
         worldbody = mujoco.find("worldbody")
         if worldbody is None:
             return
@@ -900,8 +938,15 @@ f 5 4 8
             pos = "0 0 0"
         body.set("pos", pos)
 
-        # Prefer real mesh if available
+        # Try loading via trimesh mesh_loader first (produces URDF with V-HACD)
         mesh_asset = getattr(instrument, "mesh", None)
+        if mesh_asset is not None:
+            urdf_path = self._load_instrument_geometry(instrument)
+            if urdf_path:
+                include_elem = ET.SubElement(body, "include", file=urdf_path)
+                return
+
+        # Fallback to direct OBJ mesh reference (existing code path)
         if mesh_asset and getattr(mesh_asset, "path", None):
             resolved = self.resolve_asset_path(mesh_asset.path)
             if resolved and resolved.exists():
@@ -910,14 +955,14 @@ f 5 4 8
                 ET.SubElement(
                     body, "geom", name=f"{instrument.name}_geom", type="mesh", mesh=mesh_name
                 )
+                return
             else:
                 self._log_missing_asset(mesh_asset.path, instrument.name)
-                mesh_asset = None
-        if not mesh_asset or not getattr(mesh_asset, "path", None):
-            # Fallback to primitive box
-            ET.SubElement(
-                body, "geom", name=f"{instrument.name}_geom", type="box", size="0.01 0.01 0.05"
-            )
+
+        # Ultimate fallback: primitive box
+        ET.SubElement(
+            body, "geom", name=f"{instrument.name}_geom", type="box", size="0.01 0.01 0.05"
+        )
 
         # Note: Instrument is static for now (no control implemented yet)
         # To make it dynamic, add: <freejoint name="instrument_root"/>
