@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-05-13)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** Phase 20 — Real Surgical Assets
+**Current focus:** Phase 21 — Surgical Task Curriculum
 
 ## Current Position
 
 Milestone: v0.4.0 — Training Infrastructure & Realism
-Phase: 20 of 24 (Real Surgical Assets)
+Phase: 21 of 24 (Surgical Task Curriculum)
 Plan: —
 Status: Ready to plan
-Last activity: 2026-05-13 — Phase 19 complete (schema models, lazy guards, pyproject.toml groups)
+Last activity: 2026-05-13 — Phase 20 complete (trimesh mesh loading, URDF generation, organ tetgen pipeline, procedural fallbacks)
 
-Progress: █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 4%
+Progress: ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 8%
 
 ## Performance Metrics
 

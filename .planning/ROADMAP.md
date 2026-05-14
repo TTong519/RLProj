@@ -64,7 +64,7 @@
 **Milestone Goal:** Transform Surg-RL from a simulation framework into a competitive RL research platform with real surgical assets, comprehensive task curriculum, systematic benchmarking, multi-agent support, and DreamerV3 world models.
 
 - [x] **Phase 19: Schema Foundation** — Pydantic v2 models + optional dependency groups for all five v0.4.0 feature modules
-- [ ] **Phase 20: Real Surgical Assets** — trimesh OBJ loading for instruments (11) and organs (4) with decimation, fallback, and [assets] extras
+- [x] **Phase 20: Real Surgical Assets** — trimesh OBJ loading for instruments (11) and organs (4) with decimation, fallback, and [assets] extras
 - [ ] **Phase 21: Surgical Task Curriculum** — 6 task types × 3 difficulty levels integrated with CurriculumScheduler, structured success/failure detection
 - [ ] **Phase 22: Multi-Agent RL** — PettingZoo ParallelEnv dual-arm coordination, SuperSuit SB3 wrappers, thin adapter over SurgicalEnv
 - [ ] **Phase 23: Performance Benchmarking** — ExperimentRunner with SB3-only comparison, publication plots/tables, per-backend reporting
@@ -154,7 +154,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 19. Schema Foundation | 3/3 | Complete | 2026-05-13 |
-| 20. Real Surgical Assets | 0/0 | Not started | - |
+| 20. Real Surgical Assets | 4/4 | Complete | 2026-05-13 |
 | 21. Surgical Task Curriculum | 0/0 | Not started | - |
 | 22. Multi-Agent RL | 0/0 | Not started | - |
 | 23. Performance Benchmarking | 0/0 | Not started | - |
