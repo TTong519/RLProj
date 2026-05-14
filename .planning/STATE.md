@@ -5,17 +5,17 @@
 See: .planning/PROJECT.md (updated 2026-05-13)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** Phase 19 — Schema Foundation
+**Current focus:** Phase 20 — Real Surgical Assets
 
 ## Current Position
 
 Milestone: v0.4.0 — Training Infrastructure & Realism
-Phase: 19 of 24 (Schema Foundation)
+Phase: 20 of 24 (Real Surgical Assets)
 Plan: —
 Status: Ready to plan
-Last activity: 2026-05-13 — v0.4.0 phased roadmap created (Phases 19–24)
+Last activity: 2026-05-13 — Phase 19 complete (schema models, lazy guards, pyproject.toml groups)
 
-Progress: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0%
+Progress: █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 4%
 
 ## Performance Metrics
 

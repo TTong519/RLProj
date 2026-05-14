@@ -63,7 +63,7 @@
 
 **Milestone Goal:** Transform Surg-RL from a simulation framework into a competitive RL research platform with real surgical assets, comprehensive task curriculum, systematic benchmarking, multi-agent support, and DreamerV3 world models.
 
-- [ ] **Phase 19: Schema Foundation** — Pydantic v2 models + optional dependency groups for all five v0.4.0 feature modules
+- [x] **Phase 19: Schema Foundation** — Pydantic v2 models + optional dependency groups for all five v0.4.0 feature modules
 - [ ] **Phase 20: Real Surgical Assets** — trimesh OBJ loading for instruments (11) and organs (4) with decimation, fallback, and [assets] extras
 - [ ] **Phase 21: Surgical Task Curriculum** — 6 task types × 3 difficulty levels integrated with CurriculumScheduler, structured success/failure detection
 - [ ] **Phase 22: Multi-Agent RL** — PettingZoo ParallelEnv dual-arm coordination, SuperSuit SB3 wrappers, thin adapter over SurgicalEnv
@@ -79,9 +79,14 @@
 **Success Criteria** (what must be TRUE):
   1. `schema.py` contains `MeshAsset`, `TaskConfig`, `BenchmarkConfig`, `MultiAgentConfig`, `DreamerConfig` Pydantic v2 models — all new fields default to `None`, all existing models unchanged and backward-compatible
   2. `pyproject.toml` declares `[assets]` (trimesh>=4.5.0), `[benchmark]` (matplotlib, seaborn, pandas, rliable), `[marl]` (pettingzoo>=1.24.0, supersuit>=3.9.0), `[dreamer]` (dreamerv3, jax, optax) optional dependency groups with pinned versions
-  3. Lazy import guards exist for all new optional dependencies — `import surg_rl` succeeds without trimesh, pettingzoo, or jax installed
-  4. All 910 existing tests pass with new schema in place — no regressions from optional field additions to existing Pydantic models
-**Plans**: TBD
+   3. Lazy import guards exist for all new optional dependencies — `import surg_rl` succeeds without trimesh, pettingzoo, or jax installed
+   4. All 910 existing tests pass with new schema in place — no regressions from optional field additions to existing Pydantic models
+**Plans**: 3 plans in 1 wave
+
+Plans:
+- [ ] 19-01-PLAN.md — Extend MeshAsset/TaskConfig, add BenchmarkConfig/MultiAgentConfig/DreamerConfig schema models
+- [ ] 19-02-PLAN.md — LazyImport infrastructure + 4 per-package __init__.py lazy import guards
+- [ ] 19-03-PLAN.md — pyproject.toml [assets]/[benchmark]/[marl]/[dreamer] optional dependency groups
 
 ### Phase 20: Real Surgical Assets
 **Goal**: Surgical instrument and organ meshes load via trimesh, integrate with existing scene_builder and tetgen pipeline, silently fall back to primitives when meshes are missing.
@@ -148,7 +153,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 19. Schema Foundation | 0/0 | Not started | - |
+| 19. Schema Foundation | 3/3 | Complete | 2026-05-13 |
 | 20. Real Surgical Assets | 0/0 | Not started | - |
 | 21. Surgical Task Curriculum | 0/0 | Not started | - |
 | 22. Multi-Agent RL | 0/0 | Not started | - |
