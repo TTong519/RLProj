@@ -114,6 +114,18 @@ from .rewards import (
     create_default_reward,
 )
 
+# Task results
+from .task_results import (
+    CuttingResult,
+    DissectionResult,
+    GraspingResult,
+    KnotTyingResult,
+    NeedleInsertionResult,
+    SuturingResult,
+    TASK_RESULT_MAP,
+    TaskResult,
+)
+
 # Training
 from .training import (
     AlgorithmConfig,
@@ -175,6 +187,15 @@ __all__ = [
     "SurgicalEnvConfig",
     "make_env",
     "make_vec_env",
+    # Task results
+    "TaskResult",
+    "SuturingResult",
+    "KnotTyingResult",
+    "NeedleInsertionResult",
+    "GraspingResult",
+    "CuttingResult",
+    "DissectionResult",
+    "TASK_RESULT_MAP",
     # Training
     "AlgorithmConfig",
     "TrainingConfig",
