@@ -1,0 +1,82 @@
+"""Task reward router with registry-based dispatch.
+
+Maps TaskConfig.task_type to a list of BaseRewardFunction instances.
+Replaces the fragile string-matching in create_default_reward().
+"""
+
+from typing import Any
+
+from surg_rl.rl.rewards import (
+    ActionPenalty,
+    BaseRewardFunction,
+    CollisionPenalty,
+    CuttingReward,
+    DissectionReward,
+    DistanceReward,
+    GraspingReward,
+    KnotTyingReward,
+    NeedlePassingReward,
+    SuturingReward,
+    TimePenalty,
+)
+from surg_rl.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+# D-02: Registry maps task_type -> reward class
+TASK_REWARD_REGISTRY: dict[str, type[BaseRewardFunction]] = {
+    "suturing": SuturingReward,
+    "dissection": DissectionReward,
+    "needle_insertion": NeedlePassingReward,
+    "knot_tying": KnotTyingReward,
+    "grasping": GraspingReward,
+    "cutting": CuttingReward,
+}
+
+GENERIC_REWARD_CLASSES: list[type[BaseRewardFunction]] = [
+    DistanceReward,
+    ActionPenalty,
+    TimePenalty,
+    CollisionPenalty,
+]
+
+
+class TaskRewardRouter:
+    """Routes task_type to a list of reward function instances.
+
+    D-03: Returns list[BaseRewardFunction] that plugs into CompositeReward
+    without any changes to CompositeReward.
+    """
+
+    def __init__(self, difficulty: float = 0.5):
+        self._difficulty = difficulty
+
+    def build(
+        self,
+        task_type: str | None,
+        **reward_kwargs: Any,
+    ) -> list[BaseRewardFunction]:
+        """Build reward list from task_type.
+
+        Returns:
+            List of [task_specific_reward] + generic_rewards.
+            For None or unknown task_type, returns only generic rewards.
+            Never returns None — contract guarantees list[BaseRewardFunction].
+        """
+        rewards: list[BaseRewardFunction] = []
+
+        if task_type is not None:
+            reward_cls = TASK_REWARD_REGISTRY.get(task_type)
+            if reward_cls is not None:
+                task_reward = reward_cls(**reward_kwargs)
+                rewards.append(task_reward)
+            else:
+                logger.warning(
+                    f"Unknown task_type={task_type!r}, using generic rewards only"
+                )
+
+        # D-03: Always add generic rewards — CompositeReward expects non-empty list
+        for cls in GENERIC_REWARD_CLASSES:
+            rewards.append(cls())
+
+        return rewards

@@ -16,8 +16,11 @@ from pydantic import BaseModel, field_validator
 
 from surg_rl.rl.task_results import (
     CuttingResult,
+    DissectionResult,
     GraspingResult,
     KnotTyingResult,
+    NeedleInsertionResult,
+    SuturingResult,
 )
 
 
@@ -521,6 +524,13 @@ class SuturingReward(BaseRewardFunction):
     the needle or excessive tissue deformation.
     """
 
+    PARAM_BOUNDS: dict[str, list[float]] = {
+        "needle_position_tolerance": [0.02, 0.002],   # m (20mm → 2mm)
+        "thread_tension_threshold": [1.0, 0.2],        # normalized
+        "stitch_spacing_tolerance": [0.01, 0.002],     # m
+        "time_limit": [120.0, 45.0],                   # seconds
+    }
+
     def __init__(
         self,
         weight: float = 1.0,
@@ -544,6 +554,8 @@ class SuturingReward(BaseRewardFunction):
         self.completion_bonus = completion_bonus
         self.drop_penalty = drop_penalty
         self._stitches_completed: int = 0
+        self._needle_dropped_flag: bool = False
+        self._steps: int = 0
 
     def compute(
         self,
@@ -552,6 +564,7 @@ class SuturingReward(BaseRewardFunction):
         info: dict[str, Any],
     ) -> RewardResult:
         """Compute suturing task reward."""
+        self._steps += 1
         reward = 0.0
         components: dict[str, float] = {}
 
@@ -587,10 +600,12 @@ class SuturingReward(BaseRewardFunction):
 
         # Needle drop penalty
         if info.get("needle_dropped", False):
+            self._needle_dropped_flag = True
             reward += self.drop_penalty
             components["needle_drop"] = self.drop_penalty
 
         total = reward * self.weight
+        total = _clamp_finite(total)
         return RewardResult(
             total=total,
             components={k: v * self.weight for k, v in components.items()},
@@ -600,6 +615,45 @@ class SuturingReward(BaseRewardFunction):
     def reset(self) -> None:
         """Reset stitch counter."""
         self._stitches_completed = 0
+        self._needle_dropped_flag = False
+        self._steps = 0
+
+    def check_success(self, difficulty: float) -> SuturingResult:
+        """Check if the suturing task succeeded."""
+        return SuturingResult(
+            success=self._stitches_completed > 0,
+            failure_reason=None if self._stitches_completed > 0 else "no_stitches",
+            stitches_completed=self._stitches_completed,
+            thread_tension_avg=0.0,
+            difficulty=difficulty,
+        )
+
+    def check_failure(self, difficulty: float) -> SuturingResult:
+        """Check if the suturing task failed."""
+        dropped = getattr(self, "_needle_dropped_flag", False)
+        if dropped:
+            return SuturingResult(
+                success=False,
+                failure_reason="needle_dropped",
+                stitches_completed=self._stitches_completed,
+                thread_tension_avg=0.0,
+                difficulty=difficulty,
+            )
+        return SuturingResult(
+            success=True,
+            failure_reason=None,
+            stitches_completed=self._stitches_completed,
+            thread_tension_avg=0.0,
+            difficulty=difficulty,
+        )
+
+    @classmethod
+    def interpolate_params(cls, difficulty: float) -> dict[str, float]:
+        """Compute per-parameter values from difficulty scalar."""
+        return {
+            name: bounds[0] + (bounds[1] - bounds[0]) * difficulty
+            for name, bounds in cls.PARAM_BOUNDS.items()
+        }
 
 
 class DissectionReward(BaseRewardFunction):
@@ -608,6 +662,14 @@ class DissectionReward(BaseRewardFunction):
     Rewards progress along the planned incision path, clean cuts with
     appropriate force, and penalizes collateral tissue damage.
     """
+
+    PARAM_BOUNDS: dict[str, list[float]] = {
+        "incision_path_tolerance": [0.01, 0.002],      # m
+        "collateral_damage_threshold": [0.05, 0.01],    # allowable damage
+        "force_precision": [3.0, 1.0],                  # N threshold
+        "tissue_stiffness": [50.0, 200.0],              # N/m
+        "time_limit": [180.0, 60.0],                    # seconds
+    }
 
     def __init__(
         self,
@@ -632,6 +694,10 @@ class DissectionReward(BaseRewardFunction):
         self.force_threshold = force_threshold
         self.clean_cut_bonus = clean_cut_bonus
         self._prev_progress: float = 0.0
+        self._clean_cuts: int = 0
+        self._cut_attempts: int = 0
+        self._damage_accum: float = 0.0
+        self._steps: int = 0
 
     def compute(
         self,
@@ -640,6 +706,7 @@ class DissectionReward(BaseRewardFunction):
         info: dict[str, Any],
     ) -> RewardResult:
         """Compute dissection task reward."""
+        self._steps += 1
         reward = 0.0
         components: dict[str, float] = {}
 
@@ -657,20 +724,24 @@ class DissectionReward(BaseRewardFunction):
         # Collateral damage penalty
         damage = float(info.get("collateral_damage", 0.0))
         if damage > 0:
+            self._damage_accum += damage
             damage_pen = damage * self.damage_penalty
             reward += damage_pen
             components["collateral_damage"] = damage_pen
 
         # Clean cut bonus
         if info.get("cutting", False):
+            self._cut_attempts += 1
             cut_force = observation.get("cut_force")
             if cut_force is not None:
                 force = float(cut_force.item() if cut_force.size == 1 else cut_force[0])
                 if force < self.force_threshold:
+                    self._clean_cuts += 1
                     reward += self.clean_cut_bonus
                     components["clean_cut"] = self.clean_cut_bonus
 
         total = reward * self.weight
+        total = _clamp_finite(total)
         return RewardResult(
             total=total,
             components={k: v * self.weight for k, v in components.items()},
@@ -680,6 +751,46 @@ class DissectionReward(BaseRewardFunction):
     def reset(self) -> None:
         """Reset progress tracking."""
         self._prev_progress = 0.0
+        self._clean_cuts = 0
+        self._cut_attempts = 0
+        self._damage_accum = 0.0
+        self._steps = 0
+
+    def check_success(self, difficulty: float) -> DissectionResult:
+        """Check if the dissection task succeeded."""
+        return DissectionResult(
+            success=self._prev_progress >= 0.95,
+            failure_reason=None if self._prev_progress >= 0.95 else "incision_incomplete",
+            incision_completion=self._prev_progress,
+            clean_cut_ratio=self._clean_cuts / max(1, self._cut_attempts),
+            difficulty=difficulty,
+        )
+
+    def check_failure(self, difficulty: float) -> DissectionResult:
+        """Check if the dissection task failed."""
+        if getattr(self, "_damage_accum", 0.0) > 0.5:
+            return DissectionResult(
+                success=False,
+                failure_reason="excessive_collateral_damage",
+                incision_completion=self._prev_progress,
+                clean_cut_ratio=self._clean_cuts / max(1, self._cut_attempts),
+                difficulty=difficulty,
+            )
+        return DissectionResult(
+            success=True,
+            failure_reason=None,
+            incision_completion=self._prev_progress,
+            clean_cut_ratio=self._clean_cuts / max(1, self._cut_attempts),
+            difficulty=difficulty,
+        )
+
+    @classmethod
+    def interpolate_params(cls, difficulty: float) -> dict[str, float]:
+        """Compute per-parameter values from difficulty scalar."""
+        return {
+            name: bounds[0] + (bounds[1] - bounds[0]) * difficulty
+            for name, bounds in cls.PARAM_BOUNDS.items()
+        }
 
 
 class NeedlePassingReward(BaseRewardFunction):
@@ -688,6 +799,13 @@ class NeedlePassingReward(BaseRewardFunction):
     Rewards proximity of the needle to the receiving instrument,
     successful handoffs, and penalizes dropping the needle.
     """
+
+    PARAM_BOUNDS: dict[str, list[float]] = {
+        "handoff_proximity_tolerance": [0.05, 0.01],   # m
+        "needle_alignment_tolerance": [0.3, 0.05],      # rad
+        "action_noise": [0.01, 0.06],                   # std dev
+        "time_limit": [90.0, 30.0],                     # seconds
+    }
 
     def __init__(
         self,
@@ -712,6 +830,8 @@ class NeedlePassingReward(BaseRewardFunction):
         self.drop_penalty = drop_penalty
         self.proximity_scale = proximity_scale
         self._handoffs_completed: int = 0
+        self._needle_dropped_flag: bool = False
+        self._steps: int = 0
 
     def compute(
         self,
@@ -720,6 +840,7 @@ class NeedlePassingReward(BaseRewardFunction):
         info: dict[str, Any],
     ) -> RewardResult:
         """Compute needle passing task reward."""
+        self._steps += 1
         reward = 0.0
         components: dict[str, float] = {}
 
@@ -746,10 +867,12 @@ class NeedlePassingReward(BaseRewardFunction):
 
         # Dropped needle penalty
         if info.get("needle_dropped", False):
+            self._needle_dropped_flag = True
             reward += self.drop_penalty
             components["needle_drop"] = self.drop_penalty
 
         total = reward * self.weight
+        total = _clamp_finite(total)
         return RewardResult(
             total=total,
             components={k: v * self.weight for k, v in components.items()},
@@ -759,7 +882,44 @@ class NeedlePassingReward(BaseRewardFunction):
     def reset(self) -> None:
         """Reset handoff counter."""
         self._handoffs_completed = 0
+        self._needle_dropped_flag = False
         self._steps = 0
+
+    def check_success(self, difficulty: float) -> NeedleInsertionResult:
+        """Check if the needle passing task succeeded."""
+        return NeedleInsertionResult(
+            success=self._handoffs_completed > 0,
+            failure_reason=None if self._handoffs_completed > 0 else "no_handoffs",
+            insertion_depth=float(self._handoffs_completed),
+            deviation_angle=0.0,
+            difficulty=difficulty,
+        )
+
+    def check_failure(self, difficulty: float) -> NeedleInsertionResult:
+        """Check if the needle passing task failed."""
+        if getattr(self, "_needle_dropped_flag", False):
+            return NeedleInsertionResult(
+                success=False,
+                failure_reason="needle_dropped",
+                insertion_depth=float(self._handoffs_completed),
+                deviation_angle=0.0,
+                difficulty=difficulty,
+            )
+        return NeedleInsertionResult(
+            success=True,
+            failure_reason=None,
+            insertion_depth=float(self._handoffs_completed),
+            deviation_angle=0.0,
+            difficulty=difficulty,
+        )
+
+    @classmethod
+    def interpolate_params(cls, difficulty: float) -> dict[str, float]:
+        """Compute per-parameter values from difficulty scalar."""
+        return {
+            name: bounds[0] + (bounds[1] - bounds[0]) * difficulty
+            for name, bounds in cls.PARAM_BOUNDS.items()
+        }
 
 
 class KnotTyingReward(BaseRewardFunction):
