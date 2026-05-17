@@ -43,10 +43,12 @@ from .observation import (
 )
 from .rewards import (
     BaseRewardFunction,
+    CompositeReward,
     RewardConfig,
     RewardResult,
     create_default_reward,
 )
+from .task_reward_router import TaskRewardRouter
 from .task_termination import check_task_success
 
 logger = get_logger(__name__)
@@ -191,9 +193,23 @@ class SurgicalEnv(gym.Env):
 
         # Initialize reward function
         task_name = None
+        task_type = None
         if self._scene.task is not None:
             task_name = self._scene.task.name
-        self._reward_fn = create_default_reward(self.config.reward_config, task_name=task_name)
+            task_type = getattr(self._scene.task, 'task_type', None)
+
+        # Phase 21: Use TaskRewardRouter when task_type is configured (D-02, D-03)
+        if task_type is not None:
+            router = TaskRewardRouter()
+            reward_list = router.build(task_type)
+            self._reward_fn = CompositeReward([
+                (r, 1.0) for r in reward_list
+            ])
+        else:
+            self._reward_fn = create_default_reward(self.config.reward_config, task_name=task_name)
+
+        # Phase 21: Track difficulty for TaskResult population
+        self._task_difficulty = 0.5
 
         # Initialize environment controller
         self._controller: EnvironmentController | None = None
@@ -502,6 +518,13 @@ class SurgicalEnv(gym.Env):
             params = self._controller.reset(seed=seed)
             # Apply randomized parameters to simulator
             self._controller.apply_parameters(params, self._simulator)
+
+        # Phase 21: Update task difficulty from curriculum
+        if self._controller is not None:
+            try:
+                self._task_difficulty = self._controller.get_difficulty() or 0.5
+            except (AttributeError, Exception):
+                pass
 
         # Reset simulator
         try:
