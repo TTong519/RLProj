@@ -14,6 +14,12 @@ from typing import Any
 import numpy as np
 from pydantic import BaseModel, field_validator
 
+from surg_rl.rl.task_results import (
+    CuttingResult,
+    GraspingResult,
+    KnotTyingResult,
+)
+
 
 class RewardType(str, Enum):
     """Types of reward functions."""
@@ -753,6 +759,445 @@ class NeedlePassingReward(BaseRewardFunction):
     def reset(self) -> None:
         """Reset handoff counter."""
         self._handoffs_completed = 0
+        self._steps = 0
+
+
+class KnotTyingReward(BaseRewardFunction):
+    """Task-specific reward for knot-tying tasks.
+
+    Rewards proximity of the needle to the loop center, appropriate thread
+    tension, and knot completion. Penalizes dropping the needle.
+    """
+
+    PARAM_BOUNDS: dict[str, list[float]] = {
+        "loop_deviation_tolerance": [0.03, 0.005],    # m
+        "knot_tension_tolerance": [0.5, 0.05],         # normalized
+        "tissue_stiffness": [50.0, 200.0],             # N/m (higher = harder)
+        "action_noise": [0.01, 0.08],                  # std dev
+        "time_limit": [120.0, 45.0],                   # seconds
+    }
+
+    def __init__(
+        self,
+        weight: float = 1.0,
+        loop_deviation_threshold: float = 0.01,
+        tension_threshold: float = 0.5,
+        knot_completion_bonus: float = 50.0,
+        drop_penalty: float = -20.0,
+    ):
+        self.weight = weight
+        self.loop_deviation_threshold = loop_deviation_threshold
+        self.tension_threshold = tension_threshold
+        self.knot_completion_bonus = knot_completion_bonus
+        self.drop_penalty = drop_penalty
+        self._knots_completed: int = 0
+        self._needle_dropped: bool = False
+        self._tension_accum: float = 0.0
+        self._tension_samples: int = 0
+        self._steps: int = 0
+
+    def compute(
+        self,
+        observation: dict[str, np.ndarray],
+        action: np.ndarray,
+        info: dict[str, Any],
+    ) -> RewardResult:
+        """Compute knot-tying task reward."""
+        self._steps += 1
+        reward = 0.0
+        components: dict[str, float] = {}
+
+        # Loop deviation reward (needle position relative to loop center)
+        needle_pos = observation.get("needle_pos")
+        loop_center = observation.get("loop_center")
+        if needle_pos is not None and loop_center is not None:
+            distance = float(np.linalg.norm(needle_pos - loop_center))
+            position_reward = float(np.exp(-distance * 100.0))
+            reward += position_reward
+            components["loop_deviation"] = position_reward
+
+        # Thread tension penalty
+        thread_tension = observation.get("thread_tension")
+        if thread_tension is not None:
+            tension = float(
+                thread_tension.item() if thread_tension.size == 1 else thread_tension[0]
+            )
+            self._tension_accum += tension
+            self._tension_samples += 1
+            tension_penalty = -max(0.0, tension - self.tension_threshold)
+            reward += tension_penalty
+            components["thread_tension"] = tension_penalty
+
+        # Knot completion bonus
+        knots = int(info.get("knots_completed", 0))
+        if knots > self._knots_completed:
+            new_knots = knots - self._knots_completed
+            completion_reward = new_knots * self.knot_completion_bonus
+            reward += completion_reward
+            components["knot_completion"] = completion_reward
+            self._knots_completed = knots
+
+        # Needle drop penalty
+        if info.get("needle_dropped", False):
+            self._needle_dropped = True
+            reward += self.drop_penalty
+            components["needle_drop"] = self.drop_penalty
+
+        total = reward * self.weight
+        total = _clamp_finite(total)
+        return RewardResult(
+            total=total,
+            components={k: v * self.weight for k, v in components.items()},
+            info={
+                "knots_completed": self._knots_completed,
+                "knot_tension_avg": self._tension_accum / max(1, self._tension_samples),
+            },
+        )
+
+    def reset(self) -> None:
+        """Reset knot tracking state."""
+        self._knots_completed = 0
+        self._needle_dropped = False
+        self._tension_accum = 0.0
+        self._tension_samples = 0
+        self._steps = 0
+
+    def check_success(self, difficulty: float) -> KnotTyingResult:
+        """Check if the knot-tying task succeeded."""
+        return KnotTyingResult(
+            success=self._knots_completed > 0,
+            failure_reason=None if self._knots_completed > 0 else "no_knots_completed",
+            knots_completed=self._knots_completed,
+            knot_tension_avg=self._tension_accum / max(1, self._tension_samples),
+            difficulty=difficulty,
+        )
+
+    def check_failure(self, difficulty: float) -> KnotTyingResult:
+        """Check if the knot-tying task failed."""
+        dropped = getattr(self, "_needle_dropped", False)
+        if dropped:
+            return KnotTyingResult(
+                success=False,
+                failure_reason="needle_dropped",
+                knots_completed=self._knots_completed,
+                knot_tension_avg=self._tension_accum / max(1, self._tension_samples),
+                difficulty=difficulty,
+            )
+        if self._knots_completed == 0 and self._steps > 100:
+            return KnotTyingResult(
+                success=False,
+                failure_reason="no_progress",
+                knots_completed=0,
+                knot_tension_avg=0.0,
+                difficulty=difficulty,
+            )
+        return KnotTyingResult(
+            success=True,
+            failure_reason=None,
+            knots_completed=self._knots_completed,
+            knot_tension_avg=self._tension_accum / max(1, self._tension_samples),
+            difficulty=difficulty,
+        )
+
+    @classmethod
+    def interpolate_params(cls, difficulty: float) -> dict[str, float]:
+        """Compute per-parameter values from difficulty scalar."""
+        return {
+            name: bounds[0] + (bounds[1] - bounds[0]) * difficulty
+            for name, bounds in cls.PARAM_BOUNDS.items()
+        }
+
+
+class GraspingReward(BaseRewardFunction):
+    """Task-specific reward for grasping tasks.
+
+    Rewards proximity of the gripper to the target object, appropriate
+    grip force, and stable grasp. Penalizes dropping the object.
+    """
+
+    PARAM_BOUNDS: dict[str, list[float]] = {
+        "approach_tolerance": [0.05, 0.005],        # m
+        "grip_force_accuracy": [2.0, 0.3],           # N tolerance (lower = harder)
+        "object_mass": [0.01, 0.1],                  # kg (heavier = harder)
+        "action_noise": [0.01, 0.06],                # std dev
+        "time_limit": [90.0, 30.0],                  # seconds
+    }
+
+    def __init__(
+        self,
+        weight: float = 1.0,
+        grasp_threshold: float = 0.01,
+        grip_force_range: tuple[float, float] = (0.5, 2.0),
+        approach_bonus: float = 5.0,
+        grasp_bonus: float = 50.0,
+        drop_penalty: float = -20.0,
+    ):
+        self.weight = weight
+        self.grasp_threshold = grasp_threshold
+        self.grip_force_range = grip_force_range
+        self.approach_bonus = approach_bonus
+        self.grasp_bonus = grasp_bonus
+        self.drop_penalty = drop_penalty
+        self._grasp_stable_steps: int = 0
+        self._object_dropped: bool = False
+        self._force_accum: float = 0.0
+        self._force_samples: int = 0
+        self._steps: int = 0
+
+    def compute(
+        self,
+        observation: dict[str, np.ndarray],
+        action: np.ndarray,
+        info: dict[str, Any],
+    ) -> RewardResult:
+        """Compute grasping task reward."""
+        self._steps += 1
+        reward = 0.0
+        components: dict[str, float] = {}
+
+        # Approach reward (distance to target object)
+        gripper_pos = observation.get("gripper_pos")
+        target_object_pos = observation.get("target_object_pos")
+        if gripper_pos is not None and target_object_pos is not None:
+            distance = float(np.linalg.norm(gripper_pos - target_object_pos))
+            approach_reward = float(np.exp(-distance * 50.0))
+            reward += approach_reward
+            components["approach"] = approach_reward
+
+        # Grip force reward
+        grip_force = observation.get("grip_force")
+        if grip_force is not None:
+            force = float(grip_force.item() if grip_force.size == 1 else grip_force[0])
+            self._force_accum += force
+            self._force_samples += 1
+            if self.grip_force_range[0] <= force <= self.grip_force_range[1]:
+                reward += 1.0
+                components["grip_force"] = 1.0
+            else:
+                components["grip_force"] = 0.0
+
+        # Grasp detection
+        grasp_detected = observation.get("grasp_detected")
+        if grasp_detected is not None:
+            gd = float(grasp_detected.item() if grasp_detected.size == 1 else grasp_detected[0])
+            if gd > 0.5:
+                self._grasp_stable_steps += 1
+                reward += self.grasp_bonus
+                components["grasp_success"] = self.grasp_bonus
+
+        # Object dropped penalty
+        if info.get("object_dropped", False):
+            self._object_dropped = True
+            reward += self.drop_penalty
+            components["object_drop"] = self.drop_penalty
+
+        total = reward * self.weight
+        total = _clamp_finite(total)
+        return RewardResult(
+            total=total,
+            components={k: v * self.weight for k, v in components.items()},
+            info={
+                "grasp_stable_steps": self._grasp_stable_steps,
+                "grip_force_avg": self._force_accum / max(1, self._force_samples),
+            },
+        )
+
+    def reset(self) -> None:
+        """Reset grasp tracking state."""
+        self._grasp_stable_steps = 0
+        self._object_dropped = False
+        self._force_accum = 0.0
+        self._force_samples = 0
+        self._steps = 0
+
+    def check_success(self, difficulty: float) -> GraspingResult:
+        """Check if the grasping task succeeded."""
+        stable = self._grasp_stable_steps >= 50
+        return GraspingResult(
+            success=stable,
+            failure_reason=None if stable else "grasp_not_stable",
+            grasp_stable=stable,
+            grip_force_avg=self._force_accum / max(1, self._force_samples),
+            difficulty=difficulty,
+        )
+
+    def check_failure(self, difficulty: float) -> GraspingResult:
+        """Check if the grasping task failed."""
+        if getattr(self, "_object_dropped", False):
+            return GraspingResult(
+                success=False,
+                failure_reason="object_dropped",
+                grasp_stable=False,
+                grip_force_avg=self._force_accum / max(1, self._force_samples),
+                difficulty=difficulty,
+            )
+        if self._steps > 50 and self._grasp_stable_steps == 0:
+            return GraspingResult(
+                success=False,
+                failure_reason="no_grasp_attempt",
+                grasp_stable=False,
+                grip_force_avg=0.0,
+                difficulty=difficulty,
+            )
+        return GraspingResult(
+            success=True,
+            failure_reason=None,
+            grasp_stable=True,
+            grip_force_avg=self._force_accum / max(1, self._force_samples),
+            difficulty=difficulty,
+        )
+
+    @classmethod
+    def interpolate_params(cls, difficulty: float) -> dict[str, float]:
+        """Compute per-parameter values from difficulty scalar."""
+        return {
+            name: bounds[0] + (bounds[1] - bounds[0]) * difficulty
+            for name, bounds in cls.PARAM_BOUNDS.items()
+        }
+
+
+class CuttingReward(BaseRewardFunction):
+    """Task-specific reward for cutting tasks.
+
+    Rewards progress along the cut path, clean cuts with appropriate force,
+    and penalizes collateral tissue damage.
+    """
+
+    PARAM_BOUNDS: dict[str, list[float]] = {
+        "cut_path_accuracy": [0.01, 0.002],          # m deviation tolerance
+        "collateral_threshold": [0.05, 0.01],         # allowable damage (lower = stricter)
+        "force_precision": [3.0, 1.0],                # N (lower = harder to stay under)
+        "tissue_stiffness": [50.0, 300.0],            # N/m (higher = harder)
+        "time_limit": [120.0, 60.0],                  # seconds
+    }
+
+    def __init__(
+        self,
+        weight: float = 1.0,
+        cut_progress_scale: float = 10.0,
+        collateral_penalty: float = -5.0,
+        force_threshold: float = 3.0,
+        completion_bonus: float = 100.0,
+    ):
+        self.weight = weight
+        self.cut_progress_scale = cut_progress_scale
+        self.collateral_penalty = collateral_penalty
+        self.force_threshold = force_threshold
+        self.completion_bonus = completion_bonus
+        self._prev_progress: float = 0.0
+        self._cut_complete: bool = False
+        self._damage_accum: float = 0.0
+        self._steps: int = 0
+
+    def compute(
+        self,
+        observation: dict[str, np.ndarray],
+        action: np.ndarray,
+        info: dict[str, Any],
+    ) -> RewardResult:
+        """Compute cutting task reward."""
+        self._steps += 1
+        reward = 0.0
+        components: dict[str, float] = {}
+
+        # Cut progress reward
+        cut_progress = observation.get("cut_progress")
+        if cut_progress is not None:
+            current = float(cut_progress.item() if cut_progress.size == 1 else cut_progress[0])
+            delta = current - self._prev_progress
+            if delta > 0:
+                progress_reward = delta * self.cut_progress_scale
+                reward += progress_reward
+                components["cut_progress"] = progress_reward
+            self._prev_progress = current
+
+        # Collateral damage penalty
+        damage = observation.get("collateral_damage")
+        if damage is not None:
+            dmg = float(damage.item() if damage.size == 1 else damage[0])
+            self._damage_accum += dmg
+            if dmg > 0:
+                damage_pen = dmg * self.collateral_penalty
+                reward += damage_pen
+                components["collateral_damage"] = damage_pen
+
+        # Clean cut bonus (force below threshold)
+        cut_force = observation.get("cut_force")
+        if cut_force is not None:
+            force = float(cut_force.item() if cut_force.size == 1 else cut_force[0])
+            if force < self.force_threshold:
+                components["clean_cut"] = 1.0
+            else:
+                components["clean_cut"] = 0.0
+
+        # Cut completion bonus
+        if info.get("cut_complete", False):
+            self._cut_complete = True
+            reward += self.completion_bonus
+            components["cut_complete"] = self.completion_bonus
+
+        total = reward * self.weight
+        total = _clamp_finite(total)
+        return RewardResult(
+            total=total,
+            components={k: v * self.weight for k, v in components.items()},
+            info={
+                "cut_progress": self._prev_progress,
+                "collateral_damage": self._damage_accum,
+            },
+        )
+
+    def reset(self) -> None:
+        """Reset cutting tracking state."""
+        self._prev_progress = 0.0
+        self._cut_complete = False
+        self._damage_accum = 0.0
+        self._steps = 0
+
+    def check_success(self, difficulty: float) -> CuttingResult:
+        """Check if the cutting task succeeded."""
+        complete = self._cut_complete
+        return CuttingResult(
+            success=complete,
+            failure_reason=None if complete else "cut_incomplete",
+            cut_completion=self._prev_progress,
+            collateral_damage=self._damage_accum,
+            difficulty=difficulty,
+        )
+
+    def check_failure(self, difficulty: float) -> CuttingResult:
+        """Check if the cutting task failed."""
+        if self._damage_accum > 1.0:
+            return CuttingResult(
+                success=False,
+                failure_reason="excessive_collateral_damage",
+                cut_completion=self._prev_progress,
+                collateral_damage=self._damage_accum,
+                difficulty=difficulty,
+            )
+        if self._steps > 100 and self._prev_progress < 0.1:
+            return CuttingResult(
+                success=False,
+                failure_reason="cut_not_started",
+                cut_completion=0.0,
+                collateral_damage=0.0,
+                difficulty=difficulty,
+            )
+        return CuttingResult(
+            success=True,
+            failure_reason=None,
+            cut_completion=self._prev_progress,
+            collateral_damage=self._damage_accum,
+            difficulty=difficulty,
+        )
+
+    @classmethod
+    def interpolate_params(cls, difficulty: float) -> dict[str, float]:
+        """Compute per-parameter values from difficulty scalar."""
+        return {
+            name: bounds[0] + (bounds[1] - bounds[0]) * difficulty
+            for name, bounds in cls.PARAM_BOUNDS.items()
+        }
 
 
 class CompositeReward(BaseRewardFunction):
