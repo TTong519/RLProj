@@ -5,6 +5,7 @@ training, including distance-based rewards, success/failure rewards,
 collision penalties, and composite reward functions.
 """
 
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
@@ -25,7 +26,10 @@ class RewardType(str, Enum):
     TIME_PENALTY = "time_penalty"
     ORIENTATION = "orientation"
     SUTURING = "suturing"
+    CUTTING = "cutting"
     DISSECTION = "dissection"
+    GRASPING = "grasping"
+    KNOT_TYING = "knot_tying"
     NEEDLE_PASSING = "needle_passing"
     COMPOSITE = "composite"
     CUSTOM = "custom"
@@ -102,6 +106,16 @@ class RewardResult:
             components={k: v * scale for k, v in self.components.items()},
             info=self.info.copy(),
         )
+
+
+def _is_finite(value: float) -> bool:
+    """Check if a float is finite (not NaN, not inf)."""
+    return math.isfinite(value)
+
+
+def _clamp_finite(value: float, default: float = 0.0) -> float:
+    """Return value if finite, else default. Guards against NaN/inf in reward computation."""
+    return value if math.isfinite(value) else default
 
 
 class BaseRewardFunction(ABC):
