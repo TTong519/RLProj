@@ -44,6 +44,10 @@ class CurriculumStageConfig:
         success_threshold: Success rate threshold to advance.
         episode_threshold: Minimum episodes before advancement.
         reward_threshold: Reward threshold to advance.
+        task_param_bounds: Optional per-task parameter bounds for difficulty
+            interpolation (Phase 21 — task curriculum). When set, this dict
+            is merged into parameter_overrides during sample_parameters().
+            Each key maps to a [min, max] pair or a fixed value.
     """
 
     name: str
@@ -53,6 +57,7 @@ class CurriculumStageConfig:
     success_threshold: float = 0.8
     episode_threshold: int = 100
     reward_threshold: float = 0.0
+    task_param_bounds: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -65,6 +70,9 @@ class CurriculumConfig:
         auto_advance: Whether to automatically advance stages.
         advancement_window: Number of episodes to consider for advancement.
         min_success_rate: Minimum success rate to advance.
+        difficulty_hysteresis: Prevents difficulty oscillation when success rate
+            hovers near threshold. Stage must succeed at current difficulty for
+            hysteresis*100% extra episodes before advancing. (Phase 21)
         stage_configs: Per-stage configurations.
     """
 
@@ -73,6 +81,7 @@ class CurriculumConfig:
     auto_advance: bool = True
     advancement_window: int = 50
     min_success_rate: float = 0.7
+    difficulty_hysteresis: float = 0.05
     stage_configs: dict[CurriculumStage, CurriculumStageConfig] = field(default_factory=dict)
 
 
@@ -254,12 +263,21 @@ class CurriculumScheduler(BaseController):
         """
         stage_cfg = self._stages[self._current_stage]
 
+        # D-08: Merge task_param_bounds into parameter_overrides for interpolation
+        # difficulty is the single source of truth — no separate task_difficulty field
+        task_bounds = getattr(stage_cfg, 'task_param_bounds', None) or {}
+        if task_bounds:
+            merged_overrides = dict(stage_cfg.parameter_overrides)
+            merged_overrides.update(task_bounds)
+        else:
+            merged_overrides = stage_cfg.parameter_overrides
+
         physics_params = {}
         visual_params = {}
         dynamics_params = {}
 
-        # Sample from stage parameter overrides
-        for param_name, param_value in stage_cfg.parameter_overrides.items():
+        # Sample from stage parameter overrides (with task_param_bounds merged in)
+        for param_name, param_value in merged_overrides.items():
             if isinstance(param_value, tuple) and len(param_value) == 2:
                 # Sample uniformly from range
                 value = self._rng.uniform(param_value[0], param_value[1])
@@ -486,6 +504,66 @@ class CurriculumScheduler(BaseController):
                 return True
 
         return False
+
+    def episode_end_with_task_result(
+        self,
+        task_result,  # TaskResult from per-task reward check_success
+        simulator: Any,
+    ) -> dict[str, Any]:
+        """D-09: Handle episode end with structured TaskResult.
+
+        Auto-reads TaskResult from the environment, updates difficulty
+        progression internally, and triggers parameter recalculation.
+
+        Args:
+            task_result: TaskResult from reward.check_success()/check_failure().
+            simulator: Simulator instance.
+
+        Returns:
+            Curriculum update information.
+        """
+        # Extract standard metrics from TaskResult for existing update_curriculum path
+        metrics = {
+            "success": task_result.success,
+            "reward": 0.0,  # filled by upstream
+        }
+        # Merge task-specific metrics into performance history
+        if task_result.metrics:
+            metrics.update(task_result.metrics)
+
+        # Delegate to standard episode_end pipeline
+        return self.episode_end(metrics, simulator)
+
+    def _should_regress(self) -> bool:
+        """Check if conditions are met to regress curriculum stage.
+
+        D-09: Regression occurs when success rate drops significantly below
+        threshold, with hysteresis to prevent oscillation.
+
+        Returns:
+            True if should regress, False otherwise.
+        """
+        stage_cfg = self._stages[self._current_stage]
+
+        episodes_at_stage = self._episode - self._stage_entry_episode
+        if episodes_at_stage < stage_cfg.episode_threshold:
+            return False
+
+        if self._current_stage not in self._stage_order:
+            return False
+        current_idx = self._stage_order.index(self._current_stage)
+        if current_idx <= 0:
+            return False
+
+        recent_metrics = self._performance_history[-self.curriculum_config.advancement_window:]
+        if not recent_metrics:
+            return False
+
+        success_rate = sum(m.get("success", 0) for m in recent_metrics) / len(recent_metrics)
+        hysteresis = self.curriculum_config.difficulty_hysteresis
+        regression_threshold = stage_cfg.success_threshold - 0.2 - hysteresis
+
+        return success_rate < regression_threshold
 
     def get_progress(self) -> dict[str, Any]:
         """Get curriculum progress information.
