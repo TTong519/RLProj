@@ -65,7 +65,7 @@
 
 - [x] **Phase 19: Schema Foundation** — Pydantic v2 models + optional dependency groups for all five v0.4.0 feature modules
 - [x] **Phase 20: Real Surgical Assets** — trimesh OBJ loading for instruments (11) and organs (4) with decimation, fallback, and [assets] extras
-- [ ] **Phase 21: Surgical Task Curriculum** — 6 task types × 3 difficulty levels integrated with CurriculumScheduler, structured success/failure detection
+- [ ] **Phase 21: Surgical Task Curriculum** — 6 task types × 3 difficulty levels integrated with CurriculumScheduler, structured success/failure detection · [Plans](phases/21-surgical-task-curriculum/)
 - [ ] **Phase 22: Multi-Agent RL** — PettingZoo ParallelEnv dual-arm coordination, SuperSuit SB3 wrappers, thin adapter over SurgicalEnv
 - [ ] **Phase 23: Performance Benchmarking** — ExperimentRunner with SB3-only comparison, publication plots/tables, per-backend reporting
 - [ ] **Phase 24: DreamerV3 World Models** — feasibility spike, process-isolated JAX training, GymToEmbodiedWrapper, pixel/state observation
@@ -110,8 +110,13 @@ Plans:
   2. Each task supports easy/medium/hard difficulty levels — difficulty changes observable scene parameters (tissue stiffness, precision tolerance, tool position noise, time limit); running `env.reset(options={"difficulty": "hard"})` produces a noticeably harder configuration than easy
   3. `CurriculumStageConfig.task_difficulty` field exists and integrates with the existing CurriculumScheduler — when agents meet performance thresholds, the scheduler triggers a difficulty bump, observable in training logs as staged difficulty progression
   4. `check_success()` and `check_failure()` return structured results (`success: bool`, `failure_reason: str`, `metrics: dict`) at episode end — an agent that completes a grasping task reports `success=True` with task-specific metrics (e.g. `grasp_completion_time`) in the metrics dict
-  5. The Phase 3 CurriculumScheduler `apply_parameters` fix is never modified — all task curriculum additions are purely additive extensions
-**Plans**: TBD
+   5. The Phase 3 CurriculumScheduler `apply_parameters` fix is never modified — all task curriculum additions are purely additive extensions
+**Plans**: 3 plans in 3 waves
+
+Plans:
+- [ ] 21-01-PLAN.md — Pydantic v2 TaskResult hierarchy (base + 6 per-task sub-models)
+- [ ] 21-02-PLAN.md — 3 new + 3 updated reward subclasses with check_success/check_failure/interpolate_params + TaskRewardRouter
+- [ ] 21-03-PLAN.md — CurriculumScheduler TaskResult integration + SurgicalEnv router wiring + task_termination per-task delegation
 
 ### Phase 22: Multi-Agent RL
 **Goal**: Dual-arm PettingZoo ParallelEnv with shared or independent SB3 policies, implemented as a thin adapter layer over the canonical SurgicalEnv — never duplicates sim logic.
@@ -155,7 +160,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 19. Schema Foundation | 3/3 | Complete | 2026-05-13 |
 | 20. Real Surgical Assets | 4/4 | Complete | 2026-05-13 |
-| 21. Surgical Task Curriculum | 0/0 | Not started | - |
+| 21. Surgical Task Curriculum | 0/3 | Planned | 2026-05-17 |
 | 22. Multi-Agent RL | 0/0 | Not started | - |
 | 23. Performance Benchmarking | 0/0 | Not started | - |
 | 24. DreamerV3 World Models | 0/0 | Not started | - |
