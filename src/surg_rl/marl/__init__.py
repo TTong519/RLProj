@@ -8,4 +8,13 @@ from surg_rl.utils.lazy_imports import LazyImport
 
 PETTINGZOO = LazyImport("pettingzoo", "marl")
 
-__all__ = ["PETTINGZOO"]
+from .multi_agent_env import MultiAgentSurgicalEnv  # noqa: E402
+from .wrappers import wrap_for_sb3  # noqa: E402
+from .training import MultiAgentTrainingManager  # noqa: E402
+
+__all__ = [
+    "PETTINGZOO",
+    "MultiAgentSurgicalEnv",
+    "wrap_for_sb3",
+    "MultiAgentTrainingManager",
+]
