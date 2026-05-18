@@ -96,6 +96,13 @@ class LightType(str, Enum):
     AMBIENT = "ambient"
 
 
+class ArmRole(str, Enum):
+    """Role of a robot arm in a multi-agent surgical scene."""
+
+    SURGEON = "surgeon"
+    ASSISTANT = "assistant"
+
+
 # ============================================================================
 # Base Models
 # ============================================================================
@@ -1110,25 +1117,78 @@ class BenchmarkConfig(BaseModel):
     )
 
 
-class MultiAgentConfig(BaseModel):
-    """Skeletal multi-agent configuration — Phase 22 fills in details."""
+class ArmConfig(BaseModel):
+    """Configuration for a single arm in a multi-agent scene.
 
-    num_agents: int = Field(
-        default=2, ge=1, le=4, description="Number of agents in the multi-agent scene"
+    Maps a role to a robot reference in SceneDefinition.robots[].
+    """
+
+    role: ArmRole = Field(description="Arm role (surgeon or assistant)")
+    robot_ref: str = Field(
+        description="Name of the RobotConfig in SceneDefinition.robots[] to bind to this arm",
+        min_length=1,
+    )
+    observation_keys: list[str] | None = Field(
+        default=None,
+        description="Observation keys to expose to this agent (None = all available per D-04)",
+    )
+
+
+class MultiAgentConfig(BaseModel):
+    """Multi-agent configuration for dual-arm surgical scenes.
+
+    Populated only in dual-arm scenes. Replaces the Phase 19 skeleton.
+    Replaces the old dict-based agent_roles with a structured arm_configs list.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    arm_configs: list[ArmConfig] = Field(
+        description="Per-arm role and robot binding configuration",
+        min_length=2,
     )
     shared_policy: bool = Field(
         default=True,
         description="True: single SB3 model for all agents; False: per-agent policies (per MARL-03)",
     )
-    agent_roles: dict[str, Literal["surgeon", "assistant", "camera"]] | None = Field(
-        default=None, description="Agent role assignments (None = auto-assign)"
-    )
     cooperative: bool = Field(
-        default=True, description="True: shared reward; False: competitive/adversarial"
+        default=True,
+        description="True: shared reward; False: competitive/adversarial",
     )
     observation_sharing: bool = Field(
-        default=False, description="Whether agents share observations"
+        default=False,
+        description="Whether agents share observations",
     )
+
+    @property
+    def num_agents(self) -> int:
+        """Number of agents (derived from arm_configs length)."""
+        return len(self.arm_configs)
+
+    @model_validator(mode="after")
+    def validate_unique_roles(self) -> "MultiAgentConfig":
+        """Ensure no duplicate roles in arm_configs (D-02: swappable but unique)."""
+        roles = [arm.role for arm in self.arm_configs]
+        if len(roles) != len(set(roles)):
+            raise ValueError(
+                f"Duplicate roles in arm_configs: {[r.value for r in roles]}. "
+                "Each role must appear at most once."
+            )
+        return self
+
+    def get_arm(self, role: ArmRole | str) -> ArmConfig | None:
+        """Get arm config by role (convenience accessor)."""
+        if isinstance(role, str):
+            try:
+                target = ArmRole(role)
+            except ValueError:
+                return None
+        else:
+            target = role
+        for arm in self.arm_configs:
+            if arm.role == target:
+                return arm
+        return None
 
 
 class DreamerConfig(BaseModel):
@@ -1277,6 +1337,12 @@ class SceneDefinition(BaseModel):
 
     # Task
     task: TaskConfig | None = Field(default=None, description="Task configuration")
+
+    # Multi-agent configuration (Phase 22: dual-arm scenes)
+    multi_agent: MultiAgentConfig | None = Field(
+        default=None,
+        description="Multi-agent configuration (None for single-arm scenes)",
+    )
 
     # Domain randomization
     domain_randomization: DomainRandomizationConfig = Field(
