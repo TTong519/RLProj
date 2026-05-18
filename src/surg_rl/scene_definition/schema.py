@@ -1370,6 +1370,24 @@ class SceneDefinition(BaseModel):
         default_factory=dict, description="Custom parameters for extensions"
     )
 
+    @model_validator(mode="after")
+    def validate_multi_agent_robot_refs(self) -> "SceneDefinition":
+        """Ensure multi_agent arm robot_ref entries point to existing robots.
+
+        D-01/D-03: cross-validate MultiAgentConfig against SceneDefinition.robots[].
+        """
+        if self.multi_agent is None:
+            return self
+        robot_names = {r.name for r in self.robots}
+        for arm in self.multi_agent.arm_configs:
+            if arm.robot_ref not in robot_names:
+                raise ValueError(
+                    f"multi_agent arm_configs references robot_ref={arm.robot_ref!r} "
+                    f"but no robot with that name exists in robots[]. "
+                    f"Available robots: {sorted(robot_names)}"
+                )
+        return self
+
     def get_robot(self, name: str) -> RobotConfig | None:
         """Get robot by name."""
         for robot in self.robots:
