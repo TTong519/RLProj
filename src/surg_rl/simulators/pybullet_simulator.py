@@ -83,6 +83,7 @@ class PyBulletSimulator(BaseSimulator):
         self._soft_body_ids: dict[str, int] = {}
         self._joint_ids: dict[str, dict[str, int]] = {}
         self._control_map: list[dict[str, Any]] = []
+        self._arm_joint_ranges: dict[str, tuple[int, int]] | None = None
         self._initial_positions: dict[str, list] = {}  # Store initial positions
         self._initial_orientations: dict[str, list] = {}  # Store initial orientations
 
@@ -231,6 +232,7 @@ class PyBulletSimulator(BaseSimulator):
 
         self._loaded = True
         self._build_control_map()
+        self._build_arm_joint_ranges()
 
         # Let objects settle by stepping simulation a few times
         # This prevents objects from having initial velocities that cause them to fly off
@@ -1383,6 +1385,53 @@ class PyBulletSimulator(BaseSimulator):
             total += len(joints)
         return total
 
+    def _build_arm_joint_ranges(self) -> None:
+        """Build per-arm joint index ranges for arm_id routing.
+
+        Only populated when scene has MultiAgentConfig with arm role bindings.
+        Maps arm role (e.g., "surgeon", "assistant") → (start_dof, end_dof)
+        in the _control_map flat action space.
+        """
+        self._arm_joint_ranges = None
+        scene = self._scene
+        if scene is None:
+            return
+        multi_agent = getattr(scene, "multi_agent", None)
+        if multi_agent is None:
+            return
+
+        self._arm_joint_ranges = {}
+        ctrl_offset = 0
+        for robot in scene.robots:
+            # Count non-gripper controls for this robot
+            robot_ctrls = [m for m in self._control_map
+                           if m["robot_name"] == robot.name and not m.get("is_gripper")]
+            n_ctrls = len(robot_ctrls)
+            if n_ctrls == 0:
+                # Fall back to _joint_ids
+                joint_dict = self._joint_ids.get(robot.name, {})
+                n_ctrls = len(joint_dict)
+
+            if n_ctrls == 0:
+                continue
+
+            # Find which arm role binds to this robot
+            arm = None
+            for arm_cfg in multi_agent.arm_configs:
+                if arm_cfg.robot_ref == robot.name:
+                    arm = arm_cfg
+                    break
+
+            if arm is not None:
+                role_value = arm.role.value if hasattr(arm.role, "value") else str(arm.role)
+                self._arm_joint_ranges[role_value] = (ctrl_offset, ctrl_offset + n_ctrls)
+
+            ctrl_offset += n_ctrls
+            # Skip gripper controls in offset
+            gripper_ctrls = [m for m in self._control_map
+                             if m["robot_name"] == robot.name and m.get("is_gripper")]
+            ctrl_offset += len(gripper_ctrls)
+
     def _compute_ik(
         self, robot_name: str, target_pos: np.ndarray, target_quat: np.ndarray | None = None
     ) -> np.ndarray:
@@ -1423,20 +1472,98 @@ class PyBulletSimulator(BaseSimulator):
         except Exception:
             return self.get_robot_state(robot_name) or np.array([], dtype=np.float32)
 
-    def _apply_action(self, action: np.ndarray) -> None:
+    def _apply_action(self, action: np.ndarray, arm_id: str | None = None) -> None:
         """Apply action to the simulation.
 
         Args:
             action: Action vector with joint position targets.
+            arm_id: Optional arm identifier for multi-agent routing.
+                None applies to all arms (backward compatible).
         """
         if action is None or len(action) == 0:
             return
+
+        # Validate arm_id if provided
+        if arm_id is not None:
+            if self._arm_joint_ranges is None or arm_id not in self._arm_joint_ranges:
+                raise ValueError(
+                    f"Unknown arm_id={arm_id!r}. "
+                    f"Available: {list(self._arm_joint_ranges.keys()) if self._arm_joint_ranges else 'none'}"
+                )
 
         if self._action_mode in ("endeffector_pose", "endeffector_delta"):
             self._apply_action_ik(action)
             return
 
         if self._control_map:
+            if arm_id is not None:
+                # Route action only to the specified arm's DOFs
+                action_idx = 0
+                multi_agent = getattr(self._scene, "multi_agent", None)
+                target_robot_ref = None
+                if multi_agent is not None:
+                    arm = multi_agent.get_arm(arm_id)
+                    if arm is not None:
+                        target_robot_ref = arm.robot_ref
+
+                for mapping in self._control_map:
+                    robot_name = mapping["robot_name"]
+                    idx = mapping["ctrl_index"]
+                    if idx >= len(action) and arm_id is None:
+                        continue
+
+                    if arm_id is not None and robot_name != target_robot_ref:
+                        continue
+
+                    if mapping.get("is_gripper"):
+                        gripper_target = float(action[action_idx]) if action_idx < len(action) else 0.0
+                        if robot_name in self._joint_ids and "gripper" in self._joint_ids[robot_name]:
+                            body_id = self._body_ids[robot_name]
+                            joint_idx = self._joint_ids[robot_name]["gripper"]
+                            self._pb.setJointMotorControl2(
+                                body_id,
+                                joint_idx,
+                                self._pb.POSITION_CONTROL,
+                                targetPosition=gripper_target,
+                                force=100.0,
+                                physicsClientId=self._physics_client,
+                            )
+                        action_idx += 1
+                        continue
+
+                    if action_idx < len(action):
+                        target = float(action[action_idx])
+                        robot_name = mapping["robot_name"]
+                        joint_name = mapping["joint_name"]
+                        if robot_name not in self._body_ids:
+                            action_idx += 1
+                            continue
+                        body_id = self._body_ids[robot_name]
+                        joint_idx = self._joint_ids[robot_name].get(joint_name)
+                        if joint_idx is None:
+                            action_idx += 1
+                            continue
+                        if self._action_mode == "torque":
+                            self._pb.setJointMotorControl2(
+                                body_id,
+                                joint_idx,
+                                self._pb.TORQUE_CONTROL,
+                                force=target,
+                                physicsClientId=self._physics_client,
+                            )
+                        else:
+                            self._pb.setJointMotorControl2(
+                                body_id,
+                                joint_idx,
+                                self._pb.POSITION_CONTROL,
+                                targetPosition=target,
+                                force=100.0,
+                                physicsClientId=self._physics_client,
+                            )
+                        action_idx += 1
+                return
+
+            # arm_id=None: apply to all controls (backward compatible)
             for mapping in self._control_map:
                 idx = mapping["ctrl_index"]
                 if idx >= len(action):

@@ -35,12 +35,12 @@ def _make_dual_arm_scene() -> SceneDefinition:
                 base_pose={"position": {"x": -0.2, "y": 0, "z": 0}},
                 joints=[
                     {
-                        "name": "joint_0",
+                        "name": "s_joint_0",
                         "type": "revolute",
                         "limits": {"lower": -3.14, "upper": 3.14, "velocity": 2.0, "effort": 100.0},
                     },
                     {
-                        "name": "joint_1",
+                        "name": "s_joint_1",
                         "type": "revolute",
                         "limits": {"lower": -3.14, "upper": 3.14, "velocity": 2.0, "effort": 100.0},
                     },
@@ -53,7 +53,7 @@ def _make_dual_arm_scene() -> SceneDefinition:
                 base_pose={"position": {"x": 0.2, "y": 0, "z": 0}},
                 joints=[
                     {
-                        "name": "joint_0",
+                        "name": "a_joint_0",
                         "type": "revolute",
                         "limits": {"lower": -3.14, "upper": 3.14, "velocity": 2.0, "effort": 100.0},
                     },
@@ -193,7 +193,6 @@ class TestMuJoCoArmRouting:
         import os
 
         # Suppress any OS-level GL/display issues
-        monkeypatch.setenv("MUJOCO_GL", "osmesa")
         monkeypatch.setenv("DISPLAY", "")
 
         scene = _make_dual_arm_scene()
@@ -221,7 +220,6 @@ class TestMuJoCoArmRouting:
     @pytest.mark.integration
     def test_mujoco_arm_id_surgeon_routes_surgeon_only(self, monkeypatch):
         """arm_id="surgeon" routes action only to surgeon arm joints."""
-        monkeypatch.setenv("MUJOCO_GL", "osmesa")
         monkeypatch.setenv("DISPLAY", "")
 
         scene = _make_dual_arm_scene()
@@ -264,7 +262,6 @@ class TestMuJoCoArmRouting:
     @pytest.mark.integration
     def test_mujoco_arm_id_unknown_raises_value_error(self, monkeypatch):
         """arm_id="nonexistent" raises ValueError."""
-        monkeypatch.setenv("MUJOCO_GL", "osmesa")
         monkeypatch.setenv("DISPLAY", "")
 
         scene = _make_dual_arm_scene()
@@ -369,7 +366,6 @@ class TestSingleArmBackwardCompat:
     @pytest.mark.integration
     def test_mujoco_single_arm_arm_id_none(self, monkeypatch):
         """Single-arm MuJoCo scene works with arm_id=None (backward compat)."""
-        monkeypatch.setenv("MUJOCO_GL", "osmesa")
         monkeypatch.setenv("DISPLAY", "")
 
         scene = _make_single_arm_scene()
@@ -434,7 +430,7 @@ class TestMultiAgentSurgicalEnv:
                     "base_pose": {"position": {"x": -0.2, "y": 0, "z": 0}},
                     "joints": [
                         {
-                            "name": "joint_0",
+                            "name": "s_joint_0",
                             "type": "revolute",
                             "limits": {"lower": -3.14, "upper": 3.14, "velocity": 2.0, "effort": 100.0},
                         },
@@ -447,7 +443,7 @@ class TestMultiAgentSurgicalEnv:
                     "base_pose": {"position": {"x": 0.2, "y": 0, "z": 0}},
                     "joints": [
                         {
-                            "name": "joint_0",
+                            "name": "a_joint_0",
                             "type": "revolute",
                             "limits": {"lower": -3.14, "upper": 3.14, "velocity": 2.0, "effort": 100.0},
                         },
@@ -471,7 +467,6 @@ class TestMultiAgentSurgicalEnv:
     @pytest.mark.integration
     def test_env_not_instance_of_surgical_env(self, dual_arm_scene, monkeypatch):
         """isinstance(MultiAgentSurgicalEnv, SurgicalEnv) is False (D-11 passthrough)."""
-        monkeypatch.setenv("MUJOCO_GL", "osmesa")
         monkeypatch.setenv("DISPLAY", "")
 
         from surg_rl.marl.multi_agent_env import MultiAgentSurgicalEnv
@@ -489,7 +484,6 @@ class TestMultiAgentSurgicalEnv:
     @pytest.mark.integration
     def test_env_reset_returns_agent_dicts(self, dual_arm_scene, monkeypatch):
         """env.reset() returns ({agent_id: obs_dict}, {agent_id: info_dict})."""
-        monkeypatch.setenv("MUJOCO_GL", "osmesa")
         monkeypatch.setenv("DISPLAY", "")
 
         from surg_rl.marl.multi_agent_env import MultiAgentSurgicalEnv
@@ -515,7 +509,6 @@ class TestMultiAgentSurgicalEnv:
     @pytest.mark.integration
     def test_env_agents_property(self, dual_arm_scene, monkeypatch):
         """env.agents equals ["surgeon", "assistant"]."""
-        monkeypatch.setenv("MUJOCO_GL", "osmesa")
         monkeypatch.setenv("DISPLAY", "")
 
         from surg_rl.marl.multi_agent_env import MultiAgentSurgicalEnv
@@ -533,7 +526,6 @@ class TestMultiAgentSurgicalEnv:
     @pytest.mark.integration
     def test_env_step_returns_5_tuple_of_dicts(self, dual_arm_scene, monkeypatch):
         """env.step({"surgeon": a_s, "assistant": a_a}) returns 5-tuple of dicts."""
-        monkeypatch.setenv("MUJOCO_GL", "osmesa")
         monkeypatch.setenv("DISPLAY", "")
 
         from surg_rl.marl.multi_agent_env import MultiAgentSurgicalEnv
@@ -565,7 +557,6 @@ class TestMultiAgentSurgicalEnv:
     @pytest.mark.integration
     def test_surgeon_assistant_obs_differ(self, dual_arm_scene, monkeypatch):
         """Surgeon and assistant observations differ (filtered per-agent)."""
-        monkeypatch.setenv("MUJOCO_GL", "osmesa")
         monkeypatch.setenv("DISPLAY", "")
 
         from surg_rl.marl.multi_agent_env import MultiAgentSurgicalEnv
@@ -589,7 +580,6 @@ class TestMultiAgentSurgicalEnv:
     @pytest.mark.integration
     def test_reward_dict_separate_values(self, dual_arm_scene, monkeypatch):
         """Reward dict has separate values for surgeon and assistant."""
-        monkeypatch.setenv("MUJOCO_GL", "osmesa")
         monkeypatch.setenv("DISPLAY", "")
 
         from surg_rl.marl.multi_agent_env import MultiAgentSurgicalEnv
@@ -612,7 +602,6 @@ class TestMultiAgentSurgicalEnv:
     @pytest.mark.integration
     def test_env_close_cleans_up(self, dual_arm_scene, monkeypatch):
         """env.close() cleans up without error."""
-        monkeypatch.setenv("MUJOCO_GL", "osmesa")
         monkeypatch.setenv("DISPLAY", "")
 
         from surg_rl.marl.multi_agent_env import MultiAgentSurgicalEnv
@@ -630,7 +619,6 @@ class TestMultiAgentSurgicalEnv:
     @pytest.mark.integration
     def test_observation_space_function(self, dual_arm_scene, monkeypatch):
         """env.observation_space("surgeon") and .action_space("surgeon") work."""
-        monkeypatch.setenv("MUJOCO_GL", "osmesa")
         monkeypatch.setenv("DISPLAY", "")
 
         from surg_rl.marl.multi_agent_env import MultiAgentSurgicalEnv
@@ -653,7 +641,6 @@ class TestMultiAgentSurgicalEnv:
     @pytest.mark.integration
     def test_env_has_single_surgical_env(self, dual_arm_scene, monkeypatch):
         """hasattr(env, '_surgical_env') is True (one SurgicalEnv owned)."""
-        monkeypatch.setenv("MUJOCO_GL", "osmesa")
         monkeypatch.setenv("DISPLAY", "")
 
         from surg_rl.marl.multi_agent_env import MultiAgentSurgicalEnv
@@ -672,7 +659,6 @@ class TestMultiAgentSurgicalEnv:
     @pytest.mark.integration
     def test_env_raises_if_no_multi_agent(self, monkeypatch):
         """MultiAgentSurgicalEnv raises ValueError if scene.multi_agent is None."""
-        monkeypatch.setenv("MUJOCO_GL", "osmesa")
         monkeypatch.setenv("DISPLAY", "")
 
         scene = _make_single_arm_scene()

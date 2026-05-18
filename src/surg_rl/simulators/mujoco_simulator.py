@@ -68,6 +68,7 @@ class MuJoCoSimulator(BaseSimulator):
         self._mjcf_path: Path | None = None
         self._renderer_available: bool | None = None
         self._control_map: list[dict[str, Any]] = []
+        self._arm_joint_ranges: dict[str, tuple[int, int]] | None = None
         self._last_depth: np.ndarray | None = None
         self._action_mode: str = "position"
         self._end_effector_target_pos: np.ndarray | None = None
@@ -159,6 +160,7 @@ class MuJoCoSimulator(BaseSimulator):
             self._data = self._mujoco.MjData(self._model)
             self._loaded = True
             self._build_control_map()
+            self._build_arm_joint_ranges()
             logger.info(f"Loaded scene: {scene_definition.metadata.name}")
         except Exception as exc:
             logger.error(f"Failed to load MuJoCo model: {exc}")
@@ -571,6 +573,50 @@ class MuJoCoSimulator(BaseSimulator):
                 except Exception:
                     pass
 
+    def _build_arm_joint_ranges(self) -> None:
+        """Build per-arm joint index ranges for arm_id routing.
+
+        Only populated when scene has MultiAgentConfig with arm role bindings.
+        Maps arm role (e.g., "surgeon", "assistant") → (start_dof, end_dof)
+        in the _control_map flat action space.
+        """
+        self._arm_joint_ranges = None
+        scene = self._scene
+        if scene is None:
+            return
+        multi_agent = getattr(scene, "multi_agent", None)
+        if multi_agent is None:
+            return
+
+        self._arm_joint_ranges = {}
+        ctrl_offset = 0
+        for robot in scene.robots:
+            # Count non-gripper controls for this robot
+            robot_ctrls = [m for m in self._control_map
+                           if m["robot_name"] == robot.name and not m.get("is_gripper")]
+            n_ctrls = len(robot_ctrls)
+            if n_ctrls == 0:
+                continue
+
+            # Find which arm role binds to this robot
+            arm = multi_agent.get_arm(robot.name)
+            if arm is None:
+                # Try matching by robot_ref
+                for arm_cfg in multi_agent.arm_configs:
+                    if arm_cfg.robot_ref == robot.name:
+                        arm = arm_cfg
+                        break
+
+            if arm is not None:
+                role_value = arm.role.value if hasattr(arm.role, "value") else str(arm.role)
+                self._arm_joint_ranges[role_value] = (ctrl_offset, ctrl_offset + n_ctrls)
+
+            ctrl_offset += n_ctrls
+            # Skip gripper controls in offset counting
+            gripper_ctrls = [m for m in self._control_map
+                             if m["robot_name"] == robot.name and m.get("is_gripper")]
+            ctrl_offset += len(gripper_ctrls)
+
     def get_num_controls(self) -> int:
         """Return number of controllable DOFs."""
         if self._control_map:
@@ -716,21 +762,41 @@ class MuJoCoSimulator(BaseSimulator):
         except Exception:
             return current_positions
 
-    def _apply_action(self, action: np.ndarray) -> None:
+    def _apply_action(self, action: np.ndarray, arm_id: str | None = None) -> None:
         """Apply action to the simulation.
 
         Args:
             action: Action vector.
+            arm_id: Optional arm identifier for multi-agent routing.
+                None applies to all arms (backward compatible).
         """
         if action is None or len(action) == 0:
             return
+
+        # Validate arm_id if provided
+        if arm_id is not None:
+            if self._arm_joint_ranges is None or arm_id not in self._arm_joint_ranges:
+                raise ValueError(
+                    f"Unknown arm_id={arm_id!r}. "
+                    f"Available: {list(self._arm_joint_ranges.keys()) if self._arm_joint_ranges else 'none'}"
+                )
 
         # --- End-effector control modes (IK) --------------------------------
         if self._action_mode in ("endeffector_pose", "endeffector_delta"):
             if not self._scene or not self._scene.robots:
                 return
-            robot = self._scene.robots[0]
-            robot_name = robot.name
+
+            # When arm_id specified, find the corresponding robot
+            robot_name = None
+            if arm_id is not None:
+                multi_agent = getattr(self._scene, "multi_agent", None)
+                if multi_agent is not None:
+                    arm = multi_agent.get_arm(arm_id)
+                    if arm is not None:
+                        robot_name = arm.robot_ref
+
+            if robot_name is None:
+                robot_name = self._scene.robots[0].name
 
             if len(action) < 6:
                 return
@@ -787,11 +853,32 @@ class MuJoCoSimulator(BaseSimulator):
 
         # --- Joint-space modes (position / torque / velocity) ---------------
         if self._control_map:
-            for i, mapping in enumerate(self._control_map):
-                if i < len(action):
+            if arm_id is not None:
+                # Route action only to the specified arm's DOFs
+                start_dof, end_dof = self._arm_joint_ranges[arm_id]  # type: ignore[index]
+                action_idx = 0
+                for mapping in self._control_map:
                     ctrl_idx = mapping["ctrl_index"]
                     if ctrl_idx < len(self._data.ctrl):
-                        self._data.ctrl[ctrl_idx] = action[i]
+                        # Check if this mapping belongs to the target arm
+                        robot_name = mapping["robot_name"]
+                        role_matched = False
+                        multi_agent = getattr(self._scene, "multi_agent", None)
+                        if multi_agent is not None:
+                            arm = multi_agent.get_arm(arm_id)
+                            if arm is not None and arm.robot_ref == robot_name:
+                                role_matched = True
+
+                        if role_matched and action_idx < len(action):
+                            self._data.ctrl[ctrl_idx] = float(action[action_idx])
+                            action_idx += 1
+            else:
+                # arm_id=None: apply to all controls (backward compatible)
+                for i, mapping in enumerate(self._control_map):
+                    if i < len(action):
+                        ctrl_idx = mapping["ctrl_index"]
+                        if ctrl_idx < len(self._data.ctrl):
+                            self._data.ctrl[ctrl_idx] = action[i]
             return
 
         # Fallback: apply sequentially

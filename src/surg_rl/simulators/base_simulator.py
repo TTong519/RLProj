@@ -289,13 +289,16 @@ class BaseSimulator(ABC):
         """
         pass
 
-    def apply_action(self, action: np.ndarray) -> None:
+    def apply_action(self, action: np.ndarray, arm_id: str | None = None) -> None:
         """Apply an action to the simulation.
 
         Args:
             action: Action vector (robot joint targets or end effector pose).
+            arm_id: Optional arm identifier for multi-agent routing.
+                None applies to all arms (backward compatible).
+                Specific arm_id routes only to that arm's DOFs.
         """
-        self._apply_action(action)
+        self._apply_action(action, arm_id=arm_id)
 
     def get_num_controls(self) -> int:
         """Return the number of controllable DOFs.
@@ -319,10 +322,14 @@ class BaseSimulator(ABC):
         raise NotImplementedError(f"Backend does not support action mode switching: {mode}")
 
     @abstractmethod
-    def _apply_action(self, action: np.ndarray) -> None:
+    def _apply_action(self, action: np.ndarray, arm_id: str | None = None) -> None:
         """Internal implementation of action application.
 
         Subclasses may override this instead of apply_action.
+
+        Args:
+            action: Action vector (robot joint targets or end effector pose).
+            arm_id: Optional arm identifier for multi-agent routing.
         """
         pass
 
