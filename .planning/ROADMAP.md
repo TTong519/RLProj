@@ -65,8 +65,8 @@
 
 - [x] **Phase 19: Schema Foundation** — Pydantic v2 models + optional dependency groups for all five v0.4.0 feature modules
 - [x] **Phase 20: Real Surgical Assets** — trimesh OBJ loading for instruments (11) and organs (4) with decimation, fallback, and [assets] extras
-- [ ] **Phase 21: Surgical Task Curriculum** — 6 task types × 3 difficulty levels integrated with CurriculumScheduler, structured success/failure detection · [Plans](phases/21-surgical-task-curriculum/)
-- [ ] **Phase 22: Multi-Agent RL** — PettingZoo ParallelEnv dual-arm coordination, SuperSuit SB3 wrappers, thin adapter over SurgicalEnv
+- [x] **Phase 21: Surgical Task Curriculum** — 6 task types × 3 difficulty levels integrated with CurriculumScheduler, structured success/failure detection · [Plans](phases/21-surgical-task-curriculum/)
+- [ ] **Phase 22: Multi-Agent RL** — PettingZoo ParallelEnv dual-arm coordination, SuperSuit SB3 wrappers, thin adapter over SurgicalEnv · [Plans](phases/22-multi-agent-rl/)
 - [ ] **Phase 23: Performance Benchmarking** — ExperimentRunner with SB3-only comparison, publication plots/tables, per-backend reporting
 - [ ] **Phase 24: DreamerV3 World Models** — feasibility spike, process-isolated JAX training, GymToEmbodiedWrapper, pixel/state observation
 
@@ -128,7 +128,12 @@ Plans:
   2. SuperSuit wrappers (e.g. `ss.pettingzoo_env_to_vec_env_v1`) convert the PettingZoo env to a format SB3 can train on — running an SB3 PPO policy against the MARL env completes a full training loop without error
   3. `MultiAgentConfig.shared_policy=True` trains both agents from a single SB3 model; `shared_policy=False` trains independent per-agent policies — both paths complete training and produce checkpoint files
   4. `MultiAgentSurgicalEnv` owns exactly ONE `SurgicalEnv` instance and delegates all simulation logic (physics stepping, reward computation, scene loading) to it — zero simulation code is duplicated in the MARL layer, routing is pure adapter logic
-**Plans**: TBD
+**Plans**: 3 plans in 3 waves
+
+Plans:
+- [ ] 22-01-PLAN.md — ArmRole/ArmConfig schema + MultiAgentConfig expansion + SceneDefinition.multi_agent
+- [ ] 22-02-PLAN.md — BaseSimulator arm_id routing + MultiAgentSurgicalEnv ParallelEnv + ObservationFilter
+- [ ] 22-03-PLAN.md — SuperSuit wrapper pipeline + MultiAgentTrainingManager + surg-rl marl-train CLI
 
 ### Phase 23: Performance Benchmarking
 **Goal**: Reproducible experiment runner comparing SB3 algorithms across surgical tasks, producing publication-quality plots, tables, and per-backend reports — treats MuJoCo and PyBullet as separate hardware targets.
@@ -160,11 +165,11 @@ Plans:
 |-------|----------------|--------|-----------|
 | 19. Schema Foundation | 3/3 | Complete | 2026-05-13 |
 | 20. Real Surgical Assets | 4/4 | Complete | 2026-05-13 |
-| 21. Surgical Task Curriculum | 0/3 | Planned | 2026-05-17 |
-| 22. Multi-Agent RL | 0/0 | Not started | - |
+| 21. Surgical Task Curriculum | 3/3 | Complete | 2026-05-17 |
+| 22. Multi-Agent RL | 0/3 | Planned | 2026-05-18 |
 | 23. Performance Benchmarking | 0/0 | Not started | - |
 | 24. DreamerV3 World Models | 0/0 | Not started | - |
 
 ---
 
-*Roadmap last updated: 2026-05-13 — v0.4.0 phased roadmap created*
+*Roadmap last updated: 2026-05-17 — Phase 21 complete*

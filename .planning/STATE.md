@@ -5,22 +5,22 @@
 See: .planning/PROJECT.md (updated 2026-05-13)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** Phase 21 — Surgical Task Curriculum
+**Current focus:** Phase 22 — Multi-Agent RL
 
 ## Current Position
 
 Milestone: v0.4.0 — Training Infrastructure & Realism
-Phase: 21 of 24 (Surgical Task Curriculum)
-Plan: —
-Status: Ready to plan
-Last activity: 2026-05-13 — Phase 20 complete (trimesh mesh loading, URDF generation, organ tetgen pipeline, procedural fallbacks)
+Phase: 22 of 24 (Multi-Agent RL)
+Plan: — (3 plans, ready to execute)
+Status: Ready to execute
+Last activity: 2026-05-18 — Phase 22 planned (3 plans in 3 waves)
 
 Progress: ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 8%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 67 (across v0.1.0 through v0.3.2)
+- Total plans completed: 70 (across v0.1.0 through v0.4.0)
 - Total execution time: tracked per phase in milestone archives
 
 **By Milestone:**
@@ -39,6 +39,7 @@ Progress: ██░░░░░░░░░░░░░░░░░░░░░�
 
 - [v0.3.2]: Tetgen replaces VTK entirely (not side-by-side); MuJoCo `<flex>` (not `<flexcomp>`) for arbitrary tetgen meshes; cutting is discrete trigger with 500ms cooldown; PhiFlow over Mantaflow for Eulerian fluids
 - [v0.4.0 research]: Schema-first (all new Pydantic v2 models, all optional fields); trimesh is sole new mesh library; PettingZoo ParallelEnv MUST be separate class from SurgicalEnv; DreamerV3 needs process isolation via JAX subprocess with `XLA_PYTHON_CLIENT_MEM_FRACTION=0.4`; benchmarking treats MuJoCo and PyBullet as separate targets; CurriculumScheduler extension must be additive (never replace Phase 3 fix)
+- [v0.4.0 Phase 21]: TaskResult Pydantic v2 hierarchy with 6 per-task sub-models; TASK_REWARD_REGISTRY dispatch replaces string-matching; PARAM_BOUNDS + interpolate_params() for continuous difficulty interpolation; check_success/check_failure on all 6 reward classes; TaskRewardRouter with safe None/unknown handling; D-10: apply_parameters() never modified
 
 ### Pending Todos
 
@@ -64,10 +65,10 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-13
-Stopped at: ROADMAP.md, STATE.md, REQUIREMENTS.md traceability written for v0.4.0
+Last session: 2026-05-17
+Stopped at: Phase 21 complete, ready to plan Phase 22
 Resume file: None
 
 ---
 
-*Updated: 2026-05-13 — v0.4.0 roadmap created*
+*Updated: 2026-05-17 — Phase 21 complete*
