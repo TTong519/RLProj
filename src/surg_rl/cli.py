@@ -525,6 +525,61 @@ def evaluate(
         raise typer.Exit(1) from e
 
 
+@app.command(name="marl-train")
+def marl_train(
+    scene: str = typer.Option(..., "--scene", "-s", help="Path to dual-arm scene JSON/YAML"),
+    algorithm: str = typer.Option("PPO", "--algorithm", "-a", help="SB3 algorithm (PPO, SAC)"),
+    policy: str = typer.Option("shared", "--policy", "-p", help="Policy mode: shared or independent"),
+    timesteps: int = typer.Option(100000, "--timesteps", "-t", help="Total training timesteps"),
+    model_dir: str = typer.Option("models/", "--model-dir", "-m", help="Model output directory"),
+    simulator: str = typer.Option("mujoco", "--simulator", help="Simulator backend (mujoco or pybullet)"),
+    headless: bool = typer.Option(True, "--headless/--no-headless", help="Run without GUI"),
+) -> None:
+    """Train dual-arm multi-agent RL policies.
+
+    Supports shared policy (one model for both arms) and independent
+    policy (per-arm models trained in parallel threads).
+
+    Examples:
+        surg-rl marl-train --scene scenes/dual_arm.json --policy shared
+        surg-rl marl-train --scene scenes/dual_arm.json --policy independent --algorithm SAC
+    """
+    from surg_rl.marl.multi_agent_env import MultiAgentSurgicalEnv
+    from surg_rl.marl.training import MultiAgentTrainingManager
+    from surg_rl.rl.environment import SurgicalEnvConfig
+
+    if policy not in ("shared", "independent"):
+        console.print(f"[bold red]Error:[/bold red] --policy must be 'shared' or 'independent', got '{policy}'")
+        raise typer.Exit(code=1)
+
+    render_mode = None if headless else "rgb_array"
+    try:
+        config = SurgicalEnvConfig(
+            scene_path=scene,
+            simulator_type=simulator,
+            render_mode=render_mode,
+        )
+        env = MultiAgentSurgicalEnv(config, render_mode=render_mode)
+
+        trainer = MultiAgentTrainingManager(
+            env=env,
+            algorithm=algorithm,
+            shared_policy=(policy == "shared"),
+            total_timesteps=timesteps,
+            model_dir=model_dir,
+        )
+        result = trainer.train()
+        console.print(f"[bold green]Training complete.[/bold green] Models: {result}")
+    except ImportError as e:
+        console.print(f"[bold red]Import Error:[/bold red] {e}")
+        console.print("[dim]Install: pip install surg-rl[marl][/dim]")
+        raise typer.Exit(1) from e
+    except Exception as e:
+        logger.error(f"MARL training failed: {e}")
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(1) from e
+
+
 @app.command(name="train-rllib")
 def cli_train_rllib(
     scene: str = typer.Option("scenes/simple_suturing.json", "--scene", "-s", help="Scene definition JSON"),
