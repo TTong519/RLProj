@@ -23,8 +23,22 @@ from .observation_filter import ObservationFilter
 
 logger = get_logger(__name__)
 
+_PARALLEL_ENV_BASE: type | None = None
 
-class MultiAgentSurgicalEnv:
+
+def _get_parallel_env_base() -> type:
+    """Lazily resolve the PettingZoo ParallelEnv base class."""
+    global _PARALLEL_ENV_BASE
+    if _PARALLEL_ENV_BASE is None:
+        try:
+            from pettingzoo import ParallelEnv
+            _PARALLEL_ENV_BASE = ParallelEnv
+        except ImportError:
+            _PARALLEL_ENV_BASE = object
+    return _PARALLEL_ENV_BASE
+
+
+class MultiAgentSurgicalEnv(_get_parallel_env_base()):
     """Multi-agent surgical RL environment (PettingZoo ParallelEnv adapter).
 
     This is a PASSTHROUGH adapter (D-11) — it owns exactly ONE SurgicalEnv
