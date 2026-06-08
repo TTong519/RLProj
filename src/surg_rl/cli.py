@@ -1165,6 +1165,24 @@ def benchmark(
         console.print("[bold green]✓ Benchmark complete![/bold green]")
         console.print(f"  • Results: {runner.base_output_dir}")
         
+        # Generate plots
+        if cfg.render_plots:
+            with console.status('[bold cyan]Generating plots...'):
+                from surg_rl.benchmark.plots import PlotRenderer
+                renderer = PlotRenderer(cfg, result, runner.base_output_dir)
+                plot_paths = renderer.render_all()
+            console.print(f'  ✓ Generated {len(plot_paths)} plots')
+        else:
+            plot_paths = []
+        
+        # Generate reports
+        with console.status('[bold cyan]Generating report...'):
+            from surg_rl.benchmark.report import ReportGenerator
+            generator = ReportGenerator(cfg, result, plot_paths, runner.base_output_dir)
+            report_paths = generator.generate_all()
+        console.print(f'  ✓ Report: {report_paths["html"]}')
+        console.print(f'  ✓ Data: {report_paths["json"]}')
+        
         # Print final summary
         from rich.table import Table
         
@@ -1175,14 +1193,9 @@ def benchmark(
             # Group results by backend for display
             backend_results = {}
             for (algo, backend), stats in result.items():
-                if "status" in stats:
-                    if backend not in backend_results:
-                        backend_results[backend] = []
-                    backend_results[backend].append((algo, stats))
-                else:
-                    if backend not in backend_results:
-                        backend_results[backend] = []
-                    backend_results[backend].append((algo, stats))
+                if backend not in backend_results:
+                    backend_results[backend] = []
+                backend_results[backend].append((algo, stats))
             
             for backend, algos in backend_results.items():
                 table = Table(title=f"Results: {backend}")
@@ -1207,6 +1220,14 @@ def benchmark(
                 summary_console.print(table)
         else:
             print(f"Results saved to: {runner.base_output_dir}")
+        
+        # Print DreamerV3 status if comparison enabled
+        if cfg.dreamer_comparison:
+            console.print("[yellow]DreamerV3: pending — Phase 24[/yellow]")
+        
+        # Print output location and reproduction command
+        console.print(f"\n[bold]Output directory:[/bold] {runner.base_output_dir}")
+        console.print(f"[bold]Reproduce with:[/bold] surg-rl benchmark --config experiments/{cfg.experiment_name}.yaml")
             
     except Exception as e:
         logger.error(f"Benchmark failed: {e}")
