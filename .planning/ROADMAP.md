@@ -66,7 +66,7 @@
 - [x] **Phase 19: Schema Foundation** — Pydantic v2 models + optional dependency groups for all five v0.4.0 feature modules
 - [x] **Phase 20: Real Surgical Assets** — trimesh OBJ loading for instruments (11) and organs (4) with decimation, fallback, and [assets] extras
 - [x] **Phase 21: Surgical Task Curriculum** — 6 task types × 3 difficulty levels integrated with CurriculumScheduler, structured success/failure detection · [Plans](phases/21-surgical-task-curriculum/)
-- [ ] **Phase 22: Multi-Agent RL** — PettingZoo ParallelEnv dual-arm coordination, SuperSuit SB3 wrappers, thin adapter over SurgicalEnv · [Plans](phases/22-multi-agent-rl/)
+- [x] **Phase 22: Multi-Agent RL** — PettingZoo ParallelEnv dual-arm coordination, SuperSuit SB3 wrappers, thin adapter over SurgicalEnv · [Plans](phases/22-multi-agent-rl/)
 - [ ] **Phase 23: Performance Benchmarking** — ExperimentRunner with SB3-only comparison, publication plots/tables, per-backend reporting
 - [ ] **Phase 24: DreamerV3 World Models** — feasibility spike, process-isolated JAX training, GymToEmbodiedWrapper, pixel/state observation
 
@@ -145,7 +145,12 @@ Plans:
   3. `ExperimentConfig` serializes to YAML deterministically — `surg-rl benchmark --config experiments/suturing_v1.yaml` reproduces the exact same experiment run with identical seed propagation and hyperparameters
   4. Benchmark reports include a `backend` column — MuJoCo and PyBullet results appear in separate rows/tables; cross-backend aggregation is never performed and the system does not claim cross-backend determinism
   5. SB3-only benchmarking is fully functional at this phase; DreamerV3 comparison is present as a conditional integration point that reports `DreamerV3: pending — Phase 24` when DreamerV3 checkpoints are not yet available
-**Plans**: TBD
+**Plans**: 3 plans in 2 waves
+
+Plans:
+- [ ] 23-01-PLAN.md — ExperimentConfig schema, YAML round-trip, lazy imports, CLI benchmark subcommand
+- [ ] 23-02-PLAN.md — ExperimentRunner (multiprocessing seed sweeps), MetricCollectorCallback, Aggregator (IQM, mean±std, scalar metrics)
+- [ ] 23-03-PLAN.md — PlotRenderer (learning curves, bar charts, tables), ReportGenerator (HTML + JSON), CLI integration
 
 ### Phase 24: DreamerV3 World Models
 **Goal**: Feasibility spike determines whether DreamerV3's RSSM can model surgical dynamics; if yes, integrate DreamerV3 with process isolation for surgical scene training from pixels or low-dim state.
@@ -166,10 +171,10 @@ Plans:
 | 19. Schema Foundation | 3/3 | Complete | 2026-05-13 |
 | 20. Real Surgical Assets | 4/4 | Complete | 2026-05-13 |
 | 21. Surgical Task Curriculum | 3/3 | Complete | 2026-05-17 |
-| 22. Multi-Agent RL | 0/3 | Planned | 2026-05-18 |
+| 22. Multi-Agent RL | 3/3 | Complete | 2026-05-18 |
 | 23. Performance Benchmarking | 0/0 | Not started | - |
 | 24. DreamerV3 World Models | 0/0 | Not started | - |
 
 ---
 
-*Roadmap last updated: 2026-05-17 — Phase 21 complete*
+*Roadmap last updated: 2026-05-18 — Phase 22 complete*
