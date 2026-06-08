@@ -20,8 +20,11 @@ from surg_rl.scene_definition.schema import HardwareBackend
 from surg_rl.scene_generation import TextParser, VisionParser, get_template
 from surg_rl.utils.config import get_settings
 from surg_rl.utils.logging import get_logger, setup_logging
+from surg_rl.utils.lazy_imports import LazyImport
 
 logger = get_logger(__name__)
+
+RICH = LazyImport("rich", "benchmark")
 
 
 def _yaml_serialize(scene):
@@ -996,6 +999,219 @@ def ros2_control(
             pass
         finally:
             env.close()
+
+
+@app.command()
+def benchmark(
+    config: str | None = typer.Option(
+        None, "--config", "-c", help="Path to experiment YAML config file"
+    ),
+    task: str | None = typer.Option(
+        None, "--task", help="Surgical task type (suturing, knot_tying, needle_insertion, grasping, cutting, dissection)"
+    ),
+    algorithms: str | None = typer.Option(
+        None, "--algorithms", "-a", help="Comma-separated algorithms (PPO,SAC,TD3,DDPG,A2C)"
+    ),
+    seeds: str | None = typer.Option(
+        None, "--seeds", help="Comma-seeded random seeds (e.g., 1,2,3,4,5)"
+    ),
+    backends: str | None = typer.Option(
+        None, "--backends", help="Comma-separated backends (mujoco,pybullet,all)"
+    ),
+    timesteps: int | None = typer.Option(
+        None, "--timesteps", "-t", help="Training timesteps per seed"
+    ),
+    max_parallel: int | None = typer.Option(
+        None, "--max-parallel", help="Max parallel seed processes"
+    ),
+    experiment_name: str | None = typer.Option(
+        None, "--experiment-name", "-e", help="Experiment name for output directory"
+    ),
+    output_dir: str | None = typer.Option(
+        None, "--output-dir", help="Output directory for reports"
+    ),
+    eval_episodes: int | None = typer.Option(
+        None, "--eval-episodes", help="Evaluation episodes per seed"
+    ),
+    render_eval: bool = typer.Option(
+        False, "--render-eval", help="Render during evaluation episodes"
+    ),
+    render_plots: bool = typer.Option(
+        True, "--render-plots/--no-plots", help="Generate publication-quality plots"
+    ),
+    statistical_tests: bool = typer.Option(
+        True, "--statistical-tests/--no-stats", help="Run rliable IQM + stratified bootstrap CI"
+    ),
+    backend_reporting: bool = typer.Option(
+        True, "--backend-reporting/--no-backend-reporting", help="Report results per-backend"
+    ),
+    dreamer_comparison: bool = typer.Option(
+        False, "--dreamer-comparison", help="Include DreamerV3 comparison (Phase 24)"
+    ),
+    save_per_seed_csv: bool = typer.Option(
+        True, "--save-csv/--no-csv", help="Save per-seed metrics CSV"
+    ),
+    save_aggregated_json: bool = typer.Option(
+        True, "--save-json/--no-json", help="Save aggregated metrics.json"
+    ),
+    verbose: int = typer.Option(1, "--verbose", "-v", help="Verbosity level (0, 1, 2)"),
+) -> None:
+    """Run performance benchmark experiments comparing RL algorithms.
+    
+    Uses YAML config for reproducible runs, with CLI flags overriding YAML values.
+    
+    Examples:
+        surg-rl benchmark --task suturing --algorithms PPO,SAC --seeds 5
+        surg-rl benchmark --config experiments/run.yaml --backends mujoco
+        surg-rl benchmark --config experiments/base.yaml --timesteps 200000 --seeds 10
+    """
+    from surg_rl.benchmark.experiment_config import ExperimentConfig
+    
+    console.print("[bold blue]Starting Performance Benchmark[/bold blue]")
+    
+    # Build CLI overrides dict
+    overrides = {}
+    if task is not None:
+        overrides["task"] = task
+    if algorithms is not None:
+        overrides["algorithms"] = [a.strip() for a in algorithms.split(",")]
+    if seeds is not None:
+        overrides["seeds"] = [int(s.strip()) for s in seeds.split(",")]
+    if backends is not None:
+        overrides["backends"] = [b.strip() for b in backends.split(",")]
+    if timesteps is not None:
+        overrides["timesteps"] = timesteps
+    if max_parallel is not None:
+        overrides["max_parallel"] = max_parallel
+    if experiment_name is not None:
+        overrides["experiment_name"] = experiment_name
+    if output_dir is not None:
+        overrides["output_dir"] = output_dir
+    if eval_episodes is not None:
+        overrides["eval_episodes"] = eval_episodes
+    if render_eval:
+        overrides["render_eval"] = render_eval
+    if not render_plots:
+        overrides["render_plots"] = False
+    if not statistical_tests:
+        overrides["statistical_tests"] = False
+    if not backend_reporting:
+        overrides["backend_reporting"] = False
+    if dreamer_comparison:
+        overrides["dreamer_comparison"] = True
+    if not save_per_seed_csv:
+        overrides["save_per_seed_csv"] = False
+    if not save_aggregated_json:
+        overrides["save_aggregated_json"] = False
+    
+    # Determine base config
+    if config:
+        console.print(f"  • Config: {config}")
+        base_cfg = ExperimentConfig.from_yaml(config)
+    else:
+        console.print("  • Using defaults (no config file)")
+        base_cfg = ExperimentConfig()
+    
+    # Apply CLI overrides
+    if overrides:
+        console.print(f"  • Overrides: {overrides}")
+        cfg = ExperimentConfig.merge(base_cfg, overrides)
+    else:
+        cfg = base_cfg
+    
+    console.print(f"  • Task: {cfg.task or 'all'}")
+    console.print(f"  • Algorithms: {', '.join(cfg.effective_algorithms)}")
+    console.print(f"  • Seeds: {cfg.seeds or 'single'}")
+    console.print(f"  • Backends: {', '.join(cfg.expanded_backends)}")
+    console.print(f"  • Timesteps: {cfg.timesteps:,}")
+    console.print(f"  • Max parallel: {cfg.max_parallel}")
+    console.print(f"  • Experiment: {cfg.experiment_name}")
+    
+    # Check benchmark dependencies availability
+    from surg_rl.benchmark import MATPLOTLIB, SEABORN, PANDAS, RLIABLE
+    
+    deps_available = all([MATPLOTLIB.available, SEABORN.available, PANDAS.available, RLIABLE.available])
+    if not deps_available:
+        missing = []
+        if not MATPLOTLIB.available:
+            missing.append("matplotlib")
+        if not SEABORN.available:
+            missing.append("seaborn")
+        if not PANDAS.available:
+            missing.append("pandas")
+        if not RLIABLE.available:
+            missing.append("rliable")
+        console.print(f"[bold yellow]Warning:[/bold yellow] Optional dependencies not installed: {', '.join(missing)}")
+        console.print("[dim]Install with: pip install surg-rl[benchmark][/dim]")
+        if cfg.render_plots or cfg.statistical_tests:
+            console.print("[bold red]Error:[/bold red] Plots/stats require optional dependencies")
+            raise typer.Exit(1)
+    
+    # Import and run ExperimentRunner
+    try:
+        from surg_rl.benchmark.experiment_runner import ExperimentRunner
+    except ImportError as e:
+        console.print(f"[bold red]Import Error:[/bold red] {e}")
+        console.print(
+            "[dim]Make sure benchmark dependencies are installed: pip install surg-rl[benchmark][/dim]"
+        )
+        raise typer.Exit(1) from e
+    
+    # Run the benchmark with progress display
+    runner = ExperimentRunner(cfg)
+    try:
+        with console.status("[bold green]Running experiments..."):
+            result = runner.run()
+        console.print("[bold green]✓ Benchmark complete![/bold green]")
+        console.print(f"  • Results: {runner.base_output_dir}")
+        
+        # Print final summary
+        from rich.table import Table
+        
+        if RICH.available:
+            from rich.console import Console
+            summary_console = Console()
+            
+            # Group results by backend for display
+            backend_results = {}
+            for (algo, backend), stats in result.items():
+                if "status" in stats:
+                    if backend not in backend_results:
+                        backend_results[backend] = []
+                    backend_results[backend].append((algo, stats))
+                else:
+                    if backend not in backend_results:
+                        backend_results[backend] = []
+                    backend_results[backend].append((algo, stats))
+            
+            for backend, algos in backend_results.items():
+                table = Table(title=f"Results: {backend}")
+                table.add_column("Algorithm", style="cyan")
+                table.add_column("Success Rate", style="green")
+                table.add_column("Mean Reward", style="yellow")
+                table.add_column("Mean Length", style="blue")
+                table.add_column("Wall Time (s)", style="magenta")
+                
+                for algo, stats in algos:
+                    if "status" in stats:
+                        table.add_row(algo, stats["status"], "-", "-", "-")
+                    else:
+                        sm = stats.get("scalar_metrics", {})
+                        table.add_row(
+                            algo,
+                            f"{sm.get('success_rate', 0):.1%}",
+                            f"{sm.get('sample_efficiency', 0):.4f}",
+                            f"{sm.get('mean_episode_length', 0):.1f}",
+                            f"{sm.get('wall_clock_time', 0):.1f}"
+                        )
+                summary_console.print(table)
+        else:
+            print(f"Results saved to: {runner.base_output_dir}")
+            
+    except Exception as e:
+        logger.error(f"Benchmark failed: {e}")
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(1) from e
 
 
 if __name__ == "__main__":
