@@ -67,7 +67,7 @@
 - [x] **Phase 20: Real Surgical Assets** — trimesh OBJ loading for instruments (11) and organs (4) with decimation, fallback, and [assets] extras
 - [x] **Phase 21: Surgical Task Curriculum** — 6 task types × 3 difficulty levels integrated with CurriculumScheduler, structured success/failure detection · [Plans](phases/21-surgical-task-curriculum/)
 - [x] **Phase 22: Multi-Agent RL** — PettingZoo ParallelEnv dual-arm coordination, SuperSuit SB3 wrappers, thin adapter over SurgicalEnv · [Plans](phases/22-multi-agent-rl/)
-- [ ] **Phase 23: Performance Benchmarking** — ExperimentRunner with SB3-only comparison, publication plots/tables, per-backend reporting
+- [x] **Phase 23: Performance Benchmarking** — ExperimentRunner with SB3-only comparison, publication plots/tables, per-backend reporting
 - [ ] **Phase 24: DreamerV3 World Models** — feasibility spike, process-isolated JAX training, GymToEmbodiedWrapper, pixel/state observation
 
 ## Phase Details
@@ -148,9 +148,9 @@ Plans:
 **Plans**: 3 plans in 2 waves
 
 Plans:
-- [ ] 23-01-PLAN.md — ExperimentConfig schema, YAML round-trip, lazy imports, CLI benchmark subcommand
-- [ ] 23-02-PLAN.md — ExperimentRunner (multiprocessing seed sweeps), MetricCollectorCallback, Aggregator (IQM, mean±std, scalar metrics)
-- [ ] 23-03-PLAN.md — PlotRenderer (learning curves, bar charts, tables), ReportGenerator (HTML + JSON), CLI integration
+- [x] 23-01-PLAN.md — ExperimentConfig schema, YAML round-trip, lazy imports, CLI benchmark subcommand
+- [x] 23-02-PLAN.md — ExperimentRunner (multiprocessing seed sweeps), MetricCollectorCallback, Aggregator (IQM, mean±std, scalar metrics)
+- [x] 23-03-PLAN.md — PlotRenderer (learning curves, bar charts, tables), ReportGenerator (HTML + JSON), CLI integration
 
 ### Phase 24: DreamerV3 World Models
 **Goal**: Feasibility spike determines whether DreamerV3's RSSM can model surgical dynamics; if yes, integrate DreamerV3 with process isolation for surgical scene training from pixels or low-dim state.
@@ -172,7 +172,7 @@ Plans:
 | 20. Real Surgical Assets | 4/4 | Complete | 2026-05-13 |
 | 21. Surgical Task Curriculum | 3/3 | Complete | 2026-05-17 |
 | 22. Multi-Agent RL | 3/3 | Complete | 2026-05-18 |
-| 23. Performance Benchmarking | 0/0 | Not started | - |
+| 23. Performance Benchmarking | 3/3 | Complete | 2026-06-08 |
 | 24. DreamerV3 World Models | 0/0 | Not started | - |
 
 ---

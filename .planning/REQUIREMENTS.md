@@ -76,11 +76,11 @@
 | TASK-02 | Phase 21 | Pending |
 | TASK-03 | Phase 21 | Pending |
 | TASK-04 | Phase 21 | Pending |
-| BENCH-01 | Phase 23 | Pending |
-| BENCH-02 | Phase 23 | Pending |
-| BENCH-03 | Phase 23 | Pending |
-| BENCH-04 | Phase 23 | Pending |
-| BENCH-05 | Phase 23 | Pending |
+| BENCH-01 | Phase 23 | Complete |
+| BENCH-02 | Phase 23 | Complete |
+| BENCH-03 | Phase 23 | Complete |
+| BENCH-04 | Phase 23 | Complete |
+| BENCH-05 | Phase 23 | Complete |
 | MARL-01 | Phase 22 | Pending |
 | MARL-02 | Phase 22 | Pending |
 | MARL-03 | Phase 22 | Pending |
