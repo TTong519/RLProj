@@ -5,15 +5,15 @@
 See: .planning/PROJECT.md (updated 2026-05-13)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** Phase 23 — Performance Benchmarking
+**Current focus:** Phase 24 — DreamerV3 World Models
 
 ## Current Position
 
 Milestone: v0.4.0 — Training Infrastructure & Realism
-Phase: 23 of 24 (Performance Benchmarking)
-Plan: 03 of 3
-Status: Complete
-Last activity: 2026-06-08 — Plan 03 complete (PlotRenderer, ReportGenerator, CLI plots+reports)
+Phase: 24 of 24 (DreamerV3 World Models)
+Plan: 0 of TBD
+Status: Context gathered — ready to plan
+Last activity: 2026-06-08 — Phase 24 context gathered, CONTEXT.md created
 
 Progress: ████████████████░░░░░░░░░░░░░░░░░░░░ 75%
 
@@ -41,6 +41,7 @@ Progress: ████████████████░░░░░░░�
 - [v0.4.0 research]: Schema-first (all new Pydantic v2 models, all optional fields); trimesh is sole new mesh library; PettingZoo ParallelEnv MUST be separate class from SurgicalEnv; DreamerV3 needs process isolation via JAX subprocess with `XLA_PYTHON_CLIENT_MEM_FRACTION=0.4`; benchmarking treats MuJoCo and PyBullet as separate targets; CurriculumScheduler extension must be additive (never replace Phase 3 fix)
 - [v0.4.0 Phase 21]: TaskResult Pydantic v2 hierarchy with 6 per-task sub-models; TASK_REWARD_REGISTRY dispatch replaces string-matching; PARAM_BOUNDS + interpolate_params() for continuous difficulty interpolation; check_success/check_failure on all 6 reward classes; TaskRewardRouter with safe None/unknown handling; D-10: apply_parameters() never modified
 - [v0.4.0 Phase 23]: Dual statistical aggregation (mean±1σ + IQM+CI) on learning curves per D-08; Seaborn colorblind-safe palette with fixed algorithm color cycle; standalone HTML report with embedded CSS; per-backend directory structure; DreamerV3 pending status shown gracefully in all outputs
+- [v0.4.0 Phase 24]: Feasibility spike: forceps + liver tet mesh suturing scene, MSE < 0.01 / reward MAE < 0.5 thresholds; multiprocessing + stdin/stdout process isolation with XLA_PYTHON_CLIENT_MEM_FRACTION=0.4; GymToEmbodiedWrapper with reset-in-action protocol; pixel obs (RGB+depth 64×64) + low-dim state (~50-100 dims); auto-discovery checkpoints from models/dreamerv3/{task}_{obs_type}/; kill switch defers to v0.5.0 if spike fails
 
 ### Pending Todos
 
@@ -67,9 +68,9 @@ Items acknowledged and carried forward from previous milestone close:
 ## Session Continuity
 
 Last session: 2026-06-08
-Stopped at: Phase 23 Plan 03 complete, phase complete
-Resume file: .planning/phases/23-performance-benchmarking/23-03-PLAN.md
+Stopped at: Phase 24 context gathered, ready to plan
+Resume file: .planning/phases/24-dreamerv3-world-models/24-CONTEXT.md
 
 ---
 
-*Updated: 2026-06-08 — Phase 23 Plan 03 complete*
+*Updated: 2026-06-08 — Phase 24 context gathered*

@@ -173,8 +173,8 @@ Plans:
 | 21. Surgical Task Curriculum | 3/3 | Complete | 2026-05-17 |
 | 22. Multi-Agent RL | 3/3 | Complete | 2026-05-18 |
 | 23. Performance Benchmarking | 3/3 | Complete | 2026-06-08 |
-| 24. DreamerV3 World Models | 0/0 | Not started | - |
+| 24. DreamerV3 World Models | 0/0 | Context gathered, ready to plan | 2026-06-08 |
 
 ---
 
-*Roadmap last updated: 2026-05-18 — Phase 22 complete*
+*Roadmap last updated: 2026-06-08 — Phase 24 context gathered*
