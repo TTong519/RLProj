@@ -162,7 +162,13 @@ Plans:
   3. If spike passes: `GymToEmbodiedWrapper` translates `SurgicalEnv` to the `embodied.Env` protocol — reset signal embedded in action dict, observations returned as flat dicts with `is_first`/`is_last`/`is_terminal` keys
   4. DreamerV3 supports both pixel-based observation (raw render tensor from MuJoCo/PyBullet) and low-dim state observation (joint positions, task configuration, tissue deformation state) via `DreamerConfig.obs_type` — both modes initialize and begin training without errors
   5. If spike fails: DMV3-02, DMV3-03, DMV3-04 are skipped; full DreamerV3 integration is deferred to v0.5.0 per DMV3-05 with documented failure evidence; Phase 23 benchmark reports are updated to remove the DreamerV3 pending stub and declare SB3-only as the v0.4.0 benchmarking scope
-**Plans**: TBD
+**Plans**: 4 plans in 4 waves
+
+Plans:
+- [ ] 24-01-PLAN.md — Feasibility spike infrastructure: DreamerSubprocess (JAX isolation), GymToEmbodiedWrapper, SpikeOrchestrator (forceps+liver+suturing scene, 100k steps, MSE/MAE eval)
+- [ ] 24-02-PLAN.md — DreamerV3 training CLI: surg-rl dreamer-train with checkpoint management, resume, eval-only, both obs modes
+- [ ] 24-03-PLAN.md — Benchmark integration: auto-discovery of DreamerV3 checkpoints, evaluation without training, orange visualization, HTML/JSON reporting
+- [ ] 24-04-PLAN.md — Deferral handling: spike failure report, dreamer-train exit with v0.5.0 pointer, dreamer-spike CLI, SB3-only benchmark mode
 
 ## Progress
 
@@ -173,7 +179,7 @@ Plans:
 | 21. Surgical Task Curriculum | 3/3 | Complete | 2026-05-17 |
 | 22. Multi-Agent RL | 3/3 | Complete | 2026-05-18 |
 | 23. Performance Benchmarking | 3/3 | Complete | 2026-06-08 |
-| 24. DreamerV3 World Models | 0/0 | Context gathered, ready to plan | 2026-06-08 |
+| 24. DreamerV3 World Models | 0/4 | Planning complete | 2026-06-08 |
 
 ---
 

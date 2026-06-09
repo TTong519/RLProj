@@ -11,11 +11,11 @@ See: .planning/PROJECT.md (updated 2026-05-13)
 
 Milestone: v0.4.0 — Training Infrastructure & Realism
 Phase: 24 of 24 (DreamerV3 World Models)
-Plan: 0 of TBD
-Status: Context gathered — ready to plan
-Last activity: 2026-06-08 — Phase 24 context gathered, CONTEXT.md created
+Plan: 0 of 4
+Status: Planning complete — ready to execute
+Last activity: 2026-06-08 — Phase 24 planned with 4 plans in 4 waves
 
-Progress: ████████████████░░░░░░░░░░░░░░░░░░░░ 75%
+Progress: ████████████████████████░░░░░░░░░░ 85%
 
 ## Performance Metrics
 
