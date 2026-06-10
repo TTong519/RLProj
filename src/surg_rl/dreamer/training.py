@@ -339,7 +339,7 @@ def run_dreamer_training(
 
         # Save final metrics
         with open(checkpoint_path / "training_metrics.json", "w") as f:
-            json.dump(metrics_log, f, indig=2)
+            json.dump(metrics_log, f, indent=2)
 
         print(f"[Training] Training complete. Final checkpoint: {final_checkpoint}")
 

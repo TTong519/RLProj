@@ -1,8 +1,14 @@
 """Tests for DreamerV3 training task type support."""
 
+import inspect
+import json
+from pathlib import Path
+from unittest.mock import MagicMock
+
 import pytest
 
-from surg_rl.dreamer.training import _create_scene_for_task
+from surg_rl.dreamer import training as dreamer_training
+from surg_rl.dreamer.training import _create_scene_for_task, run_dreamer_training
 from surg_rl.scene_definition.schema import InstrumentType, TissueType
 
 
@@ -83,6 +89,76 @@ class TestDreamerTrainingTaskTypes:
             assert (
                 scene.tissues[0].type != TissueType.CUSTOM or task == "knot_tying"
             ), f"{task} should not use CUSTOM tissue type (except knot_tying uses CUSTOM intentionally)"
+
+
+class TestTrainingMetricsSave:
+    """Regression tests for the end-of-training metrics save (Phase 26 D-01).
+
+    The original code had `json.dump(metrics_log, f, indig=2)` at the
+    final-save site which raised `TypeError: got an unexpected keyword
+    argument 'indig'` at end of every real training run. The fix uses
+    `indent=2` and must be regression-tested.
+    """
+
+    def test_no_indig_kwarg_in_training_source(self):
+        """Source code must not contain `indig=` (the typo)."""
+        src = inspect.getsource(dreamer_training)
+        assert "indig=" not in src, (
+            "training.py still contains 'indig=' typo — would raise "
+            "TypeError at end of training. Expected 'indent='."
+        )
+
+    def test_final_metrics_save_uses_indent_keyword(self, tmp_path):
+        """End-of-training save writes an indented, human-readable training_metrics.json."""
+        fake_subprocess = MagicMock()
+        fake_subprocess.train.return_value = iter(
+            [
+                {"step": 100, "reconstruction_loss": 0.1, "reward_loss": 0.2, "total_loss": 0.3},
+                {"step": 200, "reconstruction_loss": 0.05, "reward_loss": 0.1, "total_loss": 0.15},
+            ]
+        )
+        fake_subprocess.evaluate.return_value = {
+            "success_rate": 0.5,
+            "mean_reward": 1.0,
+            "mean_episode_length": 50,
+        }
+
+        monkeypatch_calls = []
+
+        def _patch_subprocess_module():
+            import surg_rl.dreamer.training as t
+
+            original = getattr(t, "DreamerSubprocess", None)
+            t.DreamerSubprocess = MagicMock(return_value=fake_subprocess)
+            monkeypatch_calls.append("patched")
+            return original
+
+        original = _patch_subprocess_module()
+        try:
+            # Drive run_dreamer_training to the final save path.
+            run_dreamer_training(
+                task="suturing",
+                obs_type="state",
+                total_steps=200,
+                eval_episodes=1,
+                eval_every=100,
+                checkpoint_dir=str(tmp_path / "checkpoints"),
+            )
+        finally:
+            import surg_rl.dreamer.training as t
+
+            t.DreamerSubprocess = original
+
+        # Verify the final metrics file exists, parses, and is human-readable.
+        metrics_path = tmp_path / "checkpoints" / "training_metrics.json"
+        assert metrics_path.exists(), f"Expected {metrics_path} to exist"
+        content = metrics_path.read_text()
+        # Indented JSON has internal newlines; a single-line minified blob would not.
+        assert "\n" in content, "training_metrics.json is not indented (indent=2 missing?)"
+        # Must round-trip through json.load.
+        loaded = json.loads(content)
+        assert loaded["task"] == "suturing"
+        assert loaded["total_steps"] == 200
 
 
 if __name__ == "__main__":
