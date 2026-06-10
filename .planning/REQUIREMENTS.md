@@ -7,18 +7,18 @@
 
 ### Real Assets
 
-- [ ] **ASET-01**: System loads OBJ instrument meshes (forceps, scalpel, needle driver, retractor, trocar, scissors, clamp, plus 3 general-purpose instruments) via trimesh, generating URDF/MJCF collision geometry for both MuJoCo and PyBullet backends
-- [ ] **ASET-02**: System loads 4 organ meshes (liver, stomach, kidney, gallbladder) as OBJ surface meshes, converting them through the existing tetgen pipeline for deformable simulation with volumetric cutting support
-- [ ] **ASET-03**: All real meshes silently fall back to existing primitive geometry when the mesh file is not found at the configured path — no crashes, no breaking changes to existing scenes
-- [ ] **ASET-04**: Mesh assets support configurable decimation (target face count) to control simulation performance without manual mesh editing
-- [ ] **ASET-05**: New `[assets]` optional dependency group (`trimesh>=4.5.0`) with lazy import; mesh pipeline is additive and never blocks core imports
+- [x] **ASET-01**: System loads OBJ instrument meshes (forceps, scalpel, needle driver, retractor, trocar, scissors, clamp, plus 3 general-purpose instruments) via trimesh, generating URDF/MJCF collision geometry for both MuJoCo and PyBullet backends
+- [x] **ASET-02**: System loads 4 organ meshes (liver, stomach, kidney, gallbladder) as OBJ surface meshes, converting them through the existing tetgen pipeline for deformable simulation with volumetric cutting support
+- [x] **ASET-03**: All real meshes silently fall back to existing primitive geometry when the mesh file is not found at the configured path — no crashes, no breaking changes to existing scenes
+- [x] **ASET-04**: Mesh assets support configurable decimation (target face count) to control simulation performance without manual mesh editing
+- [x] **ASET-05**: New `[assets]` optional dependency group (`trimesh>=4.5.0`) with lazy import; mesh pipeline is additive and never blocks core imports
 
 ### Surgical Task Curriculum
 
-- [ ] **TASK-01**: System provides 6 surgical task types (suturing, knot-tying, needle insertion, grasping, cutting, dissection), each with a TaskConfig schema defining task-specific reward functions and success/failure detection criteria
+- [x] **TASK-01**: System provides 6 surgical task types (suturing, knot-tying, needle insertion, grasping, cutting, dissection), each with a TaskConfig schema defining task-specific reward functions and success/failure detection criteria
 - [ ] **TASK-02**: Each task type supports 3 difficulty levels (easy/medium/hard) with progressive parameter changes (tissue stiffness, target precision tolerance, tool position noise, time limit)
-- [ ] **TASK-03**: Task difficulty integrates with the existing `CurriculumScheduler` — `CurriculumStageConfig` extended with a `task_difficulty` field without replacing or rewriting existing curriculum machinery
-- [ ] **TASK-04**: Task success/failure is detectable at episode end via `check_success()` and `check_failure()` methods, returning structured results (success, failure_reason, metrics) for benchmarking integration
+- [x] **TASK-03**: Task difficulty integrates with the existing `CurriculumScheduler` — `CurriculumStageConfig` extended with a `task_difficulty` field without replacing or rewriting existing curriculum machinery
+- [x] **TASK-04**: Task success/failure is detectable at episode end via `check_success()` and `check_failure()` methods, returning structured results (success, failure_reason, metrics) for benchmarking integration
 
 ### Performance Benchmarking
 
@@ -30,18 +30,18 @@
 
 ### Multi-Agent RL
 
-- [ ] **MARL-01**: `MultiAgentSurgicalEnv` implements PettingZoo `ParallelEnv` with asymmetric roles: surgeon arm (dexterous manipulation) and assistant/camera arm (positioning/visualization), each with distinct observation and action spaces
-- [ ] **MARL-02**: SuperSuit wrappers enable SB3-compatible policy training from PettingZoo environments without manual Gymnasium conversion
-- [ ] **MARL-03**: Multi-agent configuration (`MultiAgentConfig`) supports both shared policy (both agents learn from a single model) and independent per-agent policies
+- [x] **MARL-01**: `MultiAgentSurgicalEnv` implements PettingZoo `ParallelEnv` with asymmetric roles: surgeon arm (dexterous manipulation) and assistant/camera arm (positioning/visualization), each with distinct observation and action spaces
+- [x] **MARL-02**: SuperSuit wrappers enable SB3-compatible policy training from PettingZoo environments without manual Gymnasium conversion
+- [x] **MARL-03**: Multi-agent configuration (`MultiAgentConfig`) supports both shared policy (both agents learn from a single model) and independent per-agent policies
 - [ ] **MARL-04**: The multi-agent env delegates to the canonical `SurgicalEnv` for simulation — never duplicates sim logic; MARL is a thin adapter layer
 
 ### DreamerV3 World Models
 
-- [ ] **DMV3-01**: Feasibility spike verifies that DreamerV3's RSSM can learn dynamics of a simple surgical scene (single instrument + deformable tissue) from pixel observations — report pass/fail with quantitative evidence (reconstruction quality, reward prediction accuracy)
-- [ ] **DMV3-02**: If spike passes: `GymToEmbodiedWrapper` adapts `SurgicalEnv` to the `embodied.Env` protocol (action dict with reset signal, flat observation dict with is_first/is_last/is_terminal), enabling DreamerV3 to train on surgical scenes
-- [ ] **DMV3-03**: DreamerV3 runs in process isolation (separate subprocess or venv) from PyTorch/SB3 code to prevent JAX+PyTorch GPU memory conflicts
-- [ ] **DMV3-04**: DreamerV3 supports both pixel-based observation (raw render) and low-dim state observation, configurable via `DreamerConfig`
-- [ ] **DMV3-05**: If spike fails: DreamerV3 is deferred to v0.5.0 with documented failure evidence; Phase 4 benchmarking reverts to SB3-only comparison
+- [x] **DMV3-01**: Feasibility spike verifies that DreamerV3's RSSM can learn dynamics of a simple surgical scene (single instrument + deformable tissue) from pixel observations — report pass/fail with quantitative evidence (reconstruction quality, reward prediction accuracy)
+- [x] **DMV3-02**: If spike passes: `GymToEmbodiedWrapper` adapts `SurgicalEnv` to the `embodied.Env` protocol (action dict with reset signal, flat observation dict with is_first/is_last/is_terminal), enabling DreamerV3 to train on surgical scenes
+- [x] **DMV3-03**: DreamerV3 runs in process isolation (separate subprocess or venv) from PyTorch/SB3 code to prevent JAX+PyTorch GPU memory conflicts
+- [x] **DMV3-04**: DreamerV3 supports both pixel-based observation (raw render) and low-dim state observation, configurable via `DreamerConfig`
+- [x] **DMV3-05**: If spike fails: DreamerV3 is deferred to v0.5.0 with documented failure evidence; Phase 4 benchmarking reverts to SB3-only comparison
 
 ## v2 Requirements
 
@@ -67,29 +67,29 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ASET-01 | Phase 20 | Pending |
-| ASET-02 | Phase 20 | Pending |
-| ASET-03 | Phase 20 | Pending |
-| ASET-04 | Phase 20 | Pending |
-| ASET-05 | Phase 20 | Pending |
-| TASK-01 | Phase 21 | Pending |
-| TASK-02 | Phase 21 | Pending |
-| TASK-03 | Phase 21 | Pending |
-| TASK-04 | Phase 21 | Pending |
-| BENCH-01 | Phase 23 | Complete |
+| ASET-01 | Phase 20 | Complete |
+| ASET-02 | Phase 20 | Complete |
+| ASET-03 | Phase 20 | Complete |
+| ASET-04 | Phase 20 | Complete |
+| ASET-05 | Phase 20 | Complete |
+| TASK-01 | Phase 21 | Complete |
+| TASK-02 | Phase 27 | Pending |
+| TASK-03 | Phase 21 | Complete |
+| TASK-04 | Phase 21 | Complete |
+| BENCH-01 | Phase 27 | Pending |
 | BENCH-02 | Phase 23 | Complete |
 | BENCH-03 | Phase 23 | Complete |
 | BENCH-04 | Phase 23 | Complete |
 | BENCH-05 | Phase 23 | Complete |
-| MARL-01 | Phase 22 | Pending |
-| MARL-02 | Phase 22 | Pending |
-| MARL-03 | Phase 22 | Pending |
-| MARL-04 | Phase 22 | Pending |
-| DMV3-01 | Phase 24 | Pending |
-| DMV3-02 | Phase 24 | Pending |
-| DMV3-03 | Phase 24 | Pending |
-| DMV3-04 | Phase 24 | Pending |
-| DMV3-05 | Phase 24 | Pending |
+| MARL-01 | Phase 22 | Complete |
+| MARL-02 | Phase 22 | Complete |
+| MARL-03 | Phase 22 | Complete |
+| MARL-04 | Phase 25 | Pending |
+| DMV3-01 | Phase 24 | Complete |
+| DMV3-02 | Phase 24 | Complete |
+| DMV3-03 | Phase 24 | Complete |
+| DMV3-04 | Phase 24 | Complete |
+| DMV3-05 | Phase 24 | Complete |
 
 **Coverage:**
 - v1 requirements: 23 total
@@ -99,4 +99,4 @@
 ---
 
 *Requirements defined: 2026-05-13 after v0.4.0 milestone research*
-*Traceability updated: 2026-05-13 after roadmap creation*
+*Traceability updated: 2026-05-13 after roadmap creation; v0.4.1 gap-closure phases assigned 2026-06-10*
