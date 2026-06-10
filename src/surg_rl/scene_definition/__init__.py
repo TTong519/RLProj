@@ -24,6 +24,8 @@ from .loader import (
     validate_scene,
 )
 from .schema import (
+    ArmConfig,
+    ArmRole,
     # Assets
     AssetReference,
     BenchmarkConfig,
@@ -152,6 +154,8 @@ __all__ = [
     # Scene
     "Metadata",
     "MultiAgentConfig",
+    "ArmConfig",
+    "ArmRole",
     "SceneDefinition",
     # Loader exceptions
     "SceneLoaderError",

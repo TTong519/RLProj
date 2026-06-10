@@ -103,6 +103,11 @@ class MultiAgentSurgicalEnv(_get_parallel_env_base()):
             agent_id = arm.role.value if hasattr(arm.role, "value") else str(arm.role)
             self.possible_agents.append(agent_id)
 
+        # Initialize self.agents to the full possible_agents set (PettingZoo
+        # contract — possible_agents is immutable, agents is the active
+        # subset which equals possible_agents at construction time).
+        self.agents = list(self.possible_agents)
+
         # Create the single SurgicalEnv instance (D-11: one env only)
         self._surgical_env = self._create_surgical_env(config)
 
@@ -303,22 +308,20 @@ class MultiAgentSurgicalEnv(_get_parallel_env_base()):
                 truncations: dict[agent_id → bool]
                 infos: dict[agent_id → info_dict]
         """
-        # Process arm_id for the first agent first to set up the scene
-        # For the passthrough, we need to apply actions to both arms
-        # before calling step()
-
-        scene = self._surgical_env._scene  # type: ignore
+        # Apply per-arm actions before stepping (D-09).
+        # The passthrough composition pattern (D-11) requires that all per-arm
+        # actions are written to the simulator via apply_action(arm_id=...) before
+        # the surgical env's step is called, so the surgical env's action builder
+        # is bypassed entirely.
         simulator = self._surgical_env.simulator
-
-        # Apply per-arm actions before stepping (D-09)
         for agent_id in self.agents:
             action = actions.get(agent_id)
             if action is not None and len(action) > 0:
                 simulator.apply_action(action, arm_id=agent_id)
 
-        # Step the single SurgicalEnv once
-        full_obs, full_reward, terminated, truncated, full_info = self._surgical_env.step(
-            np.zeros(0)
+        # Step the single SurgicalEnv using already-applied per-arm actions (D-11)
+        full_obs, full_reward, terminated, truncated, full_info = (
+            self._surgical_env.passthrough_step()
         )
 
         # Split observations, rewards, and infos per agent

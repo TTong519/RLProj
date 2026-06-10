@@ -579,7 +579,6 @@ def marl_train(
     """
     from surg_rl.marl.multi_agent_env import MultiAgentSurgicalEnv
     from surg_rl.marl.training import MultiAgentTrainingManager
-    from surg_rl.rl.environment import SurgicalEnvConfig
 
     if policy not in ("shared", "independent"):
         console.print(
@@ -589,12 +588,16 @@ def marl_train(
 
     render_mode = None if headless else "rgb_array"
     try:
-        config = SurgicalEnvConfig(
-            scene_path=scene,
-            simulator_type=simulator,
-            render_mode=render_mode,
-        )
-        env = MultiAgentSurgicalEnv(config, render_mode=render_mode)
+        # Build plain dict config — MultiAgentSurgicalEnv expects dict, not SurgicalEnvConfig
+        # CLI parameters in scope (lines 558-570): scene, algorithm, policy, timesteps,
+        # model_dir, simulator, headless. NOTE: there is NO `seed` or `frame_skip` parameter
+        # on this command — do NOT reference undeclared names.
+        marl_config = {
+            "scene_path": scene,
+            "simulator_type": simulator,
+            "render_mode": render_mode,
+        }
+        env = MultiAgentSurgicalEnv(marl_config)
 
         trainer = MultiAgentTrainingManager(
             env=env,
