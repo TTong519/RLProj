@@ -19,7 +19,7 @@ class TestDreamerColorConstant:
         assert DREAMER_COLOR is not None
 
     def test_dreamer_color_is_orange_hex(self):
-        assert DREAMER_COLOR == "#d55e00"
+        assert DREAMER_COLOR == "#FF8C00"
 
 
 class TestExperimentConfigDreamerFields:

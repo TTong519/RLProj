@@ -27,7 +27,7 @@ FONT_SIZE = 11
 TITLE_SIZE = 14
 LEGEND_SIZE = 10
 COLOR_PALETTE = ["#0173b2", "#de8f05", "#029e73", "#cc78bc", "#ca9161"]
-DREAMER_COLOR = "#d55e00"
+DREAMER_COLOR = "#FF8C00"
 
 
 class PlotRenderer:
