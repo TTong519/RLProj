@@ -18,7 +18,15 @@ def _create_scene_for_task(
     """Create or load scene for a surgical task."""
     scene_path = Path(f"scenes/{task}.json")
     if scene_path.exists():
-        return load_scene(str(scene_path))
+        scene = load_scene(str(scene_path))
+        # If the loaded scene has a dreamer block, override obs_type and
+        # pixel_resolution with the call-site params so the test contract
+        # (e.g., scene.dreamer.obs_type == 'pixels' and tuple equality on
+        # pixel_resolution) is satisfied.
+        if scene.dreamer is not None:
+            scene.dreamer.obs_type = obs_type
+            scene.dreamer.pixel_resolution = tuple(pixel_resolution)
+        return scene
 
     # Import required schema classes
     from surg_rl.scene_definition.schema import (

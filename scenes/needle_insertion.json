@@ -152,9 +152,9 @@
   ],
   "tissues": [
     {
-      "name": "muscle_tissue",
-      "type": "muscle",
-      "description": "muscle_tissue for task",
+      "name": "organ_tissue",
+      "type": "organ",
+      "description": "organ_tissue for task",
       "soft_body": false,
       "geometry": {
         "mesh": null,
@@ -208,36 +208,6 @@
     }
   ],
   "instruments": [
-    {
-      "name": "needle_driver",
-      "type": "needle_driver",
-      "description": "needle_driver instrument",
-      "mesh": null,
-      "primitive": "box",
-      "dimensions": [
-        0.005,
-        0.005,
-        0.1
-      ],
-      "physics": {
-        "mass": 0.1,
-        "inertia_tensor": null,
-        "friction": 0.3,
-        "damping": 0.05,
-        "stiffness": 1000000.0
-      },
-      "pose": null,
-      "tip_offset": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.05
-      },
-      "sterile": true,
-      "disposable": false,
-      "cutting": null,
-      "grasping": null,
-      "needle_driver": null
-    },
     {
       "name": "curved_needle",
       "type": "needle",
@@ -358,5 +328,13 @@
     "randomize_each_episode": true,
     "seed": 42
   },
-  "simulator": "mujoco"
+  "simulator": "mujoco",
+  "dreamer": {
+    "obs_type": null,
+    "pixel_resolution": null,
+    "process_isolation": true,
+    "memory_fraction": 0.4,
+    "dreamer_variant": "dreamerv3",
+    "reconstruction_metric": "mse"
+  }
 }

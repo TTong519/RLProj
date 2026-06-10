@@ -152,9 +152,9 @@
   ],
   "tissues": [
     {
-      "name": "skin_tissue",
+      "name": "skin_patch",
       "type": "skin",
-      "description": "skin_tissue for task",
+      "description": "skin_patch for task",
       "soft_body": false,
       "geometry": {
         "mesh": null,
@@ -209,9 +209,9 @@
   ],
   "instruments": [
     {
-      "name": "surgical_scalpel",
-      "type": "scalpel",
-      "description": "surgical_scalpel instrument",
+      "name": "surgical_scissors",
+      "type": "scissors",
+      "description": "surgical_scissors instrument",
       "mesh": null,
       "primitive": "box",
       "dimensions": [
@@ -250,8 +250,8 @@
     "objectives": [
       {
         "name": "incision_alignment",
-        "description": "Align the scalpel with the target line",
-        "success_criteria": "Scalpel tip within 2mm of target line at correct angle",
+        "description": "Align the scissors with the target line",
+        "success_criteria": "Scissors tip within 2mm of target line at correct angle",
         "failure_criteria": null,
         "target_body": null,
         "weight": 1.0
@@ -332,5 +332,13 @@
     "randomize_each_episode": true,
     "seed": 42
   },
-  "simulator": "mujoco"
+  "simulator": "mujoco",
+  "dreamer": {
+    "obs_type": null,
+    "pixel_resolution": null,
+    "process_isolation": true,
+    "memory_fraction": 0.4,
+    "dreamer_variant": "dreamerv3",
+    "reconstruction_metric": "mse"
+  }
 }

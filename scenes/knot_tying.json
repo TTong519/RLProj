@@ -152,9 +152,9 @@
   ],
   "tissues": [
     {
-      "name": "skin_tissue",
-      "type": "skin",
-      "description": "skin_tissue for task",
+      "name": "suture_pad",
+      "type": "custom",
+      "description": "suture_pad for task",
       "soft_body": false,
       "geometry": {
         "mesh": null,
@@ -332,5 +332,13 @@
     "randomize_each_episode": true,
     "seed": 42
   },
-  "simulator": "mujoco"
+  "simulator": "mujoco",
+  "dreamer": {
+    "obs_type": null,
+    "pixel_resolution": null,
+    "process_isolation": true,
+    "memory_fraction": 0.4,
+    "dreamer_variant": "dreamerv3",
+    "reconstruction_metric": "mse"
+  }
 }

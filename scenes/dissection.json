@@ -152,9 +152,9 @@
   ],
   "tissues": [
     {
-      "name": "liver_tissue",
-      "type": "organ",
-      "description": "liver_tissue for task",
+      "name": "dissection_tissue",
+      "type": "muscle",
+      "description": "dissection_tissue for task",
       "soft_body": false,
       "geometry": {
         "mesh": null,
@@ -205,61 +205,6 @@
       "pathology": null,
       "vitality": 1.0,
       "deformable": null
-    },
-    {
-      "name": "fat_tissue",
-      "type": "fat",
-      "description": "fat_tissue for task",
-      "soft_body": false,
-      "geometry": {
-        "mesh": null,
-        "primitive": "box",
-        "dimensions": [
-          0.12,
-          0.1,
-          0.02
-        ],
-        "radius": null,
-        "length": null
-      },
-      "physics": {
-        "stiffness": 1500.0,
-        "damping": 0.1,
-        "density": 1000.0,
-        "poissons_ratio": 0.45,
-        "youngs_modulus": 10000.0,
-        "elasticity": 0.5,
-        "bending_stiffness": 100.0,
-        "self_collision": false,
-        "yield_stress": null,
-        "tear_threshold": null,
-        "max_deformation": null
-      },
-      "pose": {
-        "position": {
-          "x": 0.0,
-          "y": 0.0,
-          "z": 0.05
-        },
-        "orientation": {
-          "w": 1.0,
-          "x": 0.0,
-          "y": 0.0,
-          "z": 0.0
-        }
-      },
-      "attachments": [],
-      "color": {
-        "r": 1.0,
-        "g": 0.95,
-        "b": 0.7,
-        "a": 1.0
-      },
-      "texture": null,
-      "anatomical_region": null,
-      "pathology": null,
-      "vitality": 1.0,
-      "deformable": null
     }
   ],
   "instruments": [
@@ -292,36 +237,6 @@
       "cutting": null,
       "grasping": null,
       "needle_driver": null
-    },
-    {
-      "name": "tissue_forceps",
-      "type": "forceps",
-      "description": "tissue_forceps instrument",
-      "mesh": null,
-      "primitive": "box",
-      "dimensions": [
-        0.005,
-        0.005,
-        0.1
-      ],
-      "physics": {
-        "mass": 0.05,
-        "inertia_tensor": null,
-        "friction": 0.3,
-        "damping": 0.05,
-        "stiffness": 1000000.0
-      },
-      "pose": null,
-      "tip_offset": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.05
-      },
-      "sterile": true,
-      "disposable": false,
-      "cutting": null,
-      "grasping": null,
-      "needle_driver": null
     }
   ],
   "task": {
@@ -332,7 +247,7 @@
       {
         "name": "plane_identification",
         "description": "Identify the dissection plane between tissues",
-        "success_criteria": "Forceps at tissue boundary",
+        "success_criteria": "Scissors at tissue boundary",
         "failure_criteria": null,
         "target_body": null,
         "weight": 1.0
@@ -421,5 +336,13 @@
     "randomize_each_episode": true,
     "seed": 42
   },
-  "simulator": "mujoco"
+  "simulator": "mujoco",
+  "dreamer": {
+    "obs_type": null,
+    "pixel_resolution": null,
+    "process_isolation": true,
+    "memory_fraction": 0.4,
+    "dreamer_variant": "dreamerv3",
+    "reconstruction_metric": "mse"
+  }
 }

@@ -10,7 +10,10 @@ Closes the v0.4.0 milestone audit's "Benchmark-scene-coverage" and
 
 from pathlib import Path
 
-from surg_rl.benchmark.experiment_runner import TASK_SCENE_MAP
+import yaml
+
+from surg_rl.benchmark.experiment_config import ExperimentConfig
+from surg_rl.benchmark.experiment_runner import TASK_SCENE_MAP, ExperimentRunner
 from surg_rl.scene_definition.loader import SceneLoader
 
 
@@ -65,18 +68,10 @@ class TestBenchmarkSceneCoverage:
         schema, not the mesh file existence — primitive fallback is a
         scene_builder concern).
         """
-        for task, scene_path in TASK_SCENE_MAP.items():
+        for _task, scene_path in TASK_SCENE_MAP.items():
             scene = SceneLoader().load(scene_path)  # MUST NOT raise
             if scene.instruments:
                 assert len(scene.instruments) > 0
-
-
-import os
-
-import yaml
-
-from surg_rl.benchmark.experiment_config import ExperimentConfig
-from surg_rl.benchmark.experiment_runner import ExperimentRunner
 
 
 class TestExperimentRunnerExperimentsWrite:

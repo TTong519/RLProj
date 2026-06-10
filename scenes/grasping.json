@@ -152,9 +152,9 @@
   ],
   "tissues": [
     {
-      "name": "gallbladder_tissue",
-      "type": "organ",
-      "description": "gallbladder_tissue for task",
+      "name": "skin_patch",
+      "type": "skin",
+      "description": "skin_patch for task",
       "soft_body": false,
       "geometry": {
         "mesh": null,
@@ -191,9 +191,9 @@
       },
       "attachments": [],
       "color": {
-        "r": 0.7,
-        "g": 0.6,
-        "b": 0.4,
+        "r": 0.85,
+        "g": 0.7,
+        "b": 0.6,
         "a": 1.0
       },
       "texture": null,
@@ -328,5 +328,13 @@
     "randomize_each_episode": true,
     "seed": 42
   },
-  "simulator": "mujoco"
+  "simulator": "mujoco",
+  "dreamer": {
+    "obs_type": null,
+    "pixel_resolution": null,
+    "process_isolation": true,
+    "memory_fraction": 0.4,
+    "dreamer_variant": "dreamerv3",
+    "reconstruction_metric": "mse"
+  }
 }
