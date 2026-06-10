@@ -89,6 +89,8 @@
   **Plans:** 1 plan
   - [ ] 26-01-PLAN.md — Fix `indig`→`indent` typo in `training.py:342` + replace `os.fdopen` with `_JsonStdout` wrapper in `subprocess.py:23` + change `DREAMER_COLOR` to `#FF8C00` in `plots.py:30`; add 3 regression tests (all CPU-only mocked)
 - [ ] Phase 27: Complete Benchmark Scene Coverage (BENCH-01, 5 task scenes, task_type wiring, experiments/)
+  **Plans:** 1 plan
+  - [ ] 27-01-PLAN.md — Create 5 missing task scene JSONs (knot_tying/needle_insertion/grasping/cutting/dissection) + add `task_type` to simple_suturing.json (activates dormant TaskRewardRouter) + write `experiments/{name}.yaml` on `ExperimentRunner.__init__` (closes misleading CLI reproduce hint) + 9 regression tests in `tests/test_benchmark_scenes.py`
 - [ ] Phase 28: Audit Gap Closure (Retroactive Verification) (Phase 21-23 verify, REQUIREMENTS checkboxes)
 
 </details>
@@ -123,5 +125,5 @@
 | 24. DreamerV3 World Models | v0.4.0 | 5/5 | Complete | 2026-06-09 |
 | 25. Fix MARL Runtime Wiring | v0.4.1 | 0/1 | Pending | — |
 | 26. Fix DreamerV3 Training Bugs | v0.4.1 | 0/? | Pending | — |
-| 27. Complete Benchmark Scene Coverage | v0.4.1 | 0/? | Pending | — |
+| 27. Complete Benchmark Scene Coverage | v0.4.1 | 0/1 | Pending | — |
 | 28. Audit Gap Closure (Retroactive Verification) | v0.4.1 | 0/? | Pending | — |
