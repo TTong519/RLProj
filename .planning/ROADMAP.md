@@ -86,6 +86,8 @@
   **Plans:** 1 plan
   - [ ] 25-01-PLAN.md — Add `SurgicalEnv.passthrough_step()` for MARL per-arm action passthrough; fix `MultiAgentSurgicalEnv.step()` + `self.agents` init + `marl-train` CLI constructor + `ArmConfig`/`ArmRole` top-level exports
 - [ ] Phase 26: Fix DreamerV3 Training Bugs (`indig` typo, subprocess pipe, color)
+  **Plans:** 1 plan
+  - [ ] 26-01-PLAN.md — Fix `indig`→`indent` typo in `training.py:342` + replace `os.fdopen` with `_JsonStdout` wrapper in `subprocess.py:23` + change `DREAMER_COLOR` to `#FF8C00` in `plots.py:30`; add 3 regression tests (all CPU-only mocked)
 - [ ] Phase 27: Complete Benchmark Scene Coverage (BENCH-01, 5 task scenes, task_type wiring, experiments/)
 - [ ] Phase 28: Audit Gap Closure (Retroactive Verification) (Phase 21-23 verify, REQUIREMENTS checkboxes)
 
