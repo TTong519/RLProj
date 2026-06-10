@@ -129,7 +129,12 @@ class TestCheckTaskSuccess:
 
 class TestEnvironmentTaskTermination:
     def test_import_and_call_exists(self) -> None:
-        """Ensure check_task_success is imported and called inside step()."""
+        """Ensure check_task_success is imported and called inside the step pipeline.
+
+        After the Phase 25 refactor that extracted the simulator+outputs
+        body into _step_simulator_and_build_outputs(), the call lives in
+        that helper rather than in step() itself. Either source counts.
+        """
         import inspect
 
         from surg_rl.rl.environment import SurgicalEnv, SurgicalEnvConfig
@@ -145,4 +150,6 @@ class TestEnvironmentTaskTermination:
         )
         # The fact that env instantiated without error means _default_action_config
         # queried get_num_controls and action space was sized correctly.
-        assert "check_task_success" in inspect.getsource(env.step)
+        step_source = inspect.getsource(env.step)
+        helper_source = inspect.getsource(SurgicalEnv._step_simulator_and_build_outputs)
+        assert "check_task_success" in step_source + helper_source
