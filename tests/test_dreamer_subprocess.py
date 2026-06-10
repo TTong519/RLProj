@@ -1,12 +1,15 @@
 """Tests for DreamerV3 subprocess isolation and message protocol."""
 
+import inspect
 import json
 import os
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from surg_rl.dreamer.subprocess import DreamerSubprocess
+from surg_rl.dreamer import subprocess as dreamer_subprocess_mod
+from surg_rl.dreamer.subprocess import DreamerSubprocess, _JsonStdout
 
 
 class FakePipe:
@@ -364,6 +367,68 @@ class TestDreamerSubprocessContextManager:
             with DreamerSubprocess() as proc:
                 assert proc._spawned is True
             assert ctx.process.terminated is True
+
+
+class TestSubprocessStdoutProtocol:
+    """Regression tests for the stdout wrapper used inside _subprocess_main (Phase 26 D-02).
+
+    The original code used `os.fdopen(child_stdout.fileno(), "w", ...)` to
+    redirect stdout to a Pipe connection. That pattern is fragile on
+    Windows and can race with the parent's recv(). The fix introduces
+    `_JsonStdout`, a thin wrapper that uses the Pipe connection's send()
+    method directly (no FD manipulation).
+
+    These tests cover the wrapper in isolation; the protocol-level
+    test (Test 4) additionally asserts that `_subprocess_main` actually
+    wires up `_JsonStdout` (and not os.fdopen) on the stdout channel.
+    """
+
+    def test_json_stdout_write_sends_payload_to_pipe(self):
+        """`.write('{"type":"READY"}\\n')` records one send with newline stripped."""
+        pipe = FakePipe()
+        stdout = _JsonStdout(pipe)
+        n = stdout.write('{"type":"READY"}\n')
+        assert n == len('{"type":"READY"}\n')
+        assert pipe._sent == ['{"type":"READY"}']
+
+    def test_json_stdout_write_handles_empty_string(self):
+        """`.write("")` returns 0 and does not call send()."""
+        pipe = FakePipe()
+        stdout = _JsonStdout(pipe)
+        assert stdout.write("") == 0
+        assert pipe._sent == []
+
+    def test_json_stdout_write_handles_lone_newline(self):
+        """`.write("\\n")` returns 1 and does not call send() (newline-only is a no-op)."""
+        pipe = FakePipe()
+        stdout = _JsonStdout(pipe)
+        assert stdout.write("\n") == 1
+        assert pipe._sent == []
+
+    def test_json_stdout_flush_is_noop(self):
+        """`.flush()` does not raise and does not send (no-op for our protocol)."""
+        pipe = FakePipe()
+        _JsonStdout(pipe).flush()
+        assert pipe._sent == []
+
+    def test_subprocess_main_does_not_use_fdopen_for_stdout(self):
+        """Source-level guard: stdout assignment must use `_JsonStdout`, not `os.fdopen` on a Pipe FD.
+
+        The only acceptable `os.fdopen(...)` call in `_subprocess_main` is on
+        file descriptor 2 (stderr) — anything else indicates the fragile
+        FD-on-Pipe pattern has regressed.
+        """
+        src = inspect.getsource(dreamer_subprocess_mod._subprocess_main)
+        # The stdout line must use _JsonStdout
+        assert "_JsonStdout(child_stdout)" in src, (
+            f"_subprocess_main must wire stdout through _JsonStdout:\n{src}"
+        )
+        # No os.fdopen on the Pipe connection (no child_stdout.fileno() call)
+        assert "child_stdout.fileno()" not in src, (
+            f"_subprocess_main still uses child_stdout.fileno() — fragile:\n{src}"
+        )
+        # Stderr may use os.fdopen(2, ...) — that's allowed
+        assert "os.fdopen(2" in src, "expected stderr to use os.fdopen(2, ...)"
 
 
 if __name__ == "__main__":

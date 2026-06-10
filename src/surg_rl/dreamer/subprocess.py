@@ -20,10 +20,37 @@ def _subprocess_main(child_stdin, child_stdout, config: dict[str, Any]) -> None:
     os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
     # Redirect stdout/stderr for clean JSON communication
-    sys.stdout = os.fdopen(child_stdout.fileno(), "w", buffering=1)
+    sys.stdout = _JsonStdout(child_stdout)
     sys.stderr = os.fdopen(2, "w", buffering=1)
 
     _run_subprocess_loop(child_stdin)
+
+
+class _JsonStdout:
+    """stdout replacement that ships lines over a multiprocessing Pipe.
+
+    Replaces the previous `os.fdopen(child_stdout.fileno(), "w", ...)` pattern
+    which was fragile on Windows (multiprocessing Pipe connections do not always
+    expose a real fileno for the parent's send end) and could race with the
+    parent's recv(). Now every `print(..., flush=True)` call inside the
+    subprocess ends up as a single `pipe.send(json_payload)` call.
+    """
+
+    def __init__(self, pipe: Any) -> None:
+        self._pipe = pipe
+
+    def write(self, s: str) -> int:
+        if not s:
+            return 0
+        if s == "\n":
+            return 1
+        # Strip trailing newline added by `print`
+        payload = s.rstrip("\n")
+        self._pipe.send(payload)
+        return len(s)
+
+    def flush(self) -> None:
+        pass
 
 
 def _run_subprocess_loop(stdin_pipe) -> None:
