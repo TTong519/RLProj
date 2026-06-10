@@ -3,21 +3,17 @@
 Phase 22 Plan 02 — Core MultiAgentSurgicalEnv + simulator arm routing.
 """
 
-import importlib
 import json
-from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 
 from surg_rl.scene_definition.schema import (
     ArmConfig,
-    ArmRole,
     MultiAgentConfig,
     RobotConfig,
     SceneDefinition,
 )
-
 
 # ============================================================================
 # Helper: Create a minimal dual-arm scene for simulator tests
@@ -112,9 +108,11 @@ class TestBaseSimulatorArmId:
         sig = inspect.signature(BaseSimulator.apply_action)
         params = list(sig.parameters.keys())
         assert "arm_id" in params, "apply_action must accept arm_id parameter"
-        assert params == ["self", "action", "arm_id"], (
-            f"apply_action params should be ['self', 'action', 'arm_id'], got {params}"
-        )
+        assert params == [
+            "self",
+            "action",
+            "arm_id",
+        ], f"apply_action params should be ['self', 'action', 'arm_id'], got {params}"
 
     def test_apply_action_abstract_accepts_arm_id(self):
         """_apply_action abstract method accepts arm_id parameter."""
@@ -125,9 +123,11 @@ class TestBaseSimulatorArmId:
         sig = inspect.signature(BaseSimulator._apply_action)
         params = list(sig.parameters.keys())
         assert "arm_id" in params, "_apply_action must accept arm_id parameter"
-        assert params == ["self", "action", "arm_id"], (
-            f"_apply_action params should be ['self', 'action', 'arm_id'], got {params}"
-        )
+        assert params == [
+            "self",
+            "action",
+            "arm_id",
+        ], f"_apply_action params should be ['self', 'action', 'arm_id'], got {params}"
 
     def test_apply_action_passes_arm_id_to_implementation(self):
         """apply_action propagates arm_id to _apply_action."""
@@ -190,7 +190,6 @@ class TestMuJoCoArmRouting:
     @pytest.mark.integration
     def test_mujoco_arm_id_none_routes_all_joints(self, monkeypatch):
         """arm_id=None routes action to all joints (backward compatible)."""
-        import os
 
         # Suppress any OS-level GL/display issues
         monkeypatch.setenv("DISPLAY", "")
@@ -246,16 +245,16 @@ class TestMuJoCoArmRouting:
 
             # Surgeon joints should be set
             for i in range(surgeon_start, surgeon_end):
-                assert sim._data.ctrl[i] == 0.5, (
-                    f"Surgeon ctrl[{i}] should be 0.5, got {sim._data.ctrl[i]}"
-                )
+                assert (
+                    sim._data.ctrl[i] == 0.5
+                ), f"Surgeon ctrl[{i}] should be 0.5, got {sim._data.ctrl[i]}"
 
             # Non-surgeon joints should remain unchanged
             for i in range(len(sim._data.ctrl)):
                 if i < surgeon_start or i >= surgeon_end:
-                    assert sim._data.ctrl[i] == original_ctrl[i], (
-                        f"Non-surgeon ctrl[{i}] changed from {original_ctrl[i]} to {sim._data.ctrl[i]}"
-                    )
+                    assert (
+                        sim._data.ctrl[i] == original_ctrl[i]
+                    ), f"Non-surgeon ctrl[{i}] changed from {original_ctrl[i]} to {sim._data.ctrl[i]}"
         finally:
             sim.close()
 
@@ -432,7 +431,12 @@ class TestMultiAgentSurgicalEnv:
                         {
                             "name": "s_joint_0",
                             "type": "revolute",
-                            "limits": {"lower": -3.14, "upper": 3.14, "velocity": 2.0, "effort": 100.0},
+                            "limits": {
+                                "lower": -3.14,
+                                "upper": 3.14,
+                                "velocity": 2.0,
+                                "effort": 100.0,
+                            },
                         },
                     ],
                 },
@@ -445,7 +449,12 @@ class TestMultiAgentSurgicalEnv:
                         {
                             "name": "a_joint_0",
                             "type": "revolute",
-                            "limits": {"lower": -3.14, "upper": 3.14, "velocity": 2.0, "effort": 100.0},
+                            "limits": {
+                                "lower": -3.14,
+                                "upper": 3.14,
+                                "velocity": 2.0,
+                                "effort": 100.0,
+                            },
                         },
                     ],
                 },
@@ -475,9 +484,9 @@ class TestMultiAgentSurgicalEnv:
         config = {"scene_path": str(dual_arm_scene), "simulator_type": "mujoco"}
         env = MultiAgentSurgicalEnv(config)
         try:
-            assert not isinstance(env, SurgicalEnv), (
-                "MultiAgentSurgicalEnv must NOT be a SurgicalEnv subclass (D-11)"
-            )
+            assert not isinstance(
+                env, SurgicalEnv
+            ), "MultiAgentSurgicalEnv must NOT be a SurgicalEnv subclass (D-11)"
         finally:
             env.close()
 
@@ -535,7 +544,10 @@ class TestMultiAgentSurgicalEnv:
         try:
             env.reset()
 
-            actions = {"surgeon": np.array([0.1], dtype=np.float32), "assistant": np.array([0.2], dtype=np.float32)}
+            actions = {
+                "surgeon": np.array([0.1], dtype=np.float32),
+                "assistant": np.array([0.2], dtype=np.float32),
+            }
             result = env.step(actions)
 
             assert len(result) == 5, f"step must return 5-tuple, got {len(result)}"
@@ -589,7 +601,10 @@ class TestMultiAgentSurgicalEnv:
         try:
             env.reset()
 
-            actions = {"surgeon": np.array([0.1], dtype=np.float32), "assistant": np.array([0.2], dtype=np.float32)}
+            actions = {
+                "surgeon": np.array([0.1], dtype=np.float32),
+                "assistant": np.array([0.2], dtype=np.float32),
+            }
             _obs, rewards, _term, _trunc, _info = env.step(actions)
 
             assert "surgeon" in rewards
@@ -610,7 +625,10 @@ class TestMultiAgentSurgicalEnv:
         env = MultiAgentSurgicalEnv(config)
         try:
             env.reset()
-            actions = {"surgeon": np.array([0.1], dtype=np.float32), "assistant": np.array([0.2], dtype=np.float32)}
+            actions = {
+                "surgeon": np.array([0.1], dtype=np.float32),
+                "assistant": np.array([0.2], dtype=np.float32),
+            }
             env.step(actions)
         finally:
             env.close()
@@ -650,9 +668,10 @@ class TestMultiAgentSurgicalEnv:
         try:
             assert hasattr(env, "_surgical_env"), "MultiAgentSurgicalEnv must own _surgical_env"
             from surg_rl.rl.environment import SurgicalEnv
-            assert isinstance(env._surgical_env, SurgicalEnv), (
-                "_surgical_env must be a SurgicalEnv instance"
-            )
+
+            assert isinstance(
+                env._surgical_env, SurgicalEnv
+            ), "_surgical_env must be a SurgicalEnv instance"
         finally:
             env.close()
 
@@ -754,6 +773,4 @@ class TestObservationFilter:
 
         obs = {"exists_key": np.array([1.0])}
         result = filt.filter("surgeon", obs)
-        assert set(result.keys()) == {"exists_key"}, (
-            "missing_key should be silently skipped"
-        )
+        assert set(result.keys()) == {"exists_key"}, "missing_key should be silently skipped"

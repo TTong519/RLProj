@@ -194,6 +194,7 @@ TISSUE_STATE_SPEC = ObservationSpec(
 
 # Tissue deformation (soft body vertex displacements)
 
+
 def build_deformable_spec(max_vertices: int = 200) -> ObservationSpec:
     """Build a tissue_deformation ObservationSpec with configurable vertex count."""
     return ObservationSpec(

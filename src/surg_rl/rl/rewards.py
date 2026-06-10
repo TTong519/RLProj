@@ -525,10 +525,10 @@ class SuturingReward(BaseRewardFunction):
     """
 
     PARAM_BOUNDS: dict[str, list[float]] = {
-        "needle_position_tolerance": [0.02, 0.002],   # m (20mm → 2mm)
-        "thread_tension_threshold": [1.0, 0.2],        # normalized
-        "stitch_spacing_tolerance": [0.01, 0.002],     # m
-        "time_limit": [120.0, 45.0],                   # seconds
+        "needle_position_tolerance": [0.02, 0.002],  # m (20mm → 2mm)
+        "thread_tension_threshold": [1.0, 0.2],  # normalized
+        "stitch_spacing_tolerance": [0.01, 0.002],  # m
+        "time_limit": [120.0, 45.0],  # seconds
     }
 
     def __init__(
@@ -664,11 +664,11 @@ class DissectionReward(BaseRewardFunction):
     """
 
     PARAM_BOUNDS: dict[str, list[float]] = {
-        "incision_path_tolerance": [0.01, 0.002],      # m
-        "collateral_damage_threshold": [0.05, 0.01],    # allowable damage
-        "force_precision": [3.0, 1.0],                  # N threshold
-        "tissue_stiffness": [50.0, 200.0],              # N/m
-        "time_limit": [180.0, 60.0],                    # seconds
+        "incision_path_tolerance": [0.01, 0.002],  # m
+        "collateral_damage_threshold": [0.05, 0.01],  # allowable damage
+        "force_precision": [3.0, 1.0],  # N threshold
+        "tissue_stiffness": [50.0, 200.0],  # N/m
+        "time_limit": [180.0, 60.0],  # seconds
     }
 
     def __init__(
@@ -801,10 +801,10 @@ class NeedlePassingReward(BaseRewardFunction):
     """
 
     PARAM_BOUNDS: dict[str, list[float]] = {
-        "handoff_proximity_tolerance": [0.05, 0.01],   # m
-        "needle_alignment_tolerance": [0.3, 0.05],      # rad
-        "action_noise": [0.01, 0.06],                   # std dev
-        "time_limit": [90.0, 30.0],                     # seconds
+        "handoff_proximity_tolerance": [0.05, 0.01],  # m
+        "needle_alignment_tolerance": [0.3, 0.05],  # rad
+        "action_noise": [0.01, 0.06],  # std dev
+        "time_limit": [90.0, 30.0],  # seconds
     }
 
     def __init__(
@@ -930,11 +930,11 @@ class KnotTyingReward(BaseRewardFunction):
     """
 
     PARAM_BOUNDS: dict[str, list[float]] = {
-        "loop_deviation_tolerance": [0.03, 0.005],    # m
-        "knot_tension_tolerance": [0.5, 0.05],         # normalized
-        "tissue_stiffness": [50.0, 200.0],             # N/m (higher = harder)
-        "action_noise": [0.01, 0.08],                  # std dev
-        "time_limit": [120.0, 45.0],                   # seconds
+        "loop_deviation_tolerance": [0.03, 0.005],  # m
+        "knot_tension_tolerance": [0.5, 0.05],  # normalized
+        "tissue_stiffness": [50.0, 200.0],  # N/m (higher = harder)
+        "action_noise": [0.01, 0.08],  # std dev
+        "time_limit": [120.0, 45.0],  # seconds
     }
 
     def __init__(
@@ -1076,11 +1076,11 @@ class GraspingReward(BaseRewardFunction):
     """
 
     PARAM_BOUNDS: dict[str, list[float]] = {
-        "approach_tolerance": [0.05, 0.005],        # m
-        "grip_force_accuracy": [2.0, 0.3],           # N tolerance (lower = harder)
-        "object_mass": [0.01, 0.1],                  # kg (heavier = harder)
-        "action_noise": [0.01, 0.06],                # std dev
-        "time_limit": [90.0, 30.0],                  # seconds
+        "approach_tolerance": [0.05, 0.005],  # m
+        "grip_force_accuracy": [2.0, 0.3],  # N tolerance (lower = harder)
+        "object_mass": [0.01, 0.1],  # kg (heavier = harder)
+        "action_noise": [0.01, 0.06],  # std dev
+        "time_limit": [90.0, 30.0],  # seconds
     }
 
     def __init__(
@@ -1224,11 +1224,11 @@ class CuttingReward(BaseRewardFunction):
     """
 
     PARAM_BOUNDS: dict[str, list[float]] = {
-        "cut_path_accuracy": [0.01, 0.002],          # m deviation tolerance
-        "collateral_threshold": [0.05, 0.01],         # allowable damage (lower = stricter)
-        "force_precision": [3.0, 1.0],                # N (lower = harder to stay under)
-        "tissue_stiffness": [50.0, 300.0],            # N/m (higher = harder)
-        "time_limit": [120.0, 60.0],                  # seconds
+        "cut_path_accuracy": [0.01, 0.002],  # m deviation tolerance
+        "collateral_threshold": [0.05, 0.01],  # allowable damage (lower = stricter)
+        "force_precision": [3.0, 1.0],  # N (lower = harder to stay under)
+        "tissue_stiffness": [50.0, 300.0],  # N/m (higher = harder)
+        "time_limit": [120.0, 60.0],  # seconds
     }
 
     def __init__(

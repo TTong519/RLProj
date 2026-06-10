@@ -11,7 +11,6 @@ from typing import Any
 from surg_rl.assets import TRIMESH
 from surg_rl.assets.mesh_generator import (
     generate_procedural_instrument,
-    generate_procedural_organ,
 )
 from surg_rl.utils.logging import get_logger
 
@@ -107,14 +106,11 @@ def decimate_and_decompose(
         (visual_mesh, [collision_mesh, ...])
     """
     TRIMESH
-    import trimesh
 
     visual = mesh.copy()
     if target_face_count and len(visual.faces) > target_face_count:
         visual = visual.simplify_quadratic_decimation(target_face_count)
-        logger.info(
-            f"Decimated mesh from {len(mesh.faces)} to {len(visual.faces)} faces"
-        )
+        logger.info(f"Decimated mesh from {len(mesh.faces)} to {len(visual.faces)} faces")
 
     try:
         from trimesh.interfaces.vhacd import convex_decomposition
@@ -123,9 +119,7 @@ def decimate_and_decompose(
         logger.info(f"V-HACD: decomposed into {len(collision_parts)} convex parts")
         return visual, collision_parts
     except Exception:
-        logger.warning(
-            "V-HACD decomposition failed — falling back to convex hull"
-        )
+        logger.warning("V-HACD decomposition failed — falling back to convex hull")
         hull = mesh.convex_hull
         return visual, [hull]
 
@@ -172,10 +166,7 @@ def generate_urdf(
     for i, link_def in enumerate(template):
         link_name = f"{name}_{link_def['name']}"
         vis_ref = str(visual_path.relative_to(out)) if i == 0 else ""
-        col_ref = (
-            str(collision_paths[0].relative_to(out))
-            if collision_paths else ""
-        )
+        col_ref = str(collision_paths[0].relative_to(out)) if collision_paths else ""
         urdf_xml += f"""  <link name="{link_name}">
     <visual>
       <geometry>

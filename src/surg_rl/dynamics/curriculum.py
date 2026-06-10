@@ -265,7 +265,7 @@ class CurriculumScheduler(BaseController):
 
         # D-08: Merge task_param_bounds into parameter_overrides for interpolation
         # difficulty is the single source of truth — no separate task_difficulty field
-        task_bounds = getattr(stage_cfg, 'task_param_bounds', None) or {}
+        task_bounds = getattr(stage_cfg, "task_param_bounds", None) or {}
         if task_bounds:
             merged_overrides = dict(stage_cfg.parameter_overrides)
             merged_overrides.update(task_bounds)
@@ -555,7 +555,7 @@ class CurriculumScheduler(BaseController):
         if current_idx <= 0:
             return False
 
-        recent_metrics = self._performance_history[-self.curriculum_config.advancement_window:]
+        recent_metrics = self._performance_history[-self.curriculum_config.advancement_window :]
         if not recent_metrics:
             return False
 

@@ -27,6 +27,7 @@ logger = get_logger(__name__)
 # Lazily import tune objects so tests without Ray can still import this module.
 def _tune():
     from ray import tune as t
+
     return t
 
 
@@ -53,9 +54,7 @@ def build_tune_search_space(
     if scene_paths:
         space["env_config"] = {"scene_path": t.choice(scene_paths)}
     if simulator_types:
-        space.setdefault("env_config", {}).update(
-            {"simulator_type": t.choice(simulator_types)}
-        )
+        space.setdefault("env_config", {}).update({"simulator_type": t.choice(simulator_types)})
     if algorithms:
         space["algorithm"] = t.choice(algorithms)
 
@@ -73,8 +72,7 @@ def build_tune_search_space(
         space.setdefault("env_config", {}).update(
             {
                 "reward_config": {
-                    name: t.uniform(low, high)
-                    for name, (low, high) in reward_weight_ranges.items()
+                    name: t.uniform(low, high) for name, (low, high) in reward_weight_ranges.items()
                 }
             }
         )
@@ -198,9 +196,7 @@ def run_tune_experiment(
         )
         best_cfg_path = Path(base_config.save_dir or "rllib_results") / "best_config.json"
         best_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-        best_cfg_path.write_text(
-            json.dumps(best.config, indent=2, default=str)
-        )
+        best_cfg_path.write_text(json.dumps(best.config, indent=2, default=str))
     else:
         logger.warning("No best result returned from Tune")
 

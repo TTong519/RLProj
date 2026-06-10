@@ -1,6 +1,5 @@
 """Tests for real asset loading with fallback and deduplicated warnings."""
-import tempfile
-from pathlib import Path
+
 from unittest.mock import patch
 
 import pytest
@@ -70,11 +69,11 @@ class TestMuJoCoMeshAssets:
         builder = SceneBuilder(assets_dir=str(tmp_path))
 
         from surg_rl.scene_definition.schema import (
+            MeshAsset,
             Metadata,
             SceneDefinition,
             TissueConfig,
             TissueMeshDefinition,
-            MeshAsset,
         )
 
         scene = SceneDefinition(
@@ -101,11 +100,11 @@ class TestMuJoCoMeshAssets:
         builder = SceneBuilder(assets_dir=str(tmp_path))
 
         from surg_rl.scene_definition.schema import (
+            MeshAsset,
             Metadata,
             SceneDefinition,
             TissueConfig,
             TissueMeshDefinition,
-            MeshAsset,
         )
 
         scene = SceneDefinition(
@@ -140,15 +139,13 @@ class TestPyBulletRealAssetIntegration:
     )
     def test_pybullet_loads_sample_urdf(self, tmp_path):
         """PyBulletSimulator should load a real URDF without crashing."""
-        import sys
-        import pybullet as p
         from surg_rl.scene_definition.schema import (
             Metadata,
-            SceneDefinition,
-            RobotConfig,
+            Orientation,
             Pose,
             Position,
-            Orientation,
+            RobotConfig,
+            SceneDefinition,
         )
         from surg_rl.simulators.pybullet_simulator import PyBulletSimulator
 
@@ -159,8 +156,8 @@ class TestPyBulletRealAssetIntegration:
             '  <link name="base">\n'
             '    <visual><geometry><box size="0.1 0.1 0.1"/></geometry></visual>\n'
             '    <collision><geometry><box size="0.1 0.1 0.1"/></geometry></collision>\n'
-            '  </link>\n'
-            '</robot>\n'
+            "  </link>\n"
+            "</robot>\n"
         )
         scene = SceneDefinition(
             metadata=Metadata(name="urdf_scene"),
@@ -188,11 +185,11 @@ class TestPyBulletRealAssetIntegration:
     def test_scene_builder_creates_mjcf_with_mesh(self, tmp_path):
         """create_mjcf should include mesh asset when tissue has real mesh."""
         from surg_rl.scene_definition.schema import (
+            MeshAsset,
             Metadata,
             SceneDefinition,
             TissueConfig,
             TissueMeshDefinition,
-            MeshAsset,
         )
 
         obj_path = tmp_path / "sample_tissue.obj"
@@ -255,8 +252,15 @@ class TestURDFTemplates:
         from surg_rl.assets.mesh_loader import URDF_TEMPLATES
 
         required = {
-            "forceps", "scalpel", "needle_driver", "scissors",
-            "clamp", "suction", "cautery", "camera", "retractor",
+            "forceps",
+            "scalpel",
+            "needle_driver",
+            "scissors",
+            "clamp",
+            "suction",
+            "cautery",
+            "camera",
+            "retractor",
         }
         assert required.issubset(set(URDF_TEMPLATES.keys()))
 
@@ -264,6 +268,7 @@ class TestURDFTemplates:
         """generate_urdf writes valid URDF with correct link count."""
         try:
             import trimesh
+
             from surg_rl.assets.mesh_loader import generate_urdf
 
             mesh = trimesh.creation.box(extents=[0.01, 0.01, 0.1])
@@ -284,6 +289,7 @@ class TestDecimation:
         """target_face_count=500 produces fewer faces than original."""
         try:
             import trimesh
+
             from surg_rl.assets.mesh_loader import decimate_and_decompose
 
             mesh = trimesh.creation.icosphere(subdivisions=4)

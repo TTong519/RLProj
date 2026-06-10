@@ -88,12 +88,14 @@ class TestRos2BridgeConfig:
 
         yaml_path = tmp_path / "ros2_bridge.yaml"
         yaml_path.write_text(
-            yaml.dump({
-                "state_topic": "/yaml/joint_states",
-                "command_topic": "/yaml/commands",
-                "frame_id": "odom",
-                "batch_size": 8,
-            })
+            yaml.dump(
+                {
+                    "state_topic": "/yaml/joint_states",
+                    "command_topic": "/yaml/commands",
+                    "frame_id": "odom",
+                    "batch_size": 8,
+                }
+            )
         )
         c = Ros2BridgeConfig.from_yaml(str(yaml_path))
         assert c.state_topic == "/yaml/joint_states"
@@ -106,9 +108,8 @@ class TestRos2BridgeConfig:
         from surg_rl.ros2.config import Ros2BridgeConfig
 
         missing_path = tmp_path / "nonexistent.yaml"
-        with pytest.warns(UserWarning):
-            with pytest.raises(FileNotFoundError):
-                Ros2BridgeConfig.from_yaml(str(missing_path))
+        with pytest.warns(UserWarning), pytest.raises(FileNotFoundError):
+            Ros2BridgeConfig.from_yaml(str(missing_path))
 
 
 # ── Task 1: Ros2BridgeNode tests ────────────────────────────────────────
@@ -153,9 +154,7 @@ class TestRos2BridgeNodeDummy:
             joint_names=["joint1", "joint2"],
         )
         # Should not raise on dummy node
-        node.publish_state(
-            np.array([0.0, 0.0]), np.array([0.0, 0.0])
-        )
+        node.publish_state(np.array([0.0, 0.0]), np.array([0.0, 0.0]))
 
     def test_dummy_get_latest_command_returns_none(self):
         """Dummy node get_latest_command returns None."""
@@ -266,7 +265,6 @@ class TestRos2BridgeNodeGapFixes:
     @property
     def _has_real_ros2(self):
         """Check if real rclpy-based Ros2BridgeNode is available (not dummy)."""
-        import sys
 
         if sys.platform == "darwin":
             return False
@@ -281,6 +279,7 @@ class TestRos2BridgeNodeGapFixes:
         """multiprocessing.Queue injected via command_queue parameter works."""
         import multiprocessing
         import time
+
         from surg_rl.ros2.bridge_node import Ros2BridgeNode
 
         q = multiprocessing.Queue(maxsize=1)
@@ -340,9 +339,7 @@ class TestRos2BridgeNodeGapFixes:
         try:
             node.publish_state(np.array([0.0, np.nan]), np.array([0.0, 0.0]))
         except ValueError:
-            pytest.fail(
-                "publish_state with on_nan_inf='sanitize' should not raise ValueError"
-            )
+            pytest.fail("publish_state with on_nan_inf='sanitize' should not raise ValueError")
 
     def test_on_dimension_mismatch_stored(self):
         """on_dimension_mismatch parameter is stored."""
@@ -391,6 +388,7 @@ class TestRos2BridgeNodeGapFixes:
     def test_dummy_node_accepts_all_params(self):
         """Dummy Ros2BridgeNode accepts all new gap-fix parameters."""
         import multiprocessing
+
         from surg_rl.ros2.bridge_node import Ros2BridgeNode
 
         q = multiprocessing.Queue(maxsize=1)
@@ -414,12 +412,13 @@ class TestRos2BridgeGapFixes:
     def test_forward_commands_to_controller(self):
         """G-1: Ros2Bridge.forward_commands() polls shared queue and injects into controller."""
         import multiprocessing
+
         from surg_rl.dynamics.environment_controller import (
             EnvironmentController,
             EnvironmentControllerConfig,
         )
-        from surg_rl.ros2.config import Ros2BridgeConfig
         from surg_rl.rl.environment import Ros2Bridge
+        from surg_rl.ros2.config import Ros2BridgeConfig
 
         cmd_queue = multiprocessing.Queue(maxsize=1)
         cmd_queue.put(np.array([0.5, -0.3, 0.1]))
@@ -441,12 +440,13 @@ class TestRos2BridgeGapFixes:
     def test_forward_commands_drains_all_pending(self):
         """G-1: forward_commands() drains all pending commands, keep-latest wins."""
         import queue as queuelib
+
         from surg_rl.dynamics.environment_controller import (
             EnvironmentController,
             EnvironmentControllerConfig,
         )
-        from surg_rl.ros2.config import Ros2BridgeConfig
         from surg_rl.rl.environment import Ros2Bridge
+        from surg_rl.ros2.config import Ros2BridgeConfig
 
         cmd_queue = queuelib.Queue()
         cmd_queue.put(np.array([1.0, 1.0]))
@@ -470,8 +470,9 @@ class TestRos2BridgeGapFixes:
     def test_forward_commands_none_queues(self):
         """G-1: forward_commands() is a no-op when queue or controller is None."""
         import multiprocessing
-        from surg_rl.ros2.config import Ros2BridgeConfig
+
         from surg_rl.rl.environment import Ros2Bridge
+        from surg_rl.ros2.config import Ros2BridgeConfig
 
         bridge_cfg = Ros2BridgeConfig(
             state_topic="/surg_rl/joint_states",
@@ -490,12 +491,13 @@ class TestRos2BridgeGapFixes:
     def test_forward_commands_empty_queue_noop(self):
         """G-1: forward_commands() is a no-op when queue is empty."""
         import multiprocessing
+
         from surg_rl.dynamics.environment_controller import (
             EnvironmentController,
             EnvironmentControllerConfig,
         )
-        from surg_rl.ros2.config import Ros2BridgeConfig
         from surg_rl.rl.environment import Ros2Bridge
+        from surg_rl.ros2.config import Ros2BridgeConfig
 
         cmd_queue = multiprocessing.Queue(maxsize=1)
         bridge_cfg = Ros2BridgeConfig(
@@ -514,22 +516,27 @@ class TestRos2BridgeGapFixes:
     def test_on_missing_topic_error_raises(self):
         """G-2: on_missing_topic='error' raises RuntimeError when topics missing."""
         import multiprocessing
-        from unittest.mock import MagicMock, patch
-        from surg_rl.ros2.config import Ros2BridgeConfig
+
         from surg_rl.rl.environment import Ros2Bridge
+        from surg_rl.ros2.config import Ros2BridgeConfig
 
         bridge_cfg = Ros2BridgeConfig(
             state_topic="/surg_rl/joint_states",
             command_topic="/surg_rl/commands",
             on_missing_topic="error",
         )
-        bridge = Ros2Bridge(node=None, config=bridge_cfg, command_queue=multiprocessing.Queue(maxsize=1))
+        bridge = Ros2Bridge(
+            node=None, config=bridge_cfg, command_queue=multiprocessing.Queue(maxsize=1)
+        )
 
-        with patch("surg_rl.rl.environment.HAS_ROS2", True), \
-             patch("surg_rl.ros2.__init__.HAS_ROS2", True), \
-             patch("surg_rl.rl.environment.multiprocessing.Process") as mock_proc, \
-             patch.dict("sys.modules", {"rclpy": MagicMock()}):
+        with (
+            patch("surg_rl.rl.environment.HAS_ROS2", True),
+            patch("surg_rl.ros2.__init__.HAS_ROS2", True),
+            patch("surg_rl.rl.environment.multiprocessing.Process") as mock_proc,
+            patch.dict("sys.modules", {"rclpy": MagicMock()}),
+        ):
             import rclpy
+
             rclpy.ok.return_value = True
             rclpy.get_topic_names_and_types.return_value = []
 
@@ -542,22 +549,27 @@ class TestRos2BridgeGapFixes:
         """G-2: on_missing_topic='warn' logs warning when topics missing."""
         import logging
         import multiprocessing
-        from unittest.mock import MagicMock, patch
-        from surg_rl.ros2.config import Ros2BridgeConfig
+
         from surg_rl.rl.environment import Ros2Bridge
+        from surg_rl.ros2.config import Ros2BridgeConfig
 
         bridge_cfg = Ros2BridgeConfig(
             state_topic="/surg_rl/joint_states",
             command_topic="/surg_rl/commands",
             on_missing_topic="warn",
         )
-        bridge = Ros2Bridge(node=None, config=bridge_cfg, command_queue=multiprocessing.Queue(maxsize=1))
+        bridge = Ros2Bridge(
+            node=None, config=bridge_cfg, command_queue=multiprocessing.Queue(maxsize=1)
+        )
 
-        with patch("surg_rl.rl.environment.HAS_ROS2", True), \
-             patch("surg_rl.ros2.__init__.HAS_ROS2", True), \
-             patch("surg_rl.rl.environment.multiprocessing.Process") as mock_proc, \
-             patch.dict("sys.modules", {"rclpy": MagicMock()}):
+        with (
+            patch("surg_rl.rl.environment.HAS_ROS2", True),
+            patch("surg_rl.ros2.__init__.HAS_ROS2", True),
+            patch("surg_rl.rl.environment.multiprocessing.Process") as mock_proc,
+            patch.dict("sys.modules", {"rclpy": MagicMock()}),
+        ):
             import rclpy
+
             rclpy.ok.return_value = True
             rclpy.get_topic_names_and_types.return_value = []
 

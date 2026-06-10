@@ -17,7 +17,6 @@ logger = get_logger(__name__)
 # the EnvironmentControllerConfig pattern used in the dynamics module.
 from pydantic.dataclasses import dataclass
 
-
 # ── Default constants (callers can override per D-04, D-05, D-06) ─────
 
 DEFAULT_FRAME_ID: str = "world"
@@ -87,16 +86,13 @@ class Ros2BridgeConfig:
         config_path = Path(path)
         if not config_path.exists():
             warnings.warn(
-                f"ROS2 bridge config file not found: {path}. "
-                f"Using default configuration.",
+                f"ROS2 bridge config file not found: {path}. " f"Using default configuration.",
                 UserWarning,
             )
-            raise FileNotFoundError(
-                f"ROS2 bridge config file not found: {path}"
-            )
+            raise FileNotFoundError(f"ROS2 bridge config file not found: {path}")
 
         logger.info("Loading ROS2 bridge config from %s", config_path)
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             data = yaml.safe_load(f)
 
         if data is None:

@@ -5,7 +5,6 @@ existing tetgen infrastructure. Auto-repairs non-watertight or degenerate
 geometry before tetrahedralization.
 """
 
-import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -75,8 +74,7 @@ def load_and_repair_organ_surface(
                 mesh.merge_close_vertices()
                 mesh.fix_normals()
                 logger.info(
-                    f"Repair complete: watertight={mesh.is_watertight}, "
-                    f"{len(mesh.faces)} faces"
+                    f"Repair complete: watertight={mesh.is_watertight}, " f"{len(mesh.faces)} faces"
                 )
         except Exception as e:
             logger.warning(f"Auto-repair failed: {e}. Proceeding with raw mesh.")
@@ -112,7 +110,6 @@ def organ_to_tetgen(
         Path prefix for tetgen output files (work_dir/tetgen_output)
     """
     TRIMESH
-    import trimesh
 
     if work_dir is None:
         work_dir = tempfile.mkdtemp(prefix="surg_rl_organ_")
@@ -147,15 +144,13 @@ def organ_to_tetgen(
         )
         if result.returncode != 0:
             logger.warning(
-                f"tetgen command failed (exit {result.returncode}): "
-                f"{result.stderr[:500]}"
+                f"tetgen command failed (exit {result.returncode}): " f"{result.stderr[:500]}"
             )
         else:
             logger.info(f"tetgen completed: {output_prefix}.1.node + .1.ele generated")
     except FileNotFoundError:
         logger.warning(
-            f"tetgen binary '{tetgen_bin}' not found. "
-            f"Install tetgen or ensure it is on PATH."
+            f"tetgen binary '{tetgen_bin}' not found. " f"Install tetgen or ensure it is on PATH."
         )
     except subprocess.TimeoutExpired:
         logger.warning("tetgen timed out after 60s")

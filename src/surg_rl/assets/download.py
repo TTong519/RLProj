@@ -27,8 +27,15 @@ DEFAULT_MESH_URLS: dict[str, str] = {
 }
 
 ALL_INSTRUMENT_NAMES = [
-    "forceps", "scalpel", "needle_driver", "scissors",
-    "clamp", "suction", "cautery", "camera", "retractor",
+    "forceps",
+    "scalpel",
+    "needle_driver",
+    "scissors",
+    "clamp",
+    "suction",
+    "cautery",
+    "camera",
+    "retractor",
 ]
 
 ALL_ORGAN_NAMES = ["liver", "kidney", "stomach", "gallbladder"]
@@ -38,17 +45,17 @@ def _get_http_client() -> Any:
     """Return an HTTP client (requests or httpx), or raise ImportError."""
     try:
         import requests
+
         return requests
     except ImportError:
         pass
     try:
         import httpx
+
         return httpx
     except ImportError:
         pass
-    raise ImportError(
-        "No HTTP client available. Install with: pip install requests"
-    )
+    raise ImportError("No HTTP client available. Install with: pip install requests")
 
 
 def download_meshes(

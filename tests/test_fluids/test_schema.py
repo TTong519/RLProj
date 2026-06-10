@@ -4,7 +4,6 @@ import pytest
 
 from surg_rl.scene_definition.schema import (
     BoundingBox,
-    FluidBoundaryType,
     FluidConfig,
     Position,
 )

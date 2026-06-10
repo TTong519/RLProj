@@ -1,4 +1,5 @@
 """K8S-01..05: Validate Kubernetes manifest structure."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -150,10 +151,7 @@ class TestKustomizeOverlays:
     def test_cpu_overlay_replaces_image(self):
         p = K8S_BASE.parent / "overlays" / "cpu" / "kustomization.yaml"
         overlay = yaml.safe_load(p.read_text())
-        image_patches = [
-            patch for patch in overlay["patches"]
-            if "image" in patch.get("patch", "")
-        ]
+        image_patches = [patch for patch in overlay["patches"] if "image" in patch.get("patch", "")]
         assert len(image_patches) >= 1
         for patch in image_patches:
             assert "cuda" not in patch["patch"]

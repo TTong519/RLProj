@@ -15,9 +15,7 @@ class SensitiveDataFilter(logging.Filter):
     """Masks API keys in log records."""
 
     # Pattern matches OpenAI sk-... and Anthropic sk-ant-... keys
-    _PATTERN = re.compile(
-        r"(sk-[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9-]{20,})"
-    )
+    _PATTERN = re.compile(r"(sk-[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9-]{20,})")
 
     def filter(self, record: logging.LogRecord) -> bool:
         """Mask sensitive data in the log record.
@@ -28,8 +26,7 @@ class SensitiveDataFilter(logging.Filter):
             record.msg = self._mask(record.msg)
         if record.args:
             record.args = tuple(
-                self._mask(arg) if isinstance(arg, str) else arg
-                for arg in record.args
+                self._mask(arg) if isinstance(arg, str) else arg for arg in record.args
             )
         return True
 

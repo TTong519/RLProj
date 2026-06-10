@@ -1,8 +1,7 @@
 """Tests for EnvironmentController ROS2 mode switching."""
 
 import numpy as np
-import queue
-import pytest
+
 from surg_rl.dynamics.environment_controller import (
     EnvironmentController,
     EnvironmentControllerConfig,

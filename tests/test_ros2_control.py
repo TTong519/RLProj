@@ -1,9 +1,8 @@
 """Tests for ros2_control ControllerBridge and URDF tag injection."""
+
 from __future__ import annotations
 
 import sys
-
-import pytest
 
 from surg_rl.ros2.hardware_bridge import ControllerBridge
 

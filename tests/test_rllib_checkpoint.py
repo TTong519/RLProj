@@ -14,9 +14,7 @@ import pytest
 def _make_mock_rllib_ckpt(tmp_path):
     ckpt = tmp_path / "rllib_ckpt"
     ckpt.mkdir()
-    (ckpt / "metadata.json").write_text(
-        json.dumps({"algorithm": "PPO", "env_name": "surg-rl"})
-    )
+    (ckpt / "metadata.json").write_text(json.dumps({"algorithm": "PPO", "env_name": "surg-rl"}))
     return ckpt
 
 

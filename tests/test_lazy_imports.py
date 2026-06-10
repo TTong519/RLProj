@@ -46,6 +46,7 @@ class TestLazyImportGetattr:
         result = li.join
         assert result is not None
         import os.path
+
         assert result is os.path.join
 
     def test_getattr_caches_after_success(self):

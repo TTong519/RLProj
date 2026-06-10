@@ -14,7 +14,6 @@ import pytest
 
 from surg_rl.dynamics.environment_controller import (
     EnvironmentController,
-    EnvironmentControllerConfig,
 )
 
 

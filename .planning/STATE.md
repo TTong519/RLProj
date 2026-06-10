@@ -2,25 +2,24 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-13)
+See: .planning/PROJECT.md (updated 2026-06-09)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** Phase 24 — DreamerV3 World Models
+**Current focus:** v0.4.0 milestone shipped — planning v0.5.0
 
 ## Current Position
 
-Milestone: v0.4.0 — Training Infrastructure & Realism
-Phase: 24 of 24 (DreamerV3 World Models)
-Plan: 0 of 4
-Status: Planning complete — ready to execute
-Last activity: 2026-06-08 — Phase 24 planned with 4 plans in 4 waves
+Milestone: v0.4.0 — Training Infrastructure & Realism (SHIPPED 2026-06-09)
+Phase: 24 of 24 complete
+Status: Milestone closed — ready for v0.5.0 planning
+Last activity: 2026-06-09 — v0.4.0 archived: 6 phases (19–24), 21 plans, 23/23 v1 requirements complete
 
-Progress: ████████████████████████░░░░░░░░░░ 85%
+Progress: ████████████████████████████████ 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 73 (across v0.1.0 through v0.4.0)
+- Total plans completed: 94 across v0.1.0–v0.4.0 (12 + 19 + 18 + 1 + 9 + 21 = 80 plans from v0.1.0–v0.3.2 per archive; 14 from v0.4.0 phase 24 = 5, plus earlier; see archive)
 - Total execution time: tracked per phase in milestone archives
 
 **By Milestone:**
@@ -32,6 +31,7 @@ Progress: ███████████████████████�
 | v0.3.0 | 10–13 | 18 | 826 |
 | v0.3.1 | 14 | 1 | 833 |
 | v0.3.2 | 15–18 | 9 | 910 |
+| v0.4.0 | 19–24 | 21 | TBD |
 
 ## Accumulated Context
 
@@ -67,10 +67,10 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-08
-Stopped at: Phase 24 context gathered, ready to plan
-Resume file: .planning/phases/24-dreamerv3-world-models/24-CONTEXT.md
+Last session: 2026-06-09
+Stopped at: v0.4.0 milestone closed and archived; ready to plan v0.5.0
+Resume file: (none — start v0.5.0 with /gsd-new-milestone)
 
 ---
 
-*Updated: 2026-06-08 — Phase 24 context gathered*
+*Updated: 2026-06-09 — v0.4.0 milestone shipped*

@@ -3,6 +3,7 @@
 These tests check real hardware when available, otherwise skip gracefully.
 Safe for CI (CPU-only runners) — uses @skipif or mocking.
 """
+
 from __future__ import annotations
 
 import os
@@ -166,8 +167,8 @@ def test_metal_memory_info_on_non_macos():
 
 def test_mps_fallback_warns_once(caplog):
     """Fallback warns once per run, silent thereafter."""
-    from surg_rl.utils.gpu import _mps_fallback_warned, mps_fallback_to_cpu
     import surg_rl.utils.gpu as gpu_mod
+    from surg_rl.utils.gpu import mps_fallback_to_cpu
 
     gpu_mod._mps_fallback_warned = False
     import logging

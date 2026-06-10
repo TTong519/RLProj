@@ -60,4 +60,4 @@ def compute_obstacle_forces(
         fz_total *= scale
 
     force = np.array([fx_total, 0.0, fz_total], dtype=np.float64)
-    return {name: force for name in obstacle_names}
+    return dict.fromkeys(obstacle_names, force)

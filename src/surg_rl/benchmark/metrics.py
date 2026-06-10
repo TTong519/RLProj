@@ -10,16 +10,15 @@ Install: pip install surg-rl[benchmark]
 
 import csv
 import time
-import warnings
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
+from stable_baselines3.common.callbacks import BaseCallback
 
 from surg_rl.utils.lazy_imports import LazyImport
 from surg_rl.utils.logging import get_logger
-from stable_baselines3.common.callbacks import BaseCallback
 
 RLIABLE = LazyImport("rliable", "benchmark")
 
@@ -83,10 +82,21 @@ class MetricCollectorCallback(BaseCallback):
         self.csv_path.parent.mkdir(parents=True, exist_ok=True)
         self._csv_file = open(self.csv_path, "w", newline="")
         self._csv_writer = csv.writer(self._csv_file)
-        self._csv_writer.writerow([
-            "timestep", "reward", "episode", "episode_reward", "episode_length",
-            "success", "wall_time", "algorithm", "seed", "backend", "task"
-        ])
+        self._csv_writer.writerow(
+            [
+                "timestep",
+                "reward",
+                "episode",
+                "episode_reward",
+                "episode_length",
+                "success",
+                "wall_time",
+                "algorithm",
+                "seed",
+                "backend",
+                "task",
+            ]
+        )
 
     def _on_step(self) -> bool:
         """Called at each training step - record metrics."""
@@ -131,19 +141,21 @@ class MetricCollectorCallback(BaseCallback):
                 break
 
         # Write row
-        self._csv_writer.writerow([
-            timestep,
-            step_reward,
-            episode,
-            episode_reward if episode_end else "",
-            episode_length if episode_end else "",
-            success,
-            wall_time,
-            self._algorithm,
-            self._seed,
-            self._backend,
-            self._task,
-        ])
+        self._csv_writer.writerow(
+            [
+                timestep,
+                step_reward,
+                episode,
+                episode_reward if episode_end else "",
+                episode_length if episode_end else "",
+                success,
+                wall_time,
+                self._algorithm,
+                self._seed,
+                self._backend,
+                self._task,
+            ]
+        )
 
         # Reset episode accumulators if episode ended
         if episode_end:
@@ -190,9 +202,7 @@ class Aggregator:
             logger.warning("rliable not available - IQM will fall back to mean")
 
     def read_all_seeds(
-        self,
-        results_dir: Path,
-        pattern: str = "seed_*_metrics.csv"
+        self, results_dir: Path, pattern: str = "seed_*_metrics.csv"
     ) -> dict[tuple[str, str], pd.DataFrame]:
         """Read all per-seed CSVs and group by (algorithm, backend).
 
@@ -227,15 +237,14 @@ class Aggregator:
         # Group by (algorithm, backend)
         grouped = {}
         for (algo, backend), group in combined.groupby(["algorithm", "backend"]):
-            grouped[(algo, backend)] = group.sort_values(["seed", "timestep"]).reset_index(drop=True)
+            grouped[(algo, backend)] = group.sort_values(["seed", "timestep"]).reset_index(
+                drop=True
+            )
 
         return grouped
 
     def compute_iqm_ci(
-        self,
-        data: pd.DataFrame,
-        confidence: float = 0.95,
-        n_bootstrap: int = 10000
+        self, data: pd.DataFrame, confidence: float = 0.95, n_bootstrap: int = 10000
     ) -> dict[str, Any]:
         """Compute Interquartile Mean (IQM) with stratified bootstrap CI.
 
@@ -251,10 +260,7 @@ class Aggregator:
         """
         # Pivot to (seeds × timesteps) for rliable
         pivot = data.pivot_table(
-            index="seed",
-            columns="timestep",
-            values="reward",
-            aggfunc="first"
+            index="seed", columns="timestep", values="reward", aggfunc="first"
         ).sort_index(axis=1)
 
         # rliable expects (runs, timesteps) array
@@ -271,14 +277,14 @@ class Aggregator:
                     scores,
                     metric_fn=metrics.interquartile_mean,
                     confidence=confidence,
-                    n_bootstrap=n_bootstrap
+                    n_bootstrap=n_bootstrap,
                 )
 
                 return {
                     "iqm": float(iqm),
                     "ci_low": float(ci[0]),
                     "ci_high": float(ci[1]),
-                    "method": "iqm_bootstrap"
+                    "method": "iqm_bootstrap",
                 }
             except Exception as e:
                 logger.warning(f"rliable IQM computation failed: {e}. Falling back to mean.")
@@ -291,6 +297,7 @@ class Aggregator:
 
         # Approximate CI using t-distribution
         from scipy import stats
+
         t_val = stats.t.ppf((1 + confidence) / 2, n_seeds - 1) if n_seeds > 1 else 1.96
         margin = t_val * std_scores / np.sqrt(n_seeds)
 
@@ -298,7 +305,7 @@ class Aggregator:
             "iqm": float(np.mean(mean_scores)),
             "ci_low": float(np.mean(mean_scores) - np.mean(margin)),
             "ci_high": float(np.mean(mean_scores) + np.mean(margin)),
-            "method": "mean_approx"
+            "method": "mean_approx",
         }
 
     def compute_mean_std(self, data: pd.DataFrame) -> dict[str, Any]:
@@ -312,20 +319,13 @@ class Aggregator:
         """
         # Pivot to get per-seed time series
         pivot = data.pivot_table(
-            index="seed",
-            columns="timestep",
-            values="reward",
-            aggfunc="first"
+            index="seed", columns="timestep", values="reward", aggfunc="first"
         ).sort_index(axis=1)
 
         mean_series = pivot.mean(axis=0)
         std_series = pivot.std(axis=0, ddof=1)
 
-        return {
-            "mean": mean_series,
-            "std": std_series,
-            "method": "mean_std"
-        }
+        return {"mean": mean_series, "std": std_series, "method": "mean_std"}
 
     def compute_scalar_metrics(self, data: pd.DataFrame) -> dict[str, Any]:
         """Compute scalar metrics from episode-end data.
@@ -344,7 +344,7 @@ class Aggregator:
                 "success_rate": 0.0,
                 "mean_episode_length": 0.0,
                 "wall_clock_time": 0.0,
-                "sample_efficiency": 0.0
+                "sample_efficiency": 0.0,
             }
 
         # Success rate
@@ -370,7 +370,7 @@ class Aggregator:
             "success_rate": success_rate,
             "mean_episode_length": mean_episode_length,
             "wall_clock_time": wall_clock_time,
-            "sample_efficiency": sample_efficiency
+            "sample_efficiency": sample_efficiency,
         }
 
     def aggregate_all(self, results_dir: Path) -> dict[tuple[str, str], dict[str, Any]]:
@@ -394,9 +394,7 @@ class Aggregator:
             results[(algo, backend)] = {
                 "learning_curve_iqm": learning_curve_iqm,
                 "learning_curve_mean_std": learning_curve_mean_std,
-                "scalar_metrics": scalar_metrics
+                "scalar_metrics": scalar_metrics,
             }
 
         return results
-
-

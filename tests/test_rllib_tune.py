@@ -13,16 +13,14 @@ except ImportError:
     tune = None  # type: ignore
 
 from surg_rl.rl.rllib.config import RllibConfig
-from surg_rl.rl.rllib.tune_integration import build_tune_search_space, run_tune_experiment
-
+from surg_rl.rl.rllib.tune_integration import build_tune_search_space
 
 # --------------------------------------------------------------------------- #
 # build_tune_search_space unit tests (no Ray required)
 # --------------------------------------------------------------------------- #
 
+
 def test_build_tune_search_space_basic():
-    from surg_rl.rl.rllib.config import RllibConfig
-    from surg_rl.rl.rllib.tune_integration import build_tune_search_space
 
     base = RllibConfig(algorithm="PPO")
     space = build_tune_search_space(
@@ -40,8 +38,6 @@ def test_build_tune_search_space_basic():
 
 
 def test_build_tune_search_space_ppo_only():
-    from surg_rl.rl.rllib.config import RllibConfig
-    from surg_rl.rl.rllib.tune_integration import build_tune_search_space
 
     base = RllibConfig(algorithm="PPO")
     space = build_tune_search_space(
@@ -55,8 +51,6 @@ def test_build_tune_search_space_ppo_only():
 
 
 def test_build_tune_search_space_sac_only():
-    from surg_rl.rl.rllib.config import RllibConfig
-    from surg_rl.rl.rllib.tune_integration import build_tune_search_space
 
     base = RllibConfig(algorithm="SAC")
     space = build_tune_search_space(
@@ -70,8 +64,6 @@ def test_build_tune_search_space_sac_only():
 
 
 def test_build_tune_search_space_reward_weights():
-    from surg_rl.rl.rllib.config import RllibConfig
-    from surg_rl.rl.rllib.tune_integration import build_tune_search_space
 
     base = RllibConfig(algorithm="PPO")
     space = build_tune_search_space(
@@ -87,14 +79,13 @@ def test_build_tune_search_space_reward_weights():
 # Ray is installed checks
 # --------------------------------------------------------------------------- #
 
+
 @pytest.mark.skipif(
     __import__("importlib").util.find_spec("ray") is None,
     reason="ray[rllib] not installed",
 )
 def test_build_tune_search_space_returns_tune_objects():
     from ray.tune.search.sample import Categorical
-    from surg_rl.rl.rllib.config import RllibConfig
-    from surg_rl.rl.rllib.tune_integration import build_tune_search_space
 
     base = RllibConfig(algorithm="PPO")
     space = build_tune_search_space(base, scene_paths=["a.json"])

@@ -1,12 +1,9 @@
 """LAUNCH-01..03: ROS2 launch file syntax and compatibility tests."""
+
 from __future__ import annotations
 
 import ast
-import sys
 from pathlib import Path
-
-import pytest
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -72,9 +69,7 @@ class TestPipColconCompatibility:
         path = PROJECT_ROOT / "pyproject.toml"
         with open(path, "rb") as f:
             cfg = tomllib.load(f)
-        ros2_deps = (
-            cfg.get("project", {}).get("optional-dependencies", {}).get("ros2", [])
-        )
+        ros2_deps = cfg.get("project", {}).get("optional-dependencies", {}).get("ros2", [])
         assert any("launch" in dep for dep in ros2_deps)
 
     def test_pyproject_has_bridge_console_scripts(self):

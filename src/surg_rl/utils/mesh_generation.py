@@ -211,18 +211,21 @@ def generate_box_tet_mesh(
     cell_i = np.arange(nx)
     cell_j = np.arange(ny)
     cell_k = np.arange(nz)
-    ci, cj, ck = np.meshgrid(cell_i, cell_j, cell_k, indexing='ij')
+    ci, cj, ck = np.meshgrid(cell_i, cell_j, cell_k, indexing="ij")
 
-    corners = np.stack([
-        ck * npx * npy + cj * npx + ci,
-        ck * npx * npy + cj * npx + (ci + 1),
-        ck * npx * npy + (cj + 1) * npx + (ci + 1),
-        ck * npx * npy + (cj + 1) * npx + ci,
-        (ck + 1) * npx * npy + cj * npx + ci,
-        (ck + 1) * npx * npy + cj * npx + (ci + 1),
-        (ck + 1) * npx * npy + (cj + 1) * npx + (ci + 1),
-        (ck + 1) * npx * npy + (cj + 1) * npx + ci,
-    ], axis=-1)  # shape: (nx, ny, nz, 8)
+    corners = np.stack(
+        [
+            ck * npx * npy + cj * npx + ci,
+            ck * npx * npy + cj * npx + (ci + 1),
+            ck * npx * npy + (cj + 1) * npx + (ci + 1),
+            ck * npx * npy + (cj + 1) * npx + ci,
+            (ck + 1) * npx * npy + cj * npx + ci,
+            (ck + 1) * npx * npy + cj * npx + (ci + 1),
+            (ck + 1) * npx * npy + (cj + 1) * npx + (ci + 1),
+            (ck + 1) * npx * npy + (cj + 1) * npx + ci,
+        ],
+        axis=-1,
+    )  # shape: (nx, ny, nz, 8)
 
     # 5-decomposition pattern per cube cell
     cube_tets = np.array(
@@ -376,14 +379,20 @@ def generate_cylinder_tet_mesh(
     # Vectorized level construction using np.stack
     levels = []
     for z in zs:
-        level = np.concatenate([
-            [[0.0, 0.0, z]],
-            np.stack([
-                radius * np.cos(thetas),
-                radius * np.sin(thetas),
-                np.full_like(thetas, z),
-            ], axis=1),
-        ], axis=0)
+        level = np.concatenate(
+            [
+                [[0.0, 0.0, z]],
+                np.stack(
+                    [
+                        radius * np.cos(thetas),
+                        radius * np.sin(thetas),
+                        np.full_like(thetas, z),
+                    ],
+                    axis=1,
+                ),
+            ],
+            axis=0,
+        )
         levels.append(level)
     vertices = np.concatenate(levels, axis=0)
 

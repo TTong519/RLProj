@@ -3,8 +3,6 @@
 DIST-01, DIST-06
 """
 
-import sys
-
 import pytest
 
 
@@ -58,8 +56,8 @@ def test_rllib_config_defaults():
 
 def test_rllib_config_from_training_config():
     """Factory conversion from TrainingConfig preserves algorithm fields."""
-    from surg_rl.rl.training import AlgorithmConfig, TrainingConfig
     from surg_rl.rl.rllib.config import RllibConfig
+    from surg_rl.rl.training import AlgorithmConfig, TrainingConfig
 
     algo = AlgorithmConfig(
         name="SAC",
@@ -90,8 +88,9 @@ def test_rllib_config_from_training_config():
 def test_rllib_config_from_training_config_gpu_count():
     """GPU count auto-detected (we mock it to 1 here)."""
     from unittest.mock import patch
-    from surg_rl.rl.training import TrainingConfig
+
     from surg_rl.rl.rllib.config import RllibConfig
+    from surg_rl.rl.training import TrainingConfig
 
     with patch("torch.cuda.device_count", return_value=1):
         rc = RllibConfig.from_training_config(TrainingConfig())

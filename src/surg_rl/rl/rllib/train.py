@@ -12,8 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from surg_rl.rl.rllib import _check_rllib
-from surg_rl.rl.rllib.env_wrapper import register_surgical_env
 from surg_rl.rl.rllib.config import RllibConfig
+from surg_rl.rl.rllib.env_wrapper import register_surgical_env
 from surg_rl.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -75,7 +75,9 @@ def train_rllib(
     rllib_cfg = config.build_rllib_config()
 
     algo_cls = _resolve_algo_class(config.algorithm)
-    algo = rllib_cfg.build_algo() if hasattr(rllib_cfg, "build_algo") else algo_cls(config=rllib_cfg)
+    algo = (
+        rllib_cfg.build_algo() if hasattr(rllib_cfg, "build_algo") else algo_cls(config=rllib_cfg)
+    )
 
     if callbacks:
         for cb in callbacks:
@@ -93,9 +95,7 @@ def train_rllib(
         while timesteps_done < target:
             result = algo.train()
             timesteps_done = int(result.get(lifetime_key, 0))
-            reward = result.get("env_runners", {}).get(
-                "episode_return_mean", float("nan")
-            )
+            reward = result.get("env_runners", {}).get("episode_return_mean", float("nan"))
             logger.info(
                 "Iter %s | steps %d/%d | reward=%.2f",
                 result.get("training_iteration", "?"),
@@ -107,9 +107,7 @@ def train_rllib(
             if config.checkpoint_freq > 0 and timesteps_done >= (
                 (timesteps_done // config.checkpoint_freq) * config.checkpoint_freq
             ):
-                ckpt = algo.save_to_path(
-                    str(save_dir / f"checkpoint_{timesteps_done}")
-                )
+                ckpt = algo.save_to_path(str(save_dir / f"checkpoint_{timesteps_done}"))
                 logger.info("Checkpoint: %s", ckpt.path if hasattr(ckpt, "path") else ckpt)
 
         # Final checkpoint

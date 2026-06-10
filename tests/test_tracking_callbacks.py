@@ -4,11 +4,7 @@ These callbacks are optional dependencies (wandb/mlflow).
 Tests mock both the presence and absence of these libraries.
 """
 
-import sys
 from unittest.mock import MagicMock, patch
-
-import numpy as np
-import pytest
 
 from surg_rl.rl.callbacks import MLflowCallback, WandbCallback
 

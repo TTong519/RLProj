@@ -153,7 +153,7 @@ class TestRos2BridgeEnvLifecycle:
 
     def test_mocked_bridge_spawns_process(self):
         """Test 2: When HAS_ROS2=True (mocked), bridge Process spawns."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import patch
 
         from surg_rl.ros2.config import Ros2BridgeConfig
 
@@ -165,9 +165,7 @@ class TestRos2BridgeEnvLifecycle:
 
         with patch("surg_rl.rl.environment.HAS_ROS2", True):
             with patch("surg_rl.rl.environment.platform.system", return_value="Linux"):
-                with patch(
-                    "surg_rl.rl.environment.multiprocessing.Process"
-                ) as mock_process_cls:
+                with patch("surg_rl.rl.environment.multiprocessing.Process") as mock_process_cls:
                     env = SurgicalEnv(config)
                     try:
                         assert env._bridge is not None
@@ -180,7 +178,7 @@ class TestRos2BridgeEnvLifecycle:
 
     def test_mocked_step_injects_external_action(self):
         """Test 4: step() calls controller.get_action() — external action injection."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import MagicMock
 
         config = SurgicalEnvConfig(
             scene_path="scenes/minimal_scene.json",
@@ -214,9 +212,7 @@ class TestRos2BridgeEnvLifecycle:
         with patch("surg_rl.rl.environment.HAS_ROS2", True):
             with patch("surg_rl.rl.environment.platform.system", return_value="Linux"):
                 mock_bridge = MagicMock()
-                with patch(
-                    "surg_rl.rl.environment.Ros2Bridge", return_value=mock_bridge
-                ):
+                with patch("surg_rl.rl.environment.Ros2Bridge", return_value=mock_bridge):
                     env = SurgicalEnv(config)
                     try:
                         env.reset()
@@ -480,5 +476,3 @@ class TestActionTypeValidation:
         obs, reward, terminated, truncated, info = env.step(action)
         assert isinstance(obs, dict)
         env.close()
-
-

@@ -69,21 +69,21 @@ def check_task_success(
     details: dict[str, Any] = {}
 
     # Phase 21: Delegate to per-task reward check_success if available (D-06)
-    if reward_fn is not None and hasattr(reward_fn, 'check_success'):
+    if reward_fn is not None and hasattr(reward_fn, "check_success"):
         try:
             # Get difficulty from info or default
-            difficulty = float(info.get('difficulty', 0.5))
+            difficulty = float(info.get("difficulty", 0.5))
             task_result: TaskResult = reward_fn.check_success(difficulty)
             if task_result.success:
                 return True, {
-                    'task_type': task.task_type,
-                    'success': True,
-                    'difficulty': difficulty,
-                    'metrics': task_result.metrics,
+                    "task_type": task.task_type,
+                    "success": True,
+                    "difficulty": difficulty,
+                    "metrics": task_result.metrics,
                 }
             # Not a success via per-task check — fall through to generic heuristics
             # but keep the task_result for downstream consumption
-            info['_task_result'] = task_result
+            info["_task_result"] = task_result
         except Exception:
             pass  # Fall through to generic heuristics on any error
 
@@ -148,7 +148,7 @@ def get_task_result(
     Returns:
         TaskResult if reward_fn has check_success, None otherwise.
     """
-    if reward_fn is not None and hasattr(reward_fn, 'check_success'):
+    if reward_fn is not None and hasattr(reward_fn, "check_success"):
         try:
             return reward_fn.check_success(difficulty)
         except Exception:

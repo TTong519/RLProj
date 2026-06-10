@@ -2,8 +2,6 @@
 
 import numpy as np
 
-from surg_rl.utils.vtk_io import write_vtk_unstructured_grid
-
 
 class TestTetGenCore:
     """TETG-01: tetgen produces valid (nodes, elems) from surface arrays."""
@@ -11,18 +9,24 @@ class TestTetGenCore:
     def test_tetgen_generates_tetrahedral_mesh(self):
         import tetgen
 
-        verts = np.array([
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [0.5, 1.0, 0.0],
-            [0.5, 0.33, 1.0],
-        ], dtype=np.float64)
-        faces = np.array([
-            [0, 1, 2],
-            [0, 1, 3],
-            [0, 2, 3],
-            [1, 2, 3],
-        ], dtype=np.int32)
+        verts = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.5, 1.0, 0.0],
+                [0.5, 0.33, 1.0],
+            ],
+            dtype=np.float64,
+        )
+        faces = np.array(
+            [
+                [0, 1, 2],
+                [0, 1, 3],
+                [0, 2, 3],
+                [1, 2, 3],
+            ],
+            dtype=np.int32,
+        )
 
         tgen = tetgen.TetGen(verts, faces)
         nodes, elems = tgen.tetrahedralize(order=1, quiet=True)[:2]
@@ -39,24 +43,35 @@ class TestTetGenCore:
     def test_cube_tetrahedralization(self):
         import tetgen
 
-        verts = np.array([
-            [-0.5, -0.5, -0.5],
-            [-0.5, -0.5,  0.5],
-            [-0.5,  0.5, -0.5],
-            [-0.5,  0.5,  0.5],
-            [ 0.5, -0.5, -0.5],
-            [ 0.5, -0.5,  0.5],
-            [ 0.5,  0.5, -0.5],
-            [ 0.5,  0.5,  0.5],
-        ], dtype=np.float64)
-        faces = np.int32([
-            [0, 1, 5], [0, 5, 4],
-            [2, 3, 7], [2, 7, 6],
-            [0, 2, 6], [0, 6, 4],
-            [1, 3, 7], [1, 7, 5],
-            [0, 1, 3], [0, 3, 2],
-            [4, 5, 7], [4, 7, 6],
-        ])
+        verts = np.array(
+            [
+                [-0.5, -0.5, -0.5],
+                [-0.5, -0.5, 0.5],
+                [-0.5, 0.5, -0.5],
+                [-0.5, 0.5, 0.5],
+                [0.5, -0.5, -0.5],
+                [0.5, -0.5, 0.5],
+                [0.5, 0.5, -0.5],
+                [0.5, 0.5, 0.5],
+            ],
+            dtype=np.float64,
+        )
+        faces = np.int32(
+            [
+                [0, 1, 5],
+                [0, 5, 4],
+                [2, 3, 7],
+                [2, 7, 6],
+                [0, 2, 6],
+                [0, 6, 4],
+                [1, 3, 7],
+                [1, 7, 5],
+                [0, 1, 3],
+                [0, 3, 2],
+                [4, 5, 7],
+                [4, 7, 6],
+            ]
+        )
 
         tgen = tetgen.TetGen(verts, faces)
         nodes, elems = tgen.tetrahedralize(order=1, quiet=True)[:2]
@@ -73,10 +88,10 @@ class TestObjToTetGen:
         path = str(tmp_path / "test.obj")
         lines = []
         for v in verts:
-            lines.append("v {} {} {}".format(v[0], v[1], v[2]))
+            lines.append(f"v {v[0]} {v[1]} {v[2]}")
         for f in faces:
             idxs = [int(i) + 1 for i in f]
-            lines.append("f {} {} {}".format(idxs[0], idxs[1], idxs[2]))
+            lines.append(f"f {idxs[0]} {idxs[1]} {idxs[2]}")
         with open(path, "w") as fh:
             fh.write("\n".join(lines) + "\n")
         return path
@@ -84,24 +99,34 @@ class TestObjToTetGen:
     def test_obj_to_tetrahedral_mesh(self, tmp_path):
         import tetgen
 
-        verts = np.float64([
-            [-0.5, -0.5, -0.5],
-            [-0.5, -0.5,  0.5],
-            [-0.5,  0.5, -0.5],
-            [-0.5,  0.5,  0.5],
-            [ 0.5, -0.5, -0.5],
-            [ 0.5, -0.5,  0.5],
-            [ 0.5,  0.5, -0.5],
-            [ 0.5,  0.5,  0.5],
-        ])
-        faces = np.int32([
-            [0, 1, 5], [0, 5, 4],
-            [2, 3, 7], [2, 7, 6],
-            [0, 2, 6], [0, 6, 4],
-            [1, 3, 7], [1, 7, 5],
-            [0, 1, 3], [0, 3, 2],
-            [4, 5, 7], [4, 7, 6],
-        ])
+        verts = np.float64(
+            [
+                [-0.5, -0.5, -0.5],
+                [-0.5, -0.5, 0.5],
+                [-0.5, 0.5, -0.5],
+                [-0.5, 0.5, 0.5],
+                [0.5, -0.5, -0.5],
+                [0.5, -0.5, 0.5],
+                [0.5, 0.5, -0.5],
+                [0.5, 0.5, 0.5],
+            ]
+        )
+        faces = np.int32(
+            [
+                [0, 1, 5],
+                [0, 5, 4],
+                [2, 3, 7],
+                [2, 7, 6],
+                [0, 2, 6],
+                [0, 6, 4],
+                [1, 3, 7],
+                [1, 7, 5],
+                [0, 1, 3],
+                [0, 3, 2],
+                [4, 5, 7],
+                [4, 7, 6],
+            ]
+        )
 
         obj_path = self._write_triangulated_obj(tmp_path, verts, faces)
 
@@ -198,7 +223,8 @@ print("mesh_generation imported successfully (no pyvista)")
 
         result = subprocess.run(
             [sys.executable, "-c", code],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
             env={**os.environ, "PYTHONPATH": "src"},
         )
         assert result.returncode == 0, f"Import failed:\n{result.stderr}"

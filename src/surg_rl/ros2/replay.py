@@ -8,9 +8,6 @@ Independent of the main bridge process per Phase 9 decision D-08.
 """
 
 import sys
-from typing import Optional
-
-import numpy as np
 
 from surg_rl.utils.logging import get_logger
 
@@ -35,6 +32,7 @@ else:
 # ── Dummy implementation (no rclpy available) ─────────────────────────
 
 if not _HAS_ROS2:
+
     class TrajectoryReplay:
         """Dummy trajectory replay — ROS2 is not available on this platform.
 
@@ -62,11 +60,11 @@ if not _HAS_ROS2:
                 "sudo apt install ros-humble-rclpy ros-humble-std-msgs"
             )
 
+
 # ── Real implementation (rclpy available) ─────────────────────────────
 
 else:
     import rclpy  # noqa: F811
-    from rclpy.node import Node  # noqa: F811
     from std_msgs.msg import Float64MultiArray  # noqa: F811
 
     class TrajectoryReplay:
@@ -120,15 +118,11 @@ else:
                 ValueError: If speed is not in (0.0, 1.0].
             """
             if speed <= 0 or speed > 1.0:
-                raise ValueError(
-                    f"Speed must be in (0.0, 1.0], got {speed}"
-                )
+                raise ValueError(f"Speed must be in (0.0, 1.0], got {speed}")
 
             rclpy.init()
             self._node = rclpy.create_node("trajectory_replay")
-            self._pub = self._node.create_publisher(
-                Float64MultiArray, command_topic, 10
-            )
+            self._pub = self._node.create_publisher(Float64MultiArray, command_topic, 10)
 
             # Load model per D-08
             from stable_baselines3 import PPO
@@ -143,15 +137,12 @@ else:
             )
             self._speed = speed
             self._deterministic = deterministic
-            self._dt = (
-                self._env.config.timestep * self._env.config.frame_skip
-            )
+            self._dt = self._env.config.timestep * self._env.config.frame_skip
             self._obs, _ = self._env.reset()
             self._step_count = 0
 
             logger.info(
-                "TrajectoryReplay created: model=%s, scene=%s, "
-                "speed=%.2f, dt=%.4f, topic=%s",
+                "TrajectoryReplay created: model=%s, scene=%s, " "speed=%.2f, dt=%.4f, topic=%s",
                 model_path,
                 scene_path,
                 speed,
@@ -180,9 +171,7 @@ else:
 
             for _ in range(max_steps):
                 # Predict action per D-08
-                action, _ = self._model.predict(
-                    self._obs, deterministic=self._deterministic
-                )
+                action, _ = self._model.predict(self._obs, deterministic=self._deterministic)
 
                 # Publish to ROS2 command topic
                 msg = Float64MultiArray()
@@ -190,9 +179,7 @@ else:
                 self._pub.publish(msg)
 
                 # Step environment
-                self._obs, reward, terminated, truncated, info = (
-                    self._env.step(action)
-                )
+                self._obs, reward, terminated, truncated, info = self._env.step(action)
                 self._step_count += 1
                 steps += 1
 

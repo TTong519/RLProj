@@ -29,7 +29,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from surg_rl.rl.rllib import _check_rllib
 from surg_rl.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -61,24 +60,19 @@ def inspect_rllib_checkpoint(checkpoint_dir: str) -> dict[str, Any]:
     metadata_path = checkpoint_dir / "metadata.json"
     if metadata_path.exists():
         import json
+
         with metadata_path.open() as f:
             meta = json.load(f)
         result["algorithm"] = meta.get("algorithm", "unknown")
         result["env_name"] = meta.get("env_name", "unknown")
 
     # RLModule state dict (optional — requires Ray)
-    rl_module_path = (
-        checkpoint_dir
-        / "learner_group"
-        / "learner"
-        / "rl_module"
-        / "default_policy"
-    )
+    rl_module_path = checkpoint_dir / "learner_group" / "learner" / "rl_module" / "default_policy"
     if rl_module_path.exists():
         try:
+            import ray
             import torch
             from ray.rllib.core.rl_module.rl_module import RLModule
-            import ray
 
             if not ray.is_initialized():
                 ray.init(ignore_reinit_error=True)

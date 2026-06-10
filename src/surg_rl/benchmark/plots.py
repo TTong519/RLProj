@@ -4,12 +4,10 @@ Provides learning curves with dual statistical aggregation (mean±1σ and IQM+CI
 success rate bar charts with rliable significance testing, and results tables.
 """
 
-import warnings
 from pathlib import Path
 from typing import Any
 
 import numpy as np
-import pandas as pd
 
 from surg_rl.benchmark.experiment_config import ExperimentConfig
 from surg_rl.utils.lazy_imports import LazyImport
@@ -296,7 +294,10 @@ class PlotRenderer:
             )
 
         # Add rliable significance annotations if rliable available and more than 1 algo
-        if RLIABLE.available and len([a for a in algorithms if self._extract_learning_curve_data(backend, a)]) > 1:
+        if (
+            RLIABLE.available
+            and len([a for a in algorithms if self._extract_learning_curve_data(backend, a)]) > 1
+        ):
             self._add_significance_annotations(ax, backend, algorithms, x_pos, success_rates)
 
         ax.set_xticks(x_pos)
@@ -342,8 +343,6 @@ class PlotRenderer:
             success_rates: Success rate values.
         """
         try:
-            import rliable.metrics as metrics
-            import rliable.plot_utils as plot_utils
 
             # Collect per-seed success rate data from results
             # We need the raw per-seed data for proper bootstrap comparison
@@ -422,7 +421,11 @@ class PlotRenderer:
 
                 if mean_reward is not None and hasattr(mean_reward, "mean"):
                     mean_val = mean_reward.mean()
-                    std_val = std_reward.mean() if std_reward is not None and hasattr(std_reward, "mean") else 0
+                    std_val = (
+                        std_reward.mean()
+                        if std_reward is not None and hasattr(std_reward, "mean")
+                        else 0
+                    )
                     reward_str = f"{mean_val:.3f} ± {std_val:.3f}"
                 else:
                     reward_str = "N/A"

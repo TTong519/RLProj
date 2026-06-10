@@ -116,13 +116,13 @@ from .rewards import (
 
 # Task results
 from .task_results import (
+    TASK_RESULT_MAP,
     CuttingResult,
     DissectionResult,
     GraspingResult,
     KnotTyingResult,
     NeedleInsertionResult,
     SuturingResult,
-    TASK_RESULT_MAP,
     TaskResult,
 )
 

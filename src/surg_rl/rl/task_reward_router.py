@@ -71,9 +71,7 @@ class TaskRewardRouter:
                 task_reward = reward_cls(**reward_kwargs)
                 rewards.append(task_reward)
             else:
-                logger.warning(
-                    f"Unknown task_type={task_type!r}, using generic rewards only"
-                )
+                logger.warning(f"Unknown task_type={task_type!r}, using generic rewards only")
 
         # D-03: Always add generic rewards — CompositeReward expects non-empty list
         for cls in GENERIC_REWARD_CLASSES:

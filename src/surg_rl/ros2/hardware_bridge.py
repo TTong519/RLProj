@@ -5,11 +5,10 @@ publishing / command forwarding for the mock hardware component.
 
 Linux-only. Imports guarded by HAS_ROS2 check.
 """
+
 from __future__ import annotations
 
 import subprocess
-import sys
-from typing import Optional
 
 from surg_rl.ros2 import HAS_ROS2
 from surg_rl.utils.logging import get_logger
@@ -38,9 +37,7 @@ class ControllerBridge:
         self._controller_name = controller_name
         self._controllers_spawned = False
         if not HAS_ROS2:
-            logger.warning(
-                "ControllerBridge: ROS2 not available — hardware control disabled"
-            )
+            logger.warning("ControllerBridge: ROS2 not available — hardware control disabled")
 
     def start(self) -> None:
         """Spawn the controller via ros2 control CLI."""
@@ -65,9 +62,7 @@ class ControllerBridge:
             self._controllers_spawned = True
             logger.info("Controller spawned: %s (active)", self._controller_name)
         except subprocess.CalledProcessError as e:
-            logger.error(
-                "Failed to spawn controller: %s\n%s", self._controller_name, e.stderr
-            )
+            logger.error("Failed to spawn controller: %s\n%s", self._controller_name, e.stderr)
             raise
 
     def stop(self) -> None:

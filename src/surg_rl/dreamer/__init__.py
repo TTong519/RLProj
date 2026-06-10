@@ -11,4 +11,18 @@ from surg_rl.utils.lazy_imports import LazyImport
 
 DREAMER = LazyImport("dreamerv3", "dreamer")
 
-__all__ = ["DREAMER"]
+from .spike import SpikeOrchestrator, check_spike_status, run_spike
+from .subprocess import DreamerSubprocess
+from .training import evaluate_checkpoint, run_dreamer_training
+from .wrapper import GymToEmbodiedWrapper
+
+__all__ = [
+    "DREAMER",
+    "DreamerSubprocess",
+    "GymToEmbodiedWrapper",
+    "SpikeOrchestrator",
+    "run_spike",
+    "check_spike_status",
+    "run_dreamer_training",
+    "evaluate_checkpoint",
+]

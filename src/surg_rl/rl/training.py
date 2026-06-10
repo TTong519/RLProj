@@ -416,8 +416,9 @@ class TrainingManager:
 
         # W&B callback
         if self.config.use_wandb:
-            from .callbacks import WandbCallback
             from surg_rl.utils.config import get_settings
+
+            from .callbacks import WandbCallback
 
             wandb_callback = WandbCallback(
                 project_name=self.config.wandb_project,
@@ -430,8 +431,9 @@ class TrainingManager:
 
         # MLflow callback
         if self.config.use_mlflow:
-            from .callbacks import MLflowCallback
             from surg_rl.utils.config import get_settings
+
+            from .callbacks import MLflowCallback
 
             mlflow_callback = MLflowCallback(
                 experiment_name=self.config.experiment_name,

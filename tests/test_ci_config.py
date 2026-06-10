@@ -1,9 +1,10 @@
 """MACOS-01: validate CI workflow config contains macOS runner and mjpython."""
+
 from __future__ import annotations
 
-import yaml
 from pathlib import Path
 
+import yaml
 
 CI_WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "ci.yml"
 
@@ -28,9 +29,9 @@ def test_macos_runner_python_311():
     matrix = ci["jobs"]["test"]["strategy"]["matrix"]["include"]
     for entry in matrix:
         if entry["os"] == "macos-latest":
-            assert entry["python-version"] == "3.11", (
-                f"Expected 3.11, got {entry['python-version']}"
-            )
+            assert (
+                entry["python-version"] == "3.11"
+            ), f"Expected 3.11, got {entry['python-version']}"
             break
     else:
         pytest.fail("macos-latest entry not found in matrix")
@@ -41,9 +42,9 @@ def test_ci_has_mjpython_step():
     ci = _load_ci()
     steps = ci["jobs"]["test"]["steps"]
     step_names = [s.get("name", "") for s in steps]
-    assert any("mjpython" in name for name in step_names), (
-        f"No mjpython step found. Steps: {step_names}"
-    )
+    assert any(
+        "mjpython" in name for name in step_names
+    ), f"No mjpython step found. Steps: {step_names}"
 
 
 def test_ci_ignores_ros2_on_macos():
@@ -53,9 +54,9 @@ def test_ci_ignores_ros2_on_macos():
     for step in steps:
         if step.get("name") == "Test with mjpython (macOS)":
             run_cmd = step.get("run", "")
-            assert "--ignore=tests/test_ros2_" in run_cmd, (
-                f"ROS2 ignore flag missing from macOS test step: {run_cmd[:200]}"
-            )
+            assert (
+                "--ignore=tests/test_ros2_" in run_cmd
+            ), f"ROS2 ignore flag missing from macOS test step: {run_cmd[:200]}"
             break
     else:
         pytest.fail("Test with mjpython (macOS) step not found")
@@ -65,6 +66,6 @@ def test_ci_fail_fast_disabled():
     """MACOS-01: fail-fast is disabled so macOS doesn't block ubuntu."""
     ci = _load_ci()
     strategy = ci["jobs"]["test"]["strategy"]
-    assert strategy.get("fail-fast") is False, (
-        f"fail-fast must be false, got {strategy.get('fail-fast')}"
-    )
+    assert (
+        strategy.get("fail-fast") is False
+    ), f"fail-fast must be false, got {strategy.get('fail-fast')}"

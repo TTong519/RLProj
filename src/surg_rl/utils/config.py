@@ -101,9 +101,7 @@ class Settings(BaseSettings):
             "xxxxxx",
         )
         if v.lower() in (p.lower() for p in placeholders):
-            raise ValueError(
-                "LLM_API_KEY appears to be a placeholder. Set a real API key."
-            )
+            raise ValueError("LLM_API_KEY appears to be a placeholder. Set a real API key.")
         return v
 
     # Ollama Configuration

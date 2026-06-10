@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(PYTHONPATH=src pytest tests/ --co -q)",
+      "Bash(PYTHONPATH=src pytest tests/ -v --co)",
+      "Bash(python3:*)",
+      "Bash(python:*)",
+      "Bash(PYTHONPATH=src python:*)",
+      "Bash(ollama launch:*)",
+      "Bash(ollama --help)",
+      "Bash(PYTHONPATH=src python3:*)",
+      "Bash(PYTHONPATH=src pytest tests/ -v --timeout=30)",
+      "Bash(PYTHONPATH=src pytest tests/ -v)",
+      "Bash(PYTHONPATH=src pytest tests/ -v --tb=short)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(PYTHONPATH=src pytest:*)",
+      "Bash(ruff check:*)",
+      "Bash(mypy src/surg_rl)",
+      "Bash(git branch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git *)",
+      "Bash(ls /Users/tt/Documents/RLProj/requirements*.txt /Users/tt/Documents/RLProj/pyproject.toml)"
+    ]
+  }
+}

@@ -97,6 +97,12 @@ logs/
 
 # Temporary files
 demo_results/
+results/
 *.tmp
 .opencode/
 .claude/worktrees/
+
+# Stray training artifacts
+MUJOCO_LOG.TXT
+_skipped.face
+_skipped.node

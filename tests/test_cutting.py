@@ -5,20 +5,27 @@ from pathlib import Path
 
 import numpy as np
 
-from surg_rl.cutting.intersection import classify_tet_case, compute_signed_distances, edge_intersection
 from surg_rl.cutting.engine import cut_tetrahedral_mesh
+from surg_rl.cutting.intersection import (
+    classify_tet_case,
+    compute_signed_distances,
+    edge_intersection,
+)
 
 
 class TestIntersection:
     """CUT-01: Signed distance and edge intersection."""
 
     def test_compute_signed_distances(self):
-        verts = np.array([
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-            [0.0, 0.0, 1.0],
-        ], dtype=np.float64)
+        verts = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ],
+            dtype=np.float64,
+        )
         origin = np.array([0.5, 0.5, 0.0])
         normal = np.array([0.0, 0.0, 1.0])
         dists = compute_signed_distances(verts, origin, normal)
@@ -61,12 +68,14 @@ class TestCutEngine:
     """CUT-01/02: Volumetric cutting engine tests."""
 
     def test_cut_unit_tetrahedron(self):
-        verts = np.float64([
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [0.5, 1.0, 0.0],
-            [0.5, 0.33, 1.0],
-        ])
+        verts = np.float64(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.5, 1.0, 0.0],
+                [0.5, 0.33, 1.0],
+            ]
+        )
         tets = np.int32([[0, 1, 2, 3]])
         origin = np.array([0.5, 0.5, 0.3])
         normal = np.array([0.0, 0.0, 1.0])
@@ -85,18 +94,28 @@ class TestCutEngine:
 
     def test_cut_tetrahedralized_cube(self):
         # 8 cube corners
-        verts = np.float64([
-            [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0],
-            [0.0, 0.0, 1.0], [1.0, 0.0, 1.0], [1.0, 1.0, 1.0], [0.0, 1.0, 1.0],
-        ])
+        verts = np.float64(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [1.0, 1.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+                [1.0, 0.0, 1.0],
+                [1.0, 1.0, 1.0],
+                [0.0, 1.0, 1.0],
+            ]
+        )
         # 5 tetrahedra decomposing the cube (common decomposition)
-        tets = np.int32([
-            [0, 1, 2, 5],
-            [0, 2, 3, 7],
-            [0, 2, 7, 5],
-            [0, 5, 7, 4],
-            [2, 5, 7, 6],
-        ])
+        tets = np.int32(
+            [
+                [0, 1, 2, 5],
+                [0, 2, 3, 7],
+                [0, 2, 7, 5],
+                [0, 5, 7, 4],
+                [2, 5, 7, 6],
+            ]
+        )
 
         origin = np.array([0.5, 0.5, 0.5])
         normal = np.array([1.0, 0.0, 0.0])
@@ -109,9 +128,14 @@ class TestCutEngine:
             assert tet.max() < new_v.shape[0]
 
     def test_cut_misses_all_tets(self):
-        verts = np.float64([
-            [0.0, 0.0, 0.0], [1.0, 0.0, -1.0], [0.5, 1.0, 0.0], [0.5, 0.33, 1.0],
-        ])
+        verts = np.float64(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, -1.0],
+                [0.5, 1.0, 0.0],
+                [0.5, 0.33, 1.0],
+            ]
+        )
         tets = np.int32([[0, 1, 2, 3]])
         origin = np.array([5.0, 5.0, 5.0])
         normal = np.array([0.0, 0.0, 1.0])
@@ -122,12 +146,14 @@ class TestCutEngine:
         assert cut_f.shape[0] == 0
 
     def test_cut_boundary_faces_extracted(self):
-        verts = np.float64([
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [0.5, 1.0, 0.0],
-            [0.5, 0.33, 1.0],
-        ])
+        verts = np.float64(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.5, 1.0, 0.0],
+                [0.5, 0.33, 1.0],
+            ]
+        )
         tets = np.int32([[0, 1, 2, 3]])
         origin = np.array([0.5, 0.5, 0.3])
         normal = np.array([0.0, 0.0, 1.0])
@@ -136,17 +162,27 @@ class TestCutEngine:
         assert cut_f.shape[0] > 0
 
     def test_vertex_dedup_adjacent_tets(self):
-        verts = np.float64([
-            [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0],
-            [0.0, 0.0, 1.0], [1.0, 0.0, 1.0], [1.0, 1.0, 1.0], [0.0, 1.0, 1.0],
-        ])
-        tets = np.int32([
-            [0, 1, 2, 5],
-            [0, 2, 3, 7],
-            [0, 2, 7, 5],
-            [0, 5, 7, 4],
-            [2, 5, 7, 6],
-        ])
+        verts = np.float64(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [1.0, 1.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+                [1.0, 0.0, 1.0],
+                [1.0, 1.0, 1.0],
+                [0.0, 1.0, 1.0],
+            ]
+        )
+        tets = np.int32(
+            [
+                [0, 1, 2, 5],
+                [0, 2, 3, 7],
+                [0, 2, 7, 5],
+                [0, 5, 7, 4],
+                [2, 5, 7, 6],
+            ]
+        )
 
         origin = np.array([0.5, 0.5, 0.5])
         normal = np.array([0.0, 1.0, 0.0])
@@ -189,6 +225,7 @@ class TestCutActionSchema:
 
     def test_cut_action_zero_direction_raises(self):
         import pytest
+
         from surg_rl.scene_definition.schema import CutAction, Position
 
         with pytest.raises(ValueError, match="nonzero"):
@@ -205,8 +242,18 @@ class TestMuJoCoRewiteMesh:
     def test_rewrite_updates_vertex_element_text(self):
         from surg_rl.simulators.mujoco_simulator import MuJoCoSimulator
 
-        verts = np.array([[0.0, 0.0, 0.0], [0.1, 0.0, 0.0], [0.0, 0.1, 0.0], [0.0, 0.0, 0.1],
-                          [0.1, 0.1, 0.0], [0.1, 0.0, 0.1], [0.0, 0.1, 0.1], [0.1, 0.1, 0.1]])
+        verts = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.1, 0.0, 0.0],
+                [0.0, 0.1, 0.0],
+                [0.0, 0.0, 0.1],
+                [0.1, 0.1, 0.0],
+                [0.1, 0.0, 0.1],
+                [0.0, 0.1, 0.1],
+                [0.1, 0.1, 0.1],
+            ]
+        )
         tets = np.array([[0, 1, 2, 5], [0, 2, 3, 7], [0, 2, 7, 5], [0, 5, 7, 4], [2, 5, 7, 6]])
 
         mjcf_xml = """<?xml version="1.0" encoding="UTF-8"?>

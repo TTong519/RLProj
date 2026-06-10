@@ -88,7 +88,9 @@ class PyBulletSimulator(BaseSimulator):
         self._initial_orientations: dict[str, list] = {}  # Store initial orientations
 
         self._action_mode: str = "position"
-        self._torque_control_joints: dict[tuple[int, int], bool] = {}  # (body_id, joint_idx) -> enabled
+        self._torque_control_joints: dict[tuple[int, int], bool] = (
+            {}
+        )  # (body_id, joint_idx) -> enabled
         self._endeffector_target_pos: np.ndarray | None = None
         self._endeffector_target_quat: np.ndarray | None = None
         self._mesh_cache: dict[str, Path] = {}
@@ -102,7 +104,10 @@ class PyBulletSimulator(BaseSimulator):
         logger.info("PyBullet simulator: selected backend=%s", self._active_backend.value)
 
         # GPU warning in DIRECT mode
-        if render_mode == "DIRECT" and self._active_backend in (HardwareBackend.cuda, HardwareBackend.rocm):
+        if render_mode == "DIRECT" and self._active_backend in (
+            HardwareBackend.cuda,
+            HardwareBackend.rocm,
+        ):
             logger.warning(
                 "PyBullet DIRECT mode does not support explicit GPU acceleration. "
                 "GPU rendering requires GUI mode with display connected to GPU."
@@ -245,9 +250,7 @@ class PyBulletSimulator(BaseSimulator):
         """Load a robot into the simulation."""
         # Try to load URDF or use primitive
         if robot.urdf_path:
-            urdf_resolved = self.scene_builder.load_urdf_asset(
-                robot.urdf_path, robot.name
-            )
+            urdf_resolved = self.scene_builder.load_urdf_asset(robot.urdf_path, robot.name)
             if urdf_resolved is not None:
                 try:
                     body_id = self._pb.loadURDF(
@@ -417,11 +420,15 @@ class PyBulletSimulator(BaseSimulator):
         resolved, is_primitive = self.scene_builder.get_mesh_or_primitive(
             mesh_path=mesh_path,
             primitive=tissue.geometry.primitive if tissue.geometry is not None else None,
-            dimensions=tissue.geometry.dimensions or (0.1, 0.1, 0.01)
-            if tissue.geometry is not None
-            else (0.1, 0.1, 0.01),
+            dimensions=(
+                tissue.geometry.dimensions or (0.1, 0.1, 0.01)
+                if tissue.geometry is not None
+                else (0.1, 0.1, 0.01)
+            ),
             name=tissue.name,
-            radius=getattr(tissue.geometry, "radius", None) if tissue.geometry is not None else None,
+            radius=(
+                getattr(tissue.geometry, "radius", None) if tissue.geometry is not None else None
+            ),
         )
         # Determine primitive parameters for collision shape
         primitive = tissue.geometry.primitive if tissue.geometry is not None else None
@@ -553,7 +560,9 @@ class PyBulletSimulator(BaseSimulator):
         self._initial_positions[tissue.name] = list(position)
         self._initial_orientations[tissue.name] = list(orientation)
 
-    def _load_mesh_visual_shape(self, mesh_path: Path, scale: tuple[float, float, float] = (1.0, 1.0, 1.0)) -> int:
+    def _load_mesh_visual_shape(
+        self, mesh_path: Path, scale: tuple[float, float, float] = (1.0, 1.0, 1.0)
+    ) -> int:
         """Create a visual shape from a mesh file (OBJ/DAE). Returns shape ID."""
         try:
             visual_shape_id = self._pb.createVisualShape(
@@ -564,7 +573,9 @@ class PyBulletSimulator(BaseSimulator):
             )
             return visual_shape_id
         except Exception as e:
-            logger.warning(f"Failed to create visual shape for mesh {mesh_path}: {e}. Falling back to primitive.")
+            logger.warning(
+                f"Failed to create visual shape for mesh {mesh_path}: {e}. Falling back to primitive."
+            )
             return -1
 
     def _get_vtk_mesh_path(self, tissue: Any) -> Path:
@@ -1248,16 +1259,12 @@ class PyBulletSimulator(BaseSimulator):
 
         vertices, tetrahedra = self._soft_body_tet_data[mesh_key]
 
-        cut_origin = np.array([
-            cut_action.surface_point.x, cut_action.surface_point.y, cut_action.surface_point.z
-        ])
-        cut_dir = np.array([
-            cut_action.direction.x, cut_action.direction.y, cut_action.direction.z
-        ])
-
-        new_verts, new_tets, _ = cut_tetrahedral_mesh(
-            vertices, tetrahedra, cut_origin, cut_dir
+        cut_origin = np.array(
+            [cut_action.surface_point.x, cut_action.surface_point.y, cut_action.surface_point.z]
         )
+        cut_dir = np.array([cut_action.direction.x, cut_action.direction.y, cut_action.direction.z])
+
+        new_verts, new_tets, _ = cut_tetrahedral_mesh(vertices, tetrahedra, cut_origin, cut_dir)
 
         mesh_path = self._soft_body_mesh_paths.get(tissue_name)
         if mesh_path is not None:
@@ -1265,6 +1272,7 @@ class PyBulletSimulator(BaseSimulator):
             self._soft_body_tet_data[mesh_key] = (new_verts, new_tets)
 
         from pybullet import RESET_USE_DEFORMABLE_WORLD
+
         self._pb.resetSimulation(RESET_USE_DEFORMABLE_WORLD)
         self._soft_body_ids.clear()
         self.load_scene(self._scene)
@@ -1404,8 +1412,11 @@ class PyBulletSimulator(BaseSimulator):
         ctrl_offset = 0
         for robot in scene.robots:
             # Count non-gripper controls for this robot
-            robot_ctrls = [m for m in self._control_map
-                           if m["robot_name"] == robot.name and not m.get("is_gripper")]
+            robot_ctrls = [
+                m
+                for m in self._control_map
+                if m["robot_name"] == robot.name and not m.get("is_gripper")
+            ]
             n_ctrls = len(robot_ctrls)
             if n_ctrls == 0:
                 # Fall back to _joint_ids
@@ -1428,8 +1439,11 @@ class PyBulletSimulator(BaseSimulator):
 
             ctrl_offset += n_ctrls
             # Skip gripper controls in offset
-            gripper_ctrls = [m for m in self._control_map
-                             if m["robot_name"] == robot.name and m.get("is_gripper")]
+            gripper_ctrls = [
+                m
+                for m in self._control_map
+                if m["robot_name"] == robot.name and m.get("is_gripper")
+            ]
             ctrl_offset += len(gripper_ctrls)
 
     def _compute_ik(
@@ -1516,8 +1530,13 @@ class PyBulletSimulator(BaseSimulator):
                         continue
 
                     if mapping.get("is_gripper"):
-                        gripper_target = float(action[action_idx]) if action_idx < len(action) else 0.0
-                        if robot_name in self._joint_ids and "gripper" in self._joint_ids[robot_name]:
+                        gripper_target = (
+                            float(action[action_idx]) if action_idx < len(action) else 0.0
+                        )
+                        if (
+                            robot_name in self._joint_ids
+                            and "gripper" in self._joint_ids[robot_name]
+                        ):
                             body_id = self._body_ids[robot_name]
                             joint_idx = self._joint_ids[robot_name]["gripper"]
                             self._pb.setJointMotorControl2(
@@ -1842,8 +1861,7 @@ class PyBulletSimulator(BaseSimulator):
         # Compute incision progress from objectives completion ratio
         total = len(self._scene.task.objectives)
         completed = sum(
-            1 for obj in self._scene.task.objectives
-            if "complete" in obj.success_criteria.lower()
+            1 for obj in self._scene.task.objectives if "complete" in obj.success_criteria.lower()
         )
         obs.incision_progress = completed / total if total > 0 else 0.0
 

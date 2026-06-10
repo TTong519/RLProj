@@ -66,6 +66,8 @@ class InstrumentType(str, Enum):
     CAUTERY = "cautery"
     CAMERA = "camera"
     RETRACTOR = "retractor"
+    KNOT_TIER = "knot_tier"
+    NEEDLE = "needle"
     CUSTOM = "custom"
 
 
@@ -374,9 +376,7 @@ class MuJoCoFlexConfig(BaseModel):
     edge_stiffness: float | None = Field(
         default=None, ge=0.0, description="Edge spring stiffness (N/m)"
     )
-    edge_damping: float | None = Field(
-        default=None, ge=0.0, description="Edge spring damping"
-    )
+    edge_damping: float | None = Field(default=None, ge=0.0, description="Edge spring damping")
     condim: int = Field(default=3, ge=1, le=6, description="Contact dimensionality (1, 3, 4, 6)")
     solref: str | None = Field(default=None, description="Solver reference (timeconst dampratio)")
     solimp: str | None = Field(default=None, description="Solver impedance")
@@ -415,9 +415,7 @@ class BoundaryCondition(BaseModel):
     vertex_indices: list[int] = Field(
         default_factory=list, description="Vertex indices to constrain (empty = full weld)"
     )
-    stiffness: float = Field(
-        default=1e6, ge=0.0, description="Attachment stiffness"
-    )
+    stiffness: float = Field(default=1e6, ge=0.0, description="Attachment stiffness")
 
 
 class DeformableConfig(BaseModel):
@@ -1083,9 +1081,10 @@ class TaskConfig(BaseModel):
     success_threshold: float = Field(
         default=0.9, ge=0.0, le=1.0, description="Success threshold (0-1)"
     )
-    task_type: Literal[
-        "suturing", "knot_tying", "needle_insertion", "grasping", "cutting", "dissection"
-    ] | None = Field(
+    task_type: (
+        Literal["suturing", "knot_tying", "needle_insertion", "grasping", "cutting", "dissection"]
+        | None
+    ) = Field(
         default=None,
         description="Surgical task type (None = generic/unspecified)",
     )
@@ -1103,9 +1102,7 @@ class BenchmarkConfig(BaseModel):
     output_dir: str | None = Field(
         default=None, description="Output directory for reports and plots"
     )
-    render_plots: bool = Field(
-        default=True, description="Generate publication-quality plots"
-    )
+    render_plots: bool = Field(default=True, description="Generate publication-quality plots")
     statistical_tests: bool = Field(
         default=True, description="Run rliable IQM + stratified bootstrap CI"
     )
@@ -1338,6 +1335,12 @@ class SceneDefinition(BaseModel):
     # Task
     task: TaskConfig | None = Field(default=None, description="Task configuration")
 
+    # DreamerV3 configuration (Phase 24)
+    dreamer: DreamerConfig | None = Field(
+        default=None,
+        description="DreamerV3 training configuration (per DMV3-02)",
+    )
+
     # Multi-agent configuration (Phase 22: dual-arm scenes)
     multi_agent: MultiAgentConfig | None = Field(
         default=None,
@@ -1361,9 +1364,7 @@ class SceneDefinition(BaseModel):
     )
 
     # Fluid simulation
-    fluid: "FluidConfig | None" = Field(
-        default=None, description="Fluid simulation configuration"
-    )
+    fluid: "FluidConfig | None" = Field(default=None, description="Fluid simulation configuration")
 
     # Custom parameters
     custom: dict[str, Any] = Field(
@@ -1433,9 +1434,7 @@ class FluidConfig(BaseModel):
 
     enabled: bool = Field(default=False, description="Enable fluid simulation")
     bounds: BoundingBox = Field(description="Physical domain bounds")
-    resolution: tuple[int, int] = Field(
-        default=(32, 32), description="Grid resolution (nx, ny)"
-    )
+    resolution: tuple[int, int] = Field(default=(32, 32), description="Grid resolution (nx, ny)")
     density: float = Field(default=1000.0, ge=1.0, description="Fluid density (kg/m³)")
     viscosity: float = Field(default=0.004, ge=0.0, description="Dynamic viscosity (Pa·s)")
     substep_dt: float = Field(default=0.02, gt=0.0, description="Fluid sub-step timestep (s)")

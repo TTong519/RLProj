@@ -19,8 +19,8 @@ from surg_rl.assets.download import (
 from surg_rl.scene_definition.schema import HardwareBackend
 from surg_rl.scene_generation import TextParser, VisionParser, get_template
 from surg_rl.utils.config import get_settings
-from surg_rl.utils.logging import get_logger, setup_logging
 from surg_rl.utils.lazy_imports import LazyImport
+from surg_rl.utils.logging import get_logger, setup_logging
 
 logger = get_logger(__name__)
 
@@ -45,19 +45,27 @@ app.add_typer(assets_app, name="assets")
 @assets_app.command("download")
 def assets_download(
     instruments: str = typer.Option(
-        "", "--instruments", "-i",
+        "",
+        "--instruments",
+        "-i",
         help="Comma-separated instrument names to download",
     ),
     organs: str = typer.Option(
-        "", "--organs", "-o",
+        "",
+        "--organs",
+        "-o",
         help="Comma-separated organ names to download",
     ),
     all_meshes: bool = typer.Option(
-        False, "--all", "-a",
+        False,
+        "--all",
+        "-a",
         help="Download all available meshes",
     ),
     output_dir: str = typer.Option(
-        "assets/meshes", "--output", help="Output directory for OBJ files",
+        "assets/meshes",
+        "--output",
+        help="Output directory for OBJ files",
     ),
 ):
     """Download real surgical mesh OBJ files from public datasets."""
@@ -95,7 +103,9 @@ def assets_download(
 @assets_app.command("info")
 def assets_info(
     meshes_dir: str = typer.Option(
-        "assets/meshes", "--dir", help="Meshes directory",
+        "assets/meshes",
+        "--dir",
+        help="Meshes directory",
     ),
 ):
     """Show available and downloaded surgical meshes."""
@@ -107,7 +117,7 @@ def assets_info(
     typer.echo(f"  Present: {len(present)}/{len(status)}")
     for name in present:
         typer.echo(f"    ✓ {name}.obj")
-    typer.echo(f"  Available for download:")
+    typer.echo("  Available for download:")
     for name in missing:
         typer.echo(f"    ○ {name}.obj")
     if missing:
@@ -115,6 +125,7 @@ def assets_info(
             f"\nRun 'surg-rl assets download --all' to download all "
             f"{len(missing)} missing mesh(es)."
         )
+
 
 console = Console()
 
@@ -126,7 +137,11 @@ def main():
 
 
 @app.command()
-def version(verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed system info including GPU availability")) -> None:
+def version(
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show detailed system info including GPU availability"
+    )
+) -> None:
     """Show version information."""
     from surg_rl.scene_definition.schema import HardwareBackend
     from surg_rl.utils.gpu import (
@@ -135,6 +150,7 @@ def version(verbose: bool = typer.Option(False, "--verbose", "-v", help="Show de
         get_rocm_version,
         select_backend,
     )
+
     console.print(f"[bold blue]Surg-RL[/bold blue] version: [green]{__version__}[/green]")
     if verbose:
         backends = detect_backends()
@@ -142,7 +158,13 @@ def version(verbose: bool = typer.Option(False, "--verbose", "-v", help="Show de
         table.add_column("Backend", style="cyan")
         table.add_column("Available", style="green")
         table.add_column("Version / Info", style="yellow")
-        for backend in [HardwareBackend.cuda, HardwareBackend.rocm, HardwareBackend.metal, HardwareBackend.intel, HardwareBackend.cpu]:
+        for backend in [
+            HardwareBackend.cuda,
+            HardwareBackend.rocm,
+            HardwareBackend.metal,
+            HardwareBackend.intel,
+            HardwareBackend.cpu,
+        ]:
             available = backend in backends
             version_info = "N/A"
             if backend == HardwareBackend.cuda and available:
@@ -150,7 +172,9 @@ def version(verbose: bool = typer.Option(False, "--verbose", "-v", help="Show de
             elif backend == HardwareBackend.rocm and available:
                 version_info = get_rocm_version() or "N/A"
             elif backend == HardwareBackend.metal and available:
-                version_info = "Apple Silicon" if "arm" in os.uname().machine.lower() else "Intel Mac"
+                version_info = (
+                    "Apple Silicon" if "arm" in os.uname().machine.lower() else "Intel Mac"
+                )
             elif backend == HardwareBackend.intel and available:
                 version_info = "oneAPI / XPU"
             elif backend == HardwareBackend.cpu:
@@ -371,18 +395,20 @@ def train(
     verbose: int = typer.Option(1, "--verbose", "-v", help="Verbosity level (0, 1, 2)"),
     wandb: bool = typer.Option(False, "--wandb", help="Enable Weights \u0026 Biases logging"),
     mlflow: bool = typer.Option(False, "--mlflow", help="Enable MLflow logging"),
-    experiment_name: str | None = typer.Option(None, "--experiment-name", "-e", help="Experiment name for tracking"),
-    wandb_project: str | None = typer.Option(None, "--wandb-project", help="W\u0026B project name (default: surg-rl)"),
+    experiment_name: str | None = typer.Option(
+        None, "--experiment-name", "-e", help="Experiment name for tracking"
+    ),
+    wandb_project: str | None = typer.Option(
+        None, "--wandb-project", help="W\u0026B project name (default: surg-rl)"
+    ),
     backend: str = typer.Option(
         "auto", "--backend", help="Hardware backend: auto, cuda, rocm, metal, intel, cpu"
     ),
     render_human: bool = typer.Option(
-        False, "--render-human",
-        help="Open a live 3D viewer during training (requires display)"
+        False, "--render-human", help="Open a live 3D viewer during training (requires display)"
     ),
     render_fps: float = typer.Option(
-        30.0, "--render-fps",
-        help="Target FPS for the live viewer (default: 30)"
+        30.0, "--render-fps", help="Target FPS for the live viewer (default: 30)"
     ),
 ) -> None:
     """Train an RL agent on a surgical scene.
@@ -532,10 +558,14 @@ def evaluate(
 def marl_train(
     scene: str = typer.Option(..., "--scene", "-s", help="Path to dual-arm scene JSON/YAML"),
     algorithm: str = typer.Option("PPO", "--algorithm", "-a", help="SB3 algorithm (PPO, SAC)"),
-    policy: str = typer.Option("shared", "--policy", "-p", help="Policy mode: shared or independent"),
+    policy: str = typer.Option(
+        "shared", "--policy", "-p", help="Policy mode: shared or independent"
+    ),
     timesteps: int = typer.Option(100000, "--timesteps", "-t", help="Total training timesteps"),
     model_dir: str = typer.Option("models/", "--model-dir", "-m", help="Model output directory"),
-    simulator: str = typer.Option("mujoco", "--simulator", help="Simulator backend (mujoco or pybullet)"),
+    simulator: str = typer.Option(
+        "mujoco", "--simulator", help="Simulator backend (mujoco or pybullet)"
+    ),
     headless: bool = typer.Option(True, "--headless/--no-headless", help="Run without GUI"),
 ) -> None:
     """Train dual-arm multi-agent RL policies.
@@ -552,7 +582,9 @@ def marl_train(
     from surg_rl.rl.environment import SurgicalEnvConfig
 
     if policy not in ("shared", "independent"):
-        console.print(f"[bold red]Error:[/bold red] --policy must be 'shared' or 'independent', got '{policy}'")
+        console.print(
+            f"[bold red]Error:[/bold red] --policy must be 'shared' or 'independent', got '{policy}'"
+        )
         raise typer.Exit(code=1)
 
     render_mode = None if headless else "rgb_array"
@@ -585,15 +617,21 @@ def marl_train(
 
 @app.command(name="train-rllib")
 def cli_train_rllib(
-    scene: str = typer.Option("scenes/simple_suturing.json", "--scene", "-s", help="Scene definition JSON"),
+    scene: str = typer.Option(
+        "scenes/simple_suturing.json", "--scene", "-s", help="Scene definition JSON"
+    ),
     algorithm: str = typer.Option("PPO", "--algorithm", "-a", help="RL algorithm"),
     timesteps: int = typer.Option(100_000, "--timesteps", "-t", help="Total training timesteps"),
     n_envs: int = typer.Option(1, "--n-envs", "-n", help="Number of parallel environments"),
     lr: float = typer.Option(3e-4, "--lr", help="Learning rate"),
     gamma: float = typer.Option(0.99, "--gamma", help="Discount factor"),
     seed: int = typer.Option(42, "--seed", help="Random seed"),
-    log_dir: str = typer.Option("logs/rllib", "--log-dir", help="Directory for RLlib results/checkpoints"),
-    checkpoint_freq: int = typer.Option(50_000, "--checkpoint-freq", help="Save checkpoint every N timesteps"),
+    log_dir: str = typer.Option(
+        "logs/rllib", "--log-dir", help="Directory for RLlib results/checkpoints"
+    ),
+    checkpoint_freq: int = typer.Option(
+        50_000, "--checkpoint-freq", help="Save checkpoint every N timesteps"
+    ),
     local_mode: bool = typer.Option(False, "--local-mode", help="Run Ray in local mode"),
     verbose: bool = typer.Option(True, "--verbose", help="Verbose logging"),
 ) -> None:
@@ -640,9 +678,13 @@ def cli_train_rllib(
 
 @app.command(name="tune")
 def cli_tune(
-    scene: str = typer.Option("scenes/simple_suturing.json", "--scene", "-s", help="Scene definition JSON"),
+    scene: str = typer.Option(
+        "scenes/simple_suturing.json", "--scene", "-s", help="Scene definition JSON"
+    ),
     algorithm: str = typer.Option("PPO", "--algorithm", "-a", help="RL algorithm"),
-    timesteps: int = typer.Option(50_000, "--timesteps", "-t", help="Total training timesteps per trial"),
+    timesteps: int = typer.Option(
+        50_000, "--timesteps", "-t", help="Total training timesteps per trial"
+    ),
     num_samples: int = typer.Option(3, "--num-samples", "-n", help="Number of Tune trials"),
     max_iters: int = typer.Option(10, "--max-iters", help="Max iterations per trial"),
     lr_min: float = typer.Option(1e-5, "--lr-min", help="Learning rate search lower bound"),
@@ -662,6 +704,7 @@ def cli_tune(
     """
     try:
         from ray import tune
+
         from surg_rl.rl.rllib.config import RllibConfig
         from surg_rl.rl.rllib.tune_integration import build_tune_search_space, run_tune_experiment
 
@@ -711,7 +754,9 @@ def cli_tune(
 @app.command(name="checkpoint-inspect")
 def cli_checkpoint_inspect(
     path: str = typer.Argument(..., help="Path to checkpoint (RLlib dir or SB3 zip)"),
-    compare_with: str | None = typer.Option(None, "--compare-with", help="Path to second checkpoint for comparison"),
+    compare_with: str | None = typer.Option(
+        None, "--compare-with", help="Path to second checkpoint for comparison"
+    ),
 ) -> None:
     """Inspect checkpoint meta-data and compare RLlib vs SB3 formats.
 
@@ -721,7 +766,11 @@ def cli_checkpoint_inspect(
         surg-rl checkpoint-inspect models/ppo_model.zip --compare-with logs/rllib/final
     """
     try:
-        from surg_rl.rl.rllib.checkpoint_utils import inspect_rllib_checkpoint, inspect_sb3_checkpoint, compare_checkpoints
+        from surg_rl.rl.rllib.checkpoint_utils import (
+            compare_checkpoints,
+            inspect_rllib_checkpoint,
+            inspect_sb3_checkpoint,
+        )
 
         path_obj = Path(path)
         if not path_obj.exists():
@@ -737,11 +786,11 @@ def cli_checkpoint_inspect(
         console.print(f"[bold cyan]Checkpoint: {path}[/bold cyan]")
         console.print(f"  Format: {info['format'].upper()}")
         console.print(f"  Algorithm: {info.get('algorithm', 'unknown')}")
-        if info.get('layer_shapes'):
+        if info.get("layer_shapes"):
             console.print(f"  Layers: {len(info['layer_shapes'])}")
-            for name, shape in list(info['layer_shapes'].items())[:5]:
+            for name, shape in list(info["layer_shapes"].items())[:5]:
                 console.print(f"    {name}: {shape}")
-            if len(info['layer_shapes']) > 5:
+            if len(info["layer_shapes"]) > 5:
                 console.print(f"    ... and {len(info['layer_shapes']) - 5} more")
 
         if compare_with:
@@ -756,20 +805,18 @@ def cli_checkpoint_inspect(
                 other_info = inspect_sb3_checkpoint(compare_with)
 
             comparison = compare_checkpoints(
-                info if info['format'] == 'rllib' else other_info,
-                info if info['format'] == 'sb3' else other_info,
+                info if info["format"] == "rllib" else other_info,
+                info if info["format"] == "sb3" else other_info,
             )
-            console.print(f"\n[bold cyan]Comparison:[/bold cyan]")
+            console.print("\n[bold cyan]Comparison:[/bold cyan]")
             console.print(f"  Input dim match: {comparison.get('input_dim_match')}")
             console.print(f"  Output dim match: {comparison.get('output_dim_match')}")
-            console.print(f"\n[bold yellow]Notes:[/bold yellow]")
+            console.print("\n[bold yellow]Notes:[/bold yellow]")
             console.print(comparison["notes"])
 
     except ImportError as exc:
         console.print(f"[bold red]Import Error:[/bold red] {exc}")
-        console.print(
-            '[dim]Make sure required dependencies are installed.'
-        )
+        console.print("[dim]Make sure required dependencies are installed.")
         raise typer.Exit(1) from exc
 
 
@@ -799,11 +846,12 @@ def ros2_bridge(
     ),
 ) -> None:
     """Start ROS2 bridge publisher and subscriber nodes."""
+    # macOS guard per D-15
+    import platform
+
     from surg_rl.ros2 import HAS_ROS2
     from surg_rl.ros2.config import Ros2BridgeConfig
 
-    # macOS guard per D-15
-    import platform
     if platform.system() == "Darwin":
         typer.echo(
             "ROS2 bridge is not supported on macOS.\n"
@@ -836,6 +884,7 @@ def ros2_bridge(
         raise typer.Exit(1)
 
     from surg_rl.rl.environment import SurgicalEnv, SurgicalEnvConfig
+
     env_config = SurgicalEnvConfig(
         scene_path=scene,
         simulator_type=simulator,
@@ -852,7 +901,6 @@ def ros2_bridge(
 
     # Run env interactively until interrupted
     try:
-        import time
         obs, _ = env.reset()
         while True:
             action = env.action_space.sample()
@@ -903,6 +951,7 @@ def ros2_replay(
 ) -> None:
     """Replay a trained SB3 checkpoint at reduced speed through ROS2 bridge."""
     import platform
+
     if platform.system() == "Darwin":
         typer.echo(
             "ROS2 is not supported on macOS.\n"
@@ -965,19 +1014,15 @@ def ros2_control(
 
     if not HAS_ROS2:
         console.print(
-            "[yellow]ROS2 not available on this platform. "
-            "Use a Docker Linux container.[/yellow]"
+            "[yellow]ROS2 not available on this platform. " "Use a Docker Linux container.[/yellow]"
         )
         raise typer.Exit(0)
 
     if launch_file:
         import subprocess
 
-        subprocess.run(
-            ["ros2", "launch", "surg_rl", launch_file], check=True
-        )
+        subprocess.run(["ros2", "launch", "surg_rl", launch_file], check=True)
     else:
-        from surg_rl.ros2.hardware_bridge import ControllerBridge
         from surg_rl.rl.environment import SurgicalEnv, SurgicalEnvConfig
 
         config = SurgicalEnvConfig(
@@ -988,9 +1033,7 @@ def ros2_control(
         env = SurgicalEnv(config)
         try:
             env.reset()
-            console.print(
-                "[green]ros2_control bridge active. Press Ctrl+C to stop.[/green]"
-            )
+            console.print("[green]ros2_control bridge active. Press Ctrl+C to stop.[/green]")
             import time
 
             while True:
@@ -1007,7 +1050,9 @@ def benchmark(
         None, "--config", "-c", help="Path to experiment YAML config file"
     ),
     task: str | None = typer.Option(
-        None, "--task", help="Surgical task type (suturing, knot_tying, needle_insertion, grasping, cutting, dissection)"
+        None,
+        "--task",
+        help="Surgical task type (suturing, knot_tying, needle_insertion, grasping, cutting, dissection)",
     ),
     algorithms: str | None = typer.Option(
         None, "--algorithms", "-a", help="Comma-separated algorithms (PPO,SAC,TD3,DDPG,A2C)"
@@ -1057,18 +1102,18 @@ def benchmark(
     verbose: int = typer.Option(1, "--verbose", "-v", help="Verbosity level (0, 1, 2)"),
 ) -> None:
     """Run performance benchmark experiments comparing RL algorithms.
-    
+
     Uses YAML config for reproducible runs, with CLI flags overriding YAML values.
-    
+
     Examples:
         surg-rl benchmark --task suturing --algorithms PPO,SAC --seeds 5
         surg-rl benchmark --config experiments/run.yaml --backends mujoco
         surg-rl benchmark --config experiments/base.yaml --timesteps 200000 --seeds 10
     """
     from surg_rl.benchmark.experiment_config import ExperimentConfig
-    
+
     console.print("[bold blue]Starting Performance Benchmark[/bold blue]")
-    
+
     # Build CLI overrides dict
     overrides = {}
     if task is not None:
@@ -1103,7 +1148,7 @@ def benchmark(
         overrides["save_per_seed_csv"] = False
     if not save_aggregated_json:
         overrides["save_aggregated_json"] = False
-    
+
     # Determine base config
     if config:
         console.print(f"  • Config: {config}")
@@ -1111,14 +1156,14 @@ def benchmark(
     else:
         console.print("  • Using defaults (no config file)")
         base_cfg = ExperimentConfig()
-    
+
     # Apply CLI overrides
     if overrides:
         console.print(f"  • Overrides: {overrides}")
         cfg = ExperimentConfig.merge(base_cfg, overrides)
     else:
         cfg = base_cfg
-    
+
     console.print(f"  • Task: {cfg.task or 'all'}")
     console.print(f"  • Algorithms: {', '.join(cfg.effective_algorithms)}")
     console.print(f"  • Seeds: {cfg.seeds or 'single'}")
@@ -1126,11 +1171,13 @@ def benchmark(
     console.print(f"  • Timesteps: {cfg.timesteps:,}")
     console.print(f"  • Max parallel: {cfg.max_parallel}")
     console.print(f"  • Experiment: {cfg.experiment_name}")
-    
+
     # Check benchmark dependencies availability
-    from surg_rl.benchmark import MATPLOTLIB, SEABORN, PANDAS, RLIABLE
-    
-    deps_available = all([MATPLOTLIB.available, SEABORN.available, PANDAS.available, RLIABLE.available])
+    from surg_rl.benchmark import MATPLOTLIB, PANDAS, RLIABLE, SEABORN
+
+    deps_available = all(
+        [MATPLOTLIB.available, SEABORN.available, PANDAS.available, RLIABLE.available]
+    )
     if not deps_available:
         missing = []
         if not MATPLOTLIB.available:
@@ -1141,12 +1188,14 @@ def benchmark(
             missing.append("pandas")
         if not RLIABLE.available:
             missing.append("rliable")
-        console.print(f"[bold yellow]Warning:[/bold yellow] Optional dependencies not installed: {', '.join(missing)}")
+        console.print(
+            f"[bold yellow]Warning:[/bold yellow] Optional dependencies not installed: {', '.join(missing)}"
+        )
         console.print("[dim]Install with: pip install surg-rl[benchmark][/dim]")
         if cfg.render_plots or cfg.statistical_tests:
             console.print("[bold red]Error:[/bold red] Plots/stats require optional dependencies")
             raise typer.Exit(1)
-    
+
     # Import and run ExperimentRunner
     try:
         from surg_rl.benchmark.experiment_runner import ExperimentRunner
@@ -1156,7 +1205,7 @@ def benchmark(
             "[dim]Make sure benchmark dependencies are installed: pip install surg-rl[benchmark][/dim]"
         )
         raise typer.Exit(1) from e
-    
+
     # Run the benchmark with progress display
     runner = ExperimentRunner(cfg)
     try:
@@ -1164,39 +1213,42 @@ def benchmark(
             result = runner.run()
         console.print("[bold green]✓ Benchmark complete![/bold green]")
         console.print(f"  • Results: {runner.base_output_dir}")
-        
+
         # Generate plots
         if cfg.render_plots:
-            with console.status('[bold cyan]Generating plots...'):
+            with console.status("[bold cyan]Generating plots..."):
                 from surg_rl.benchmark.plots import PlotRenderer
+
                 renderer = PlotRenderer(cfg, result, runner.base_output_dir)
                 plot_paths = renderer.render_all()
-            console.print(f'  ✓ Generated {len(plot_paths)} plots')
+            console.print(f"  ✓ Generated {len(plot_paths)} plots")
         else:
             plot_paths = []
-        
+
         # Generate reports
-        with console.status('[bold cyan]Generating report...'):
+        with console.status("[bold cyan]Generating report..."):
             from surg_rl.benchmark.report import ReportGenerator
+
             generator = ReportGenerator(cfg, result, plot_paths, runner.base_output_dir)
             report_paths = generator.generate_all()
         console.print(f'  ✓ Report: {report_paths["html"]}')
         console.print(f'  ✓ Data: {report_paths["json"]}')
-        
+
         # Print final summary
         from rich.table import Table
-        
+
         if RICH.available:
             from rich.console import Console
+
             summary_console = Console()
-            
+
             # Group results by backend for display
             backend_results = {}
             for (algo, backend), stats in result.items():
                 if backend not in backend_results:
                     backend_results[backend] = []
                 backend_results[backend].append((algo, stats))
-            
+
             for backend, algos in backend_results.items():
                 table = Table(title=f"Results: {backend}")
                 table.add_column("Algorithm", style="cyan")
@@ -1204,7 +1256,7 @@ def benchmark(
                 table.add_column("Mean Reward", style="yellow")
                 table.add_column("Mean Length", style="blue")
                 table.add_column("Wall Time (s)", style="magenta")
-                
+
                 for algo, stats in algos:
                     if "status" in stats:
                         table.add_row(algo, stats["status"], "-", "-", "-")
@@ -1215,22 +1267,201 @@ def benchmark(
                             f"{sm.get('success_rate', 0):.1%}",
                             f"{sm.get('sample_efficiency', 0):.4f}",
                             f"{sm.get('mean_episode_length', 0):.1f}",
-                            f"{sm.get('wall_clock_time', 0):.1f}"
+                            f"{sm.get('wall_clock_time', 0):.1f}",
                         )
                 summary_console.print(table)
         else:
             print(f"Results saved to: {runner.base_output_dir}")
-        
+
         # Print DreamerV3 status if comparison enabled
         if cfg.dreamer_comparison:
             console.print("[yellow]DreamerV3: pending — Phase 24[/yellow]")
-        
+
         # Print output location and reproduction command
         console.print(f"\n[bold]Output directory:[/bold] {runner.base_output_dir}")
-        console.print(f"[bold]Reproduce with:[/bold] surg-rl benchmark --config experiments/{cfg.experiment_name}.yaml")
-            
+        console.print(
+            f"[bold]Reproduce with:[/bold] surg-rl benchmark --config experiments/{cfg.experiment_name}.yaml"
+        )
+
     except Exception as e:
         logger.error(f"Benchmark failed: {e}")
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(1) from e
+
+
+@app.command(name="dreamer-train")
+def dreamer_train(
+    task: str = typer.Option(..., "--task", help="Surgical task type"),
+    obs_type: str = typer.Option("state", "--obs-type", help="pixels or state"),
+    steps: int = typer.Option(100000, "--steps", "-t", help="Total training steps"),
+    eval_episodes: int = typer.Option(10, "--eval-episodes", help="Episodes per evaluation"),
+    eval_every: int = typer.Option(10000, "--eval-every", help="Evaluation interval"),
+    resume: bool = typer.Option(False, "--resume", help="Resume from latest checkpoint"),
+    checkpoint_dir: str | None = typer.Option(
+        None, "--checkpoint-dir", help="Custom checkpoint directory"
+    ),
+    eval_only: bool = typer.Option(
+        False, "--eval-only", help="Evaluate latest checkpoint without training"
+    ),
+    config: str | None = typer.Option(None, "--config", help="YAML config file"),
+    verbose: int = typer.Option(1, "--verbose", "-v", help="Verbosity"),
+) -> None:
+    """Train DreamerV3 world model on surgical tasks.
+
+    Runs training in process-isolated JAX subprocess with GPU memory
+    fraction limit (XLA_PYTHON_CLIENT_MEM_FRACTION=0.4).
+
+    Examples:
+        surg-rl dreamer-train --task suturing --obs-type pixels --steps 500000
+        surg-rl dreamer-train --task grasping --obs-type state --eval-only
+        surg-rl dreamer-train --config experiments/dreamer_suturing.yaml --resume
+    """
+    import yaml
+
+    from surg_rl.dreamer.spike import check_spike_status
+    from surg_rl.dreamer.training import evaluate_checkpoint, run_dreamer_training
+
+    console.print("[bold blue]Starting DreamerV3 Training[/bold blue]")
+    console.print(f"  • Task: {task}")
+    console.print(f"  • Obs type: {obs_type}")
+    console.print(f"  • Steps: {steps:,}")
+    console.print(f"  • Eval episodes: {eval_episodes}")
+    console.print(f"  • Eval every: {eval_every}")
+
+    # Check spike status
+    spike_report = check_spike_status()
+    if spike_report and spike_report.get("status") == "failed":
+        console.print("[bold red]DreamerV3 Deferred to v0.5.0[/bold red]")
+        console.print("  Feasibility spike failed:")
+        console.print(
+            f"    Reconstruction MSE: {spike_report['results']['reconstruction_mse']:.6f} (threshold: < 0.01)"
+        )
+        console.print(
+            f"    Reward MAE: {spike_report['results']['reward_mae']:.6f} (threshold: < 0.5)"
+        )
+        console.print("  See models/dreamerv3/spike_report.json for details.")
+        raise typer.Exit(2)
+
+    if spike_report is None:
+        console.print("[yellow]Warning: Feasibility spike (DMV3-01) has not been run.[/yellow]")
+        console.print("[dim]Run it first with: surg-rl dreamer-spike[/dim]")
+
+    # Load config overrides from YAML if provided
+    config_overrides = {}
+    if config:
+        with open(config) as f:
+            config_overrides = yaml.safe_load(f) or {}
+
+    try:
+        if eval_only:
+            # Find latest checkpoint
+            from pathlib import Path
+
+            checkpoint_path_obj = Path(checkpoint_dir or f"models/dreamerv3/{task}_{obs_type}")
+            checkpoints = list(checkpoint_path_obj.glob("checkpoint_*.pt"))
+            if not checkpoints:
+                final = checkpoint_path_obj / "final.pt"
+                if final.exists():
+                    checkpoints = [final]
+            if not checkpoints:
+                console.print(
+                    f"[bold red]Error:[/bold red] No checkpoint found for {task}_{obs_type}"
+                )
+                raise typer.Exit(1)
+            latest = max(checkpoints, key=lambda p: p.stat().st_mtime)
+            console.print(f"[cyan]Evaluating checkpoint: {latest}[/cyan]")
+            metrics = evaluate_checkpoint(str(latest), task, obs_type, eval_episodes)
+            console.print(f"[green]Evaluation complete:[/green] {metrics}")
+        else:
+            metrics = run_dreamer_training(
+                task=task,
+                obs_type=obs_type,
+                total_steps=steps,
+                eval_episodes=eval_episodes,
+                eval_every=eval_every,
+                resume=resume,
+                checkpoint_dir=checkpoint_dir,
+                config_overrides=config_overrides,
+            )
+            console.print("[bold green]✓ DreamerV3 training complete![/bold green]")
+            console.print(f"  • Task: {metrics['task']}")
+            console.print(f"  • Obs type: {metrics['obs_type']}")
+            console.print(
+                f"  • Training steps: {metrics.get('training_curves', {}).get('total_loss', [])[-1] if metrics.get('training_curves', {}).get('total_loss') else 'N/A'}"
+            )
+
+    except RuntimeError as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(1) from e
+    except KeyboardInterrupt:
+        console.print("[yellow]Training interrupted by user[/yellow]")
+        raise typer.Exit(130)
+
+
+@app.command(name="dreamer-spike")
+def dreamer_spike(
+    task: str = typer.Option("suturing", "--task", help="Task for spike (default: suturing)"),
+    obs_type: str = typer.Option("pixels", "--obs-type", help="pixels or state"),
+    steps: int = typer.Option(100000, "--steps", "-t", help="Training steps"),
+    eval_episodes: int = typer.Option(10, "--eval-episodes", help="Evaluation episodes"),
+    force: bool = typer.Option(False, "--force", help="Re-run spike even if report exists"),
+    verbose: int = typer.Option(1, "--verbose", "-v", help="Verbosity"),
+) -> None:
+    """Run DreamerV3 feasibility spike (DMV3-01).
+
+    Tests whether DreamerV3's RSSM can model surgical dynamics from
+    pixel/state observations. Produces pass/fail report with metrics.
+
+    Examples:
+        surg-rl dreamer-spike
+        surg-rl dreamer-spike --task suturing --obs-type state --steps 50000
+        surg-rl dreamer-spike --force
+    """
+    from surg_rl.dreamer.spike import check_spike_status, run_spike
+
+    console.print("[bold blue]Running DreamerV3 Feasibility Spike (DMV3-01)[/bold blue]")
+    console.print(f"  • Task: {task}")
+    console.print(f"  • Obs type: {obs_type}")
+    console.print(f"  • Steps: {steps:,}")
+    console.print(f"  • Eval episodes: {eval_episodes}")
+
+    # Check if report exists
+    existing = check_spike_status()
+    if existing and not force:
+        console.print("[yellow]Spike report already exists (use --force to re-run):[/yellow]")
+        console.print(f"  Status: {existing['status']}")
+        console.print(f"  MSE: {existing['results']['reconstruction_mse']:.6f}")
+        console.print(f"  MAE: {existing['results']['reward_mae']:.6f}")
+        console.print(f"  Recommendation: {existing['recommendation']}")
+        if existing["status"] == "passed":
+            raise typer.Exit(0)
+        else:
+            raise typer.Exit(2)
+
+    try:
+        passed, report = run_spike(
+            task=task,
+            obs_type=obs_type,
+            steps=steps,
+            eval_episodes=eval_episodes,
+        )
+
+        console.print(
+            f"\n[bold {'green' if passed else 'red'}]Spike {'PASSED' if passed else 'FAILED'}[/bold {'green' if passed else 'red'}]"
+        )
+        console.print(
+            f"  • Reconstruction MSE: {report['results']['reconstruction_mse']:.6f} (threshold: < 0.01)"
+        )
+        console.print(f"  • Reward MAE: {report['results']['reward_mae']:.6f} (threshold: < 0.5)")
+        console.print(f"  • Recommendation: {report['recommendation']}")
+        console.print("  • Report saved to: models/dreamerv3/spike_report.json")
+
+        if passed:
+            raise typer.Exit(0)
+        else:
+            raise typer.Exit(2)
+
+    except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise typer.Exit(1) from e
 

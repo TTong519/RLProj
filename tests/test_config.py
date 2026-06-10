@@ -1,8 +1,9 @@
 """Tests for configuration module."""
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
-from pathlib import Path
 
 from surg_rl.utils.config import Settings, get_settings, reset_settings
 

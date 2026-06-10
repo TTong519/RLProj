@@ -26,8 +26,8 @@ from .loader import (
 from .schema import (
     # Assets
     AssetReference,
-    BoundingBox,
     BenchmarkConfig,
+    BoundingBox,
     # Environment
     CameraConfig,
     CameraType,

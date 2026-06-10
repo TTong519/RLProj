@@ -125,4 +125,4 @@ class TestMeshGenerationPerformance:
         vertices, tets = generate_box_tet_mesh((1.0, 1.0, 1.0), resolution=64)
         elapsed = time.perf_counter() - start
         assert elapsed < 10.0, f"Box mesh 64³ took {elapsed:.2f}s, expected <10s"
-        assert len(vertices) == 65 ** 3
+        assert len(vertices) == 65**3

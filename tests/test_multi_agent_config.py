@@ -55,9 +55,7 @@ class TestArmConfig:
 
     def test_armconfig_model_validate_assistant(self):
         """ArmConfig.model_validate with assistant role produces correct values."""
-        config = ArmConfig.model_validate(
-            {"role": "assistant", "robot_ref": "davinci_right"}
-        )
+        config = ArmConfig.model_validate({"role": "assistant", "robot_ref": "davinci_right"})
         assert config.role == ArmRole.ASSISTANT
         assert config.robot_ref == "davinci_right"
 
@@ -115,9 +113,7 @@ class TestMultiAgentConfig:
     def test_single_arm_raises(self):
         """arm_configs with fewer than 2 entries raises ValidationError."""
         with pytest.raises(ValidationError):
-            MultiAgentConfig(
-                arm_configs=[{"role": "surgeon", "robot_ref": "r1"}]
-            )
+            MultiAgentConfig(arm_configs=[{"role": "surgeon", "robot_ref": "r1"}])
 
     def test_empty_arm_configs_raises(self):
         """arm_configs=[] raises ValidationError (min_length=2)."""
@@ -319,7 +315,6 @@ class TestMultiAgentSceneLoader:
 
     def test_loader_loads_dual_arm_json(self, tmp_path):
         """SceneLoader loads a dual-arm JSON scene file with multi_agent populated."""
-        import json
 
         from surg_rl.scene_definition.loader import SceneLoader
 

@@ -12,7 +12,6 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-
 # ============================================================================
 # Task 0: TrajectoryReplay tests
 # ============================================================================
@@ -48,17 +47,13 @@ class TestTrajectoryReplaySpeedValidation:
         """speed=0 should raise ValueError (must be > 0)."""
         speed = 0.0
         with pytest.raises(ValueError, match="Speed must be"):
-            raise ValueError(
-                f"Speed must be in (0.0, 1.0], got {speed}"
-            )
+            raise ValueError(f"Speed must be in (0.0, 1.0], got {speed}")
 
     def test_speed_above_one_raises_value_error(self):
         """speed=1.5 should raise ValueError (must be <= 1.0)."""
         speed = 1.5
         with pytest.raises(ValueError, match="Speed must be"):
-            raise ValueError(
-                f"Speed must be in (0.0, 1.0], got {speed}"
-            )
+            raise ValueError(f"Speed must be in (0.0, 1.0], got {speed}")
 
     def test_speed_at_one_no_sleep(self):
         """speed=1.0 → throttle_time = 0 (no sleep)."""
@@ -107,12 +102,12 @@ class TestTrajectoryReplayDummyClass:
     def test_acceptance_grep_verification(self):
         """Verify source file has all required code patterns
         per plan acceptance_criteria.
-        
+
         On macOS, the dummy class is active, so we verify the source file
         by reading it directly (not inspect.getsource which returns active path).
         """
         from pathlib import Path
-        from surg_rl.ros2.replay import _HAS_ROS2
+
         import surg_rl.ros2.replay as replay_mod
 
         # Read source file directly to verify all paths
@@ -174,39 +169,34 @@ class TestTrajectoryReplayRunReplayWithMocks:
         # Setup env mock
         mock_env = MagicMock()
         mock_env.reset.return_value = (np.zeros(10), {})
-        mock_env.step.return_value = (
-            np.zeros(10), 0.0, False, False, {}
-        )
+        mock_env.step.return_value = (np.zeros(10), 0.0, False, False, {})
         mock_env.config.timestep = 0.002
         mock_env.config.frame_skip = 1
 
         # Setup model mock
         mock_model = MagicMock()
-        mock_model.predict.return_value = (
-            np.array([0.1, 0.2]), None
-        )
+        mock_model.predict.return_value = (np.array([0.1, 0.2]), None)
 
-        with patch.dict(sys.modules, mock_modules):
-            with patch.object(sys, "platform", "linux"):
+        with patch.dict(sys.modules, mock_modules), patch.object(sys, "platform", "linux"):
+            with patch(
+                "surg_rl.rl.environment.make_env",
+                return_value=mock_env,
+            ):
                 with patch(
-                    "surg_rl.rl.environment.make_env",
-                    return_value=mock_env,
+                    "stable_baselines3.PPO.load",
+                    return_value=mock_model,
                 ):
-                    with patch(
-                        "stable_baselines3.PPO.load",
-                        return_value=mock_model,
-                    ):
-                        import surg_rl.ros2.replay as replay_mod
+                    import surg_rl.ros2.replay as replay_mod
 
-                        importlib.reload(replay_mod)
+                    importlib.reload(replay_mod)
 
-                        replay = replay_mod.TrajectoryReplay(
-                            model_path="/tmp/model.zip",
-                            scene_path="scenes/minimal_scene.json",
-                            speed=1.0,
-                        )
+                    replay = replay_mod.TrajectoryReplay(
+                        model_path="/tmp/model.zip",
+                        scene_path="scenes/minimal_scene.json",
+                        speed=1.0,
+                    )
 
-                        result = replay.run_replay(max_steps=5)
+                    result = replay.run_replay(max_steps=5)
 
         assert isinstance(result, dict)
         assert "steps_executed" in result
@@ -243,27 +233,26 @@ class TestTrajectoryReplayRunReplayWithMocks:
         # Setup model mock
         mock_model = MagicMock()
 
-        with patch.dict(sys.modules, mock_modules):
-            with patch.object(sys, "platform", "linux"):
+        with patch.dict(sys.modules, mock_modules), patch.object(sys, "platform", "linux"):
+            with patch(
+                "surg_rl.rl.environment.make_env",
+                return_value=mock_env,
+            ):
                 with patch(
-                    "surg_rl.rl.environment.make_env",
-                    return_value=mock_env,
+                    "stable_baselines3.PPO.load",
+                    return_value=mock_model,
                 ):
-                    with patch(
-                        "stable_baselines3.PPO.load",
-                        return_value=mock_model,
-                    ):
-                        import surg_rl.ros2.replay as replay_mod
+                    import surg_rl.ros2.replay as replay_mod
 
-                        importlib.reload(replay_mod)
+                    importlib.reload(replay_mod)
 
-                        replay = replay_mod.TrajectoryReplay(
-                            model_path="/tmp/model.zip",
-                            scene_path="scenes/minimal_scene.json",
-                            speed=1.0,
-                        )
+                    replay = replay_mod.TrajectoryReplay(
+                        model_path="/tmp/model.zip",
+                        scene_path="scenes/minimal_scene.json",
+                        speed=1.0,
+                    )
 
-                        replay.terminate()
+                    replay.terminate()
 
         mock_env.close.assert_called_once()
         mock_node.destroy_node.assert_called_once()
@@ -288,41 +277,34 @@ class TestTrajectoryReplayRunReplayWithMocks:
 
         mock_env = MagicMock()
         mock_env.reset.return_value = (np.zeros(10), {})
-        mock_env.step.return_value = (
-            np.zeros(10), 0.0, False, False, {}
-        )
+        mock_env.step.return_value = (np.zeros(10), 0.0, False, False, {})
         mock_env.config.timestep = 0.002
         mock_env.config.frame_skip = 1
 
         mock_model = MagicMock()
-        mock_model.predict.return_value = (
-            np.array([0.1, 0.2]), None
-        )
+        mock_model.predict.return_value = (np.array([0.1, 0.2]), None)
 
-        with patch.dict(sys.modules, mock_modules):
-            with patch.object(sys, "platform", "linux"):
+        with patch.dict(sys.modules, mock_modules), patch.object(sys, "platform", "linux"):
+            with patch(
+                "surg_rl.rl.environment.make_env",
+                return_value=mock_env,
+            ):
                 with patch(
-                    "surg_rl.rl.environment.make_env",
-                    return_value=mock_env,
+                    "stable_baselines3.PPO.load",
+                    return_value=mock_model,
                 ):
-                    with patch(
-                        "stable_baselines3.PPO.load",
-                        return_value=mock_model,
-                    ):
-                        with patch.object(
-                            time_mod, "sleep"
-                        ) as mock_sleep:
-                            import surg_rl.ros2.replay as replay_mod
+                    with patch.object(time_mod, "sleep") as mock_sleep:
+                        import surg_rl.ros2.replay as replay_mod
 
-                            importlib.reload(replay_mod)
+                        importlib.reload(replay_mod)
 
-                            replay = replay_mod.TrajectoryReplay(
-                                model_path="/tmp/model.zip",
-                                scene_path="scenes/minimal_scene.json",
-                                speed=0.1,
-                            )
+                        replay = replay_mod.TrajectoryReplay(
+                            model_path="/tmp/model.zip",
+                            scene_path="scenes/minimal_scene.json",
+                            speed=0.1,
+                        )
 
-                            replay.run_replay(max_steps=3)
+                        replay.run_replay(max_steps=3)
 
         # At speed=0.1, dt=0.002 → throttle = (10-1)*0.002 = 0.018
         # sleep should be called 3 times
@@ -338,6 +320,7 @@ class TestTrajectoryReplayEdgeCases:
     def test_max_steps_zero_returns_zero_steps(self):
         """max_steps=0 should run zero iterations and return 0 steps."""
         from surg_rl.ros2 import TrajectoryReplay
+
         assert TrajectoryReplay is not None
 
     def test_throttle_at_edge_cases(self):

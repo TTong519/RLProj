@@ -5,7 +5,8 @@ real OBJ meshes are not available. All generators call through the
 TRIMESH lazy guard -- shapes are only generated when trimesh is installed.
 """
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from surg_rl.assets import TRIMESH
 
@@ -250,9 +251,7 @@ def generate_procedural_instrument(
     return generator(target_face_count=target_face_count)
 
 
-def generate_procedural_organ(
-    organ_type: str, target_face_count: int | None = None
-) -> Any:
+def generate_procedural_organ(organ_type: str, target_face_count: int | None = None) -> Any:
     """Generate a procedural trimesh mesh for an organ type.
 
     Args:

@@ -8,7 +8,10 @@ logger = get_logger(__name__)
 
 _SUPERSUT_AVAILABLE = False
 try:
-    from supersuit import concat_vec_envs_v1, pettingzoo_env_to_vec_env_v1  # type: ignore[import-untyped]
+    from supersuit import (  # type: ignore[import-untyped]
+        concat_vec_envs_v1,
+        pettingzoo_env_to_vec_env_v1,
+    )
 
     _SUPERSUT_AVAILABLE = True
 except ImportError:

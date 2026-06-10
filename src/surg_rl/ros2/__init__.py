@@ -24,8 +24,7 @@ logger = get_logger(__name__)
 if sys.platform == "darwin":
     HAS_ROS2 = False
     logger.warning(
-        "ROS2 not supported on macOS. Use a Docker Linux container. "
-        "Bridge features disabled."
+        "ROS2 not supported on macOS. Use a Docker Linux container. " "Bridge features disabled."
     )
 else:
     try:
@@ -38,13 +37,12 @@ else:
     except ImportError:
         HAS_ROS2 = False
         logger.warning(
-            "ROS2 not available — rclpy must be installed via apt. "
-            "Bridge features disabled."
+            "ROS2 not available — rclpy must be installed via apt. " "Bridge features disabled."
         )
 
 # ── Public API ─────────────────────────────────────────────────────────
-from surg_rl.ros2.config import Ros2BridgeConfig  # noqa: E402, F401
 from surg_rl.ros2.bridge_node import Ros2BridgeNode  # noqa: E402, F401
+from surg_rl.ros2.config import Ros2BridgeConfig  # noqa: E402, F401
 from surg_rl.ros2.replay import TrajectoryReplay  # noqa: E402, F401
 
 __all__ = [

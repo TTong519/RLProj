@@ -13,13 +13,19 @@ RLIABLE = LazyImport("rliable", "benchmark")
 
 from surg_rl.benchmark.experiment_config import ExperimentConfig
 from surg_rl.benchmark.experiment_runner import ExperimentRunner
-from surg_rl.benchmark.metrics import MetricCollectorCallback, Aggregator
+from surg_rl.benchmark.metrics import Aggregator, MetricCollectorCallback
 from surg_rl.benchmark.plots import PlotRenderer
 from surg_rl.benchmark.report import ReportGenerator
 
 __all__ = [
-    "MATPLOTLIB", "SEABORN", "PANDAS", "RLIABLE",
-    "ExperimentConfig", "ExperimentRunner",
-    "MetricCollectorCallback", "Aggregator",
-    "PlotRenderer", "ReportGenerator",
+    "MATPLOTLIB",
+    "SEABORN",
+    "PANDAS",
+    "RLIABLE",
+    "ExperimentConfig",
+    "ExperimentRunner",
+    "MetricCollectorCallback",
+    "Aggregator",
+    "PlotRenderer",
+    "ReportGenerator",
 ]

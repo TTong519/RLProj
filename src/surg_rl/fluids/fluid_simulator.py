@@ -52,6 +52,7 @@ class FluidSimulator:
 
     def add_obstacle(self, geometry: Any, name: str) -> None:
         from phi.flow import Obstacle
+
         self._obstacles.append(Obstacle(geometry))
         self._obstacle_names.append(name)
 
@@ -86,6 +87,7 @@ class FluidSimulator:
         forces: dict[str, np.ndarray] = {}
         if self._pressure is not None and self._obstacles:
             from surg_rl.fluids.force_computation import compute_obstacle_forces
+
             forces = compute_obstacle_forces(
                 self._velocity,
                 self._pressure,

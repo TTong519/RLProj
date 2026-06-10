@@ -169,9 +169,7 @@ class SurgicalEnv(gym.Env):
         self._obs_builder = ObservationBuilder(
             config=self.config.observation_config or self._default_observation_config()
         )
-        self._action_builder = ActionBuilder(
-            config=action_cfg
-        )
+        self._action_builder = ActionBuilder(config=action_cfg)
 
         # Validate action type is supported at load time (ACT-05)
         # All ActionType enum values are now implemented; this guard catches
@@ -196,15 +194,13 @@ class SurgicalEnv(gym.Env):
         task_type = None
         if self._scene.task is not None:
             task_name = self._scene.task.name
-            task_type = getattr(self._scene.task, 'task_type', None)
+            task_type = getattr(self._scene.task, "task_type", None)
 
         # Phase 21: Use TaskRewardRouter when task_type is configured (D-02, D-03)
         if task_type is not None:
             router = TaskRewardRouter()
             reward_list = router.build(task_type)
-            self._reward_fn = CompositeReward([
-                (r, 1.0) for r in reward_list
-            ])
+            self._reward_fn = CompositeReward([(r, 1.0) for r in reward_list])
         else:
             self._reward_fn = create_default_reward(self.config.reward_config, task_name=task_name)
 
@@ -216,11 +212,11 @@ class SurgicalEnv(gym.Env):
         self._setup_controller()
 
         # ROS2 Bridge (D-01: spawn as separate multiprocessing Process)
-        self._bridge: "Ros2Bridge | None" = None
+        self._bridge: Ros2Bridge | None = None
         self._setup_bridge()
 
         # ros2_control ControllerBridge
-        self._controller_bridge: "ControllerBridge | None" = None
+        self._controller_bridge: ControllerBridge | None = None
         self._setup_controller_bridge()
 
         # Episode state
@@ -244,8 +240,7 @@ class SurgicalEnv(gym.Env):
             except RuntimeError as exc:
                 # macOS without mjpython – treat as headless fallback
                 logger.warning(
-                    "Human render unavailable: %s. "
-                    "Training will continue without viewer.",
+                    "Human render unavailable: %s. " "Training will continue without viewer.",
                     exc,
                 )
                 self.render_mode = None
@@ -344,9 +339,7 @@ class SurgicalEnv(gym.Env):
         ):
             control_map = self._simulator._control_map
             if control_map:
-                gripper_count = sum(
-                    1 for m in control_map if m.get("is_gripper")
-                )
+                gripper_count = sum(1 for m in control_map if m.get("is_gripper"))
                 total = len(control_map)
                 include_gripper = gripper_count > 0
                 num_joints = total - gripper_count
@@ -422,8 +415,7 @@ class SurgicalEnv(gym.Env):
 
         if not HAS_ROS2:
             logger.warning(
-                "rclpy not installed — bridge disabled. "
-                "Install via apt: ros-humble-rclpy"
+                "rclpy not installed — bridge disabled. " "Install via apt: ros-humble-rclpy"
             )
             return
 
@@ -466,8 +458,7 @@ class SurgicalEnv(gym.Env):
             return
         if not HAS_ROS2:
             logger.warning(
-                "ros2_control requested but ROS2 not available — "
-                "hardware control disabled"
+                "ros2_control requested but ROS2 not available — " "hardware control disabled"
             )
             return
         from surg_rl.ros2.hardware_bridge import ControllerBridge
@@ -646,7 +637,17 @@ class SurgicalEnv(gym.Env):
 
         # Step fluid simulation (subsampled at fluid.substep_dt rhythm)
         if self._fluid_simulator is not None and self._simulator is not None:
-            fluid_interval = max(1, int(self._fluid_simulator.config.substep_dt / (self._scene.physics.timestep if self._scene and self._scene.physics else 0.002)))
+            fluid_interval = max(
+                1,
+                int(
+                    self._fluid_simulator.config.substep_dt
+                    / (
+                        self._scene.physics.timestep
+                        if self._scene and self._scene.physics
+                        else 0.002
+                    )
+                ),
+            )
             if self._step_count % fluid_interval == 0:
                 self._fluid_simulator.step()
 
@@ -662,7 +663,7 @@ class SurgicalEnv(gym.Env):
         return obs_dict, reward, terminated, truncated, info
 
     def trigger_cut(
-        self, tissue_name: str, surface_point: "Position", direction: "Position", depth: float = 0.01
+        self, tissue_name: str, surface_point: Position, direction: Position, depth: float = 0.01
     ) -> bool:
         """Trigger a volumetric cut on a soft body tissue.
 
@@ -677,16 +678,21 @@ class SurgicalEnv(gym.Env):
         Returns:
             True if the cut was applied, False if on cooldown or invalid.
         """
-        from surg_rl.scene_definition.schema import CutAction, Position as SchemaPosition
+        from surg_rl.scene_definition.schema import CutAction
+        from surg_rl.scene_definition.schema import Position as SchemaPosition
 
         if self._step_count - self._last_cut_step < self._cut_cooldown_steps:
             return False
 
-        sp = surface_point if isinstance(surface_point, SchemaPosition) else SchemaPosition(
-            x=surface_point.x, y=surface_point.y, z=surface_point.z
+        sp = (
+            surface_point
+            if isinstance(surface_point, SchemaPosition)
+            else SchemaPosition(x=surface_point.x, y=surface_point.y, z=surface_point.z)
         )
-        di = direction if isinstance(direction, SchemaPosition) else SchemaPosition(
-            x=direction.x, y=direction.y, z=direction.z
+        di = (
+            direction
+            if isinstance(direction, SchemaPosition)
+            else SchemaPosition(x=direction.x, y=direction.y, z=direction.z)
         )
 
         cut_action = CutAction(
@@ -950,7 +956,7 @@ def make_vec_env(
     n_envs: int = 4,
     vec_env_cls: Any | None = None,
     **kwargs,
-) -> "gym.Env":
+) -> gym.Env:
     """Create a vectorized environment for parallel training.
 
     Uses Stable-Baselines3's DummyVecEnv (single process) or SubprocVecEnv
@@ -1012,7 +1018,7 @@ class Ros2Bridge:
         self._node = node
         self._config = config
         self._command_queue = command_queue
-        self._process: "multiprocessing.Process | None" = None
+        self._process: multiprocessing.Process | None = None
         self._running = False
 
     def start(self) -> None:
@@ -1021,6 +1027,7 @@ class Ros2Bridge:
         if HAS_ROS2:
             try:
                 import rclpy
+
                 if rclpy.ok():
                     existing = [n for n, _ in rclpy.get_topic_names_and_types()]
                     missing = []
@@ -1080,9 +1087,7 @@ class Ros2Bridge:
         except queue.Empty:
             pass
 
-    def publish_joint_state(
-        self, qpos: "np.ndarray", qvel: "np.ndarray"
-    ) -> None:
+    def publish_joint_state(self, qpos: np.ndarray, qvel: np.ndarray) -> None:
         """Publish joint state from main process — delegates to node.
 
         Called at every ``SurgicalEnv.step()`` call when bridge is active.
@@ -1107,7 +1112,7 @@ def _run_bridge(node, command_queue=None) -> None:
     from rclpy.executors import MultiThreadedExecutor
 
     # Set the injected multiprocessing.Queue on the node if provided
-    if command_queue is not None and hasattr(node, '_command_queue'):
+    if command_queue is not None and hasattr(node, "_command_queue"):
         node._command_queue = command_queue
 
     rclpy.init()

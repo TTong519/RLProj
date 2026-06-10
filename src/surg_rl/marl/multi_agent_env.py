@@ -10,7 +10,6 @@ Contract: MARL-01, MARL-04.
 
 from __future__ import annotations
 
-import importlib
 from typing import Any
 
 import gymnasium as gym
@@ -32,6 +31,7 @@ def _get_parallel_env_base() -> type:
     if _PARALLEL_ENV_BASE is None:
         try:
             from pettingzoo import ParallelEnv
+
             _PARALLEL_ENV_BASE = ParallelEnv
         except ImportError:
             _PARALLEL_ENV_BASE = object
@@ -229,9 +229,9 @@ class MultiAgentSurgicalEnv(_get_parallel_env_base()):
         Returns:
             Gymnasium Space for this agent's observations.
         """
-        return self.observation_spaces.get(agent, gym.spaces.Box(
-            low=0, high=1, shape=(1,), dtype=np.float32
-        ))
+        return self.observation_spaces.get(
+            agent, gym.spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
+        )
 
     def action_space(self, agent: str) -> gym.Space:
         """Get action space for a specific agent.
@@ -242,9 +242,9 @@ class MultiAgentSurgicalEnv(_get_parallel_env_base()):
         Returns:
             Gymnasium Space for this agent's actions.
         """
-        return self.action_spaces.get(agent, gym.spaces.Box(
-            low=-1.0, high=1.0, shape=(1,), dtype=np.float32
-        ))
+        return self.action_spaces.get(
+            agent, gym.spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
+        )
 
     def reset(
         self,
@@ -279,9 +279,7 @@ class MultiAgentSurgicalEnv(_get_parallel_env_base()):
 
         return observations, infos
 
-    def step(
-        self, actions: dict[str, np.ndarray]
-    ) -> tuple[
+    def step(self, actions: dict[str, np.ndarray]) -> tuple[
         dict[str, dict[str, np.ndarray]],
         dict[str, float],
         dict[str, bool],
@@ -319,8 +317,8 @@ class MultiAgentSurgicalEnv(_get_parallel_env_base()):
                 simulator.apply_action(action, arm_id=agent_id)
 
         # Step the single SurgicalEnv once
-        full_obs, full_reward, terminated, truncated, full_info = (
-            self._surgical_env.step(np.zeros(0))
+        full_obs, full_reward, terminated, truncated, full_info = self._surgical_env.step(
+            np.zeros(0)
         )
 
         # Split observations, rewards, and infos per agent

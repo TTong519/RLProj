@@ -5,7 +5,6 @@ Tests use MagicMock to avoid creating real OS windows.
 
 import os
 import platform
-import threading
 import time
 from unittest.mock import MagicMock
 
@@ -16,10 +15,10 @@ from surg_rl.rl.environment import SurgicalEnv, SurgicalEnvConfig
 from surg_rl.simulators.mujoco_simulator import MuJoCoSimulator
 from surg_rl.simulators.pybullet_simulator import PyBulletSimulator
 
-
 # ============================================================================
 # RenderThread tests
 # ============================================================================
+
 
 class TestRenderThread:
     """Tests for the background render thread."""
@@ -71,6 +70,7 @@ class TestRenderThread:
 # MuJoCo viewer tests (mocked)
 # ============================================================================
 
+
 class TestMuJoCoViewer:
     """Mocked tests for MuJoCoSimulator.start_viewer / stop_viewer."""
 
@@ -95,9 +95,7 @@ class TestMuJoCoViewer:
 
         # Ensure renderer appears available and NOT on macOS
         monkeypatch.setattr(sim, "_renderer_available", True)
-        monkeypatch.setattr(
-            "surg_rl.simulators.mujoco_simulator.platform.system", lambda: "Linux"
-        )
+        monkeypatch.setattr("surg_rl.simulators.mujoco_simulator.platform.system", lambda: "Linux")
 
         result = sim.start_viewer(target_fps=60.0)
         assert result is True
@@ -144,9 +142,7 @@ class TestMuJoCoViewer:
         sim._mujoco = mock_mujoco
 
         monkeypatch.setattr(sim, "_renderer_available", True)
-        monkeypatch.setattr(
-            "surg_rl.simulators.mujoco_simulator.platform.system", lambda: "Linux"
-        )
+        monkeypatch.setattr("surg_rl.simulators.mujoco_simulator.platform.system", lambda: "Linux")
 
         sim.start_viewer(target_fps=30.0)
         time.sleep(0.05)
@@ -159,6 +155,7 @@ class TestMuJoCoViewer:
 # ============================================================================
 # PyBullet viewer tests
 # ============================================================================
+
 
 class TestPyBulletViewer:
     """Tests for PyBullet start_viewer / stop_viewer."""
@@ -183,6 +180,7 @@ class TestPyBulletViewer:
 # SurgicalEnv integration tests (mocked/specialised)
 # ============================================================================
 
+
 class TestSurgicalEnvViewer:
     """Headless/mocked tests for SurgicalEnv render wiring."""
 
@@ -195,9 +193,7 @@ class TestSurgicalEnvViewer:
                 started.append(("start", target_fps))
                 return False
 
-        monkeypatch.setattr(
-            "surg_rl.rl.environment.MuJoCoSimulator", _SpySimulator
-        )
+        monkeypatch.setattr("surg_rl.rl.environment.MuJoCoSimulator", _SpySimulator)
 
         config = SurgicalEnvConfig(
             scene_path="scenes/minimal_scene.json",
@@ -219,9 +215,7 @@ class TestSurgicalEnvViewer:
                 render_calls.append(mode)
                 return None
 
-        monkeypatch.setattr(
-            "surg_rl.rl.environment.MuJoCoSimulator", _SpySimulator
-        )
+        monkeypatch.setattr("surg_rl.rl.environment.MuJoCoSimulator", _SpySimulator)
 
         config = SurgicalEnvConfig(
             scene_path="scenes/minimal_scene.json",
@@ -248,9 +242,7 @@ class TestSurgicalEnvViewer:
             def close(self):
                 calls.append("close")
 
-        monkeypatch.setattr(
-            "surg_rl.rl.environment.MuJoCoSimulator", _SpySimulator
-        )
+        monkeypatch.setattr("surg_rl.rl.environment.MuJoCoSimulator", _SpySimulator)
 
         config = SurgicalEnvConfig(
             scene_path="scenes/minimal_scene.json",
@@ -263,13 +255,12 @@ class TestSurgicalEnvViewer:
 
     def test_headless_fallback_sets_none(self, monkeypatch, caplog):
         """If start_viewer returns False, render_mode should become None."""
+
         class _NoopSimulator(MuJoCoSimulator):
             def start_viewer(self, target_fps=30.0):
                 return False
 
-        monkeypatch.setattr(
-            "surg_rl.rl.environment.MuJoCoSimulator", _NoopSimulator
-        )
+        monkeypatch.setattr("surg_rl.rl.environment.MuJoCoSimulator", _NoopSimulator)
 
         config = SurgicalEnvConfig(
             scene_path="scenes/minimal_scene.json",
@@ -297,6 +288,7 @@ class TestSurgicalEnvViewer:
 
     def test_sigint_handler_crashes_gracefully(self, monkeypatch):
         """SIGINT handler should call close() and raise KeyboardInterrupt."""
+
         class _SpySimulator(MuJoCoSimulator):
             def start_viewer(self, target_fps=30.0):
                 return False
@@ -304,9 +296,7 @@ class TestSurgicalEnvViewer:
             def close(self):
                 pass
 
-        monkeypatch.setattr(
-            "surg_rl.rl.environment.MuJoCoSimulator", _SpySimulator
-        )
+        monkeypatch.setattr("surg_rl.rl.environment.MuJoCoSimulator", _SpySimulator)
 
         config = SurgicalEnvConfig(
             scene_path="scenes/minimal_scene.json",
@@ -328,6 +318,7 @@ class TestSurgicalEnvViewer:
 # Step-overhead heuristic (mocked)
 # ============================================================================
 
+
 class TestStepOverhead:
     """Ensure rendering does not block the step() path."""
 
@@ -343,6 +334,7 @@ class TestStepOverhead:
                 step_called.append(True)
                 # Return a minimal StepResult-like container
                 from surg_rl.simulators.base_simulator import StepResult
+
                 return StepResult(
                     observation=MagicMock(rgb_image=None),
                     reward=0.0,
@@ -350,9 +342,7 @@ class TestStepOverhead:
                     truncated=False,
                 )
 
-        monkeypatch.setattr(
-            "surg_rl.rl.environment.MuJoCoSimulator", _FastSimulator
-        )
+        monkeypatch.setattr("surg_rl.rl.environment.MuJoCoSimulator", _FastSimulator)
 
         config = SurgicalEnvConfig(
             scene_path="scenes/minimal_scene.json",
@@ -370,6 +360,7 @@ class TestStepOverhead:
 # ============================================================================
 # CLI train --render-human wiring (RENDER-04)
 # ============================================================================
+
 
 class TestCliRenderHumanWiring:
     """RENDER-04: verify --render-human/--render-fps flow to TrainingConfig."""

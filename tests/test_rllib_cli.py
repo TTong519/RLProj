@@ -5,9 +5,6 @@ DIST-06 — CLI integration verification.
 
 import subprocess
 import sys
-from pathlib import Path
-
-import pytest
 
 
 def _check_rllib_available():

@@ -31,6 +31,7 @@ def make_surgical_env(env_config: dict | None = None) -> SurgicalEnv:
     # Convert nested reward_config dict -> RewardConfig dataclass
     if "reward_config" in env_config and isinstance(env_config["reward_config"], dict):
         from surg_rl.rl.rewards import RewardConfig
+
         env_config["reward_config"] = RewardConfig(**env_config["reward_config"])
 
     cfg = SurgicalEnvConfig(**env_config)

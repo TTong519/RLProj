@@ -38,14 +38,10 @@ class TestDeformableConfigSchema:
         assert mc.friction == pytest.approx(0.5)
 
     def test_pybullet_flex_config_stores_solver_type(self):
-        pc = PyBulletFlexConfig(
-            solver_type="neo_hookean", auto_derive_neo_hookean=True
-        )
+        pc = PyBulletFlexConfig(solver_type="neo_hookean", auto_derive_neo_hookean=True)
         assert pc.solver_type == "neo_hookean"
         assert pc.auto_derive_neo_hookean is True
-        pc2 = PyBulletFlexConfig(
-            solver_type="neo_hookean", auto_derive_neo_hookean=False
-        )
+        pc2 = PyBulletFlexConfig(solver_type="neo_hookean", auto_derive_neo_hookean=False)
         assert pc2.auto_derive_neo_hookean is False
 
     def test_boundary_condition_validation(self):
@@ -62,9 +58,7 @@ class TestDeformableConfigSchema:
             name="liver",
             geometry=TissueMeshDefinition(primitive="box", dimensions=(0.1, 0.1, 0.1)),
             soft_body=True,
-            deformable=DeformableConfig(
-                mesh_source="tetgen", mesh_path="meshes/liver"
-            ),
+            deformable=DeformableConfig(mesh_source="tetgen", mesh_path="meshes/liver"),
         )
         assert tissue.deformable is not None
         assert tissue.deformable.mesh_path == "meshes/liver"

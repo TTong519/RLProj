@@ -341,7 +341,6 @@ class TestSceneBuilderCleanup:
 
     def test_cleanup_removes_temp_dir(self):
         """cleanup() must remove the temp directory."""
-        import os
 
         builder = SceneBuilder()
         assert os.path.exists(builder.temp_dir)
@@ -394,7 +393,6 @@ class TestWithSceneDefinition:
 
     def test_mjcf_includes_joints_and_actuators(self, tmp_path: Path):
         """Test that MJCF contains joints and actuators for robots."""
-        from surg_rl.scene_definition import RobotConfig, RobotType
 
         scene = SceneDefinition(
             metadata=Metadata(name="Joint Test Scene"),
@@ -429,7 +427,6 @@ class TestMuJoCoJointControl:
 
     def test_load_scene_creates_joints(self, tmp_path: Path):
         """Test that loading a scene creates controllable joints."""
-        from surg_rl.scene_definition import RobotConfig, RobotType
 
         scene = SceneDefinition(
             metadata=Metadata(name="Joint Scene"),
@@ -456,7 +453,6 @@ class TestMuJoCoJointControl:
 
     def test_apply_action_sets_ctrl(self, tmp_path: Path):
         """Test that applying an action sets MuJoCo controls."""
-        from surg_rl.scene_definition import RobotConfig, RobotType
 
         scene = SceneDefinition(
             metadata=Metadata(name="Action Scene"),
@@ -484,7 +480,6 @@ class TestMuJoCoJointControl:
 
     def test_get_state_includes_qpos_qvel(self, tmp_path: Path):
         """Test that get_state includes joint positions and velocities."""
-        from surg_rl.scene_definition import RobotConfig, RobotType
 
         scene = SceneDefinition(
             metadata=Metadata(name="State Scene"),
@@ -510,7 +505,6 @@ class TestMuJoCoJointControl:
 
     def test_step_with_action(self, tmp_path: Path):
         """Test that step applies action and advances simulation."""
-        from surg_rl.scene_definition import RobotConfig, RobotType
 
         scene = SceneDefinition(
             metadata=Metadata(name="Step Scene"),
@@ -778,7 +772,7 @@ class TestPyBulletBugs:
         """Bug 1: createMultiBody primitive fallback must pass [x, y, z, w]."""
         import unittest.mock as mock
 
-        from surg_rl.scene_definition import Orientation, Pose, Position, RobotConfig, RobotType
+        from surg_rl.scene_definition import Orientation, Pose, Position
 
         sim = PyBulletSimulator()
         sim._physics_client = 0
@@ -1017,7 +1011,10 @@ class TestCameraNameRendering:
 class TestSoftBodyMeshCaching:
     """Tests for soft-body mesh caching (PERF-01)."""
 
-    @pytest.mark.skipif(sys.platform == "darwin", reason="macOS PyBullet soft-body reset slower (PERF-01 — platform limitation)")
+    @pytest.mark.skipif(
+        sys.platform == "darwin",
+        reason="macOS PyBullet soft-body reset slower (PERF-01 — platform limitation)",
+    )
     def test_soft_body_reset_under_100ms(self):
         """PERF-01: Soft-body reset must complete in <100ms on second reset."""
         from surg_rl.scene_definition.schema import (
@@ -1033,9 +1030,7 @@ class TestSoftBodyMeshCaching:
             tissues=[
                 TissueConfig(
                     name="soft_tissue",
-                    geometry=TissueMeshDefinition(
-                        primitive="box", dimensions=(0.1, 0.1, 0.01)
-                    ),
+                    geometry=TissueMeshDefinition(primitive="box", dimensions=(0.1, 0.1, 0.01)),
                     soft_body=True,
                     physics=SoftBodyPhysics(),
                 )
@@ -1050,9 +1045,7 @@ class TestSoftBodyMeshCaching:
         start = time.perf_counter()
         sim.reset()  # second reset should use cache
         elapsed_ms = (time.perf_counter() - start) * 1000
-        assert elapsed_ms < 100.0, (
-            f"Soft-body reset took {elapsed_ms:.1f}ms, expected <100ms"
-        )
+        assert elapsed_ms < 100.0, f"Soft-body reset took {elapsed_ms:.1f}ms, expected <100ms"
         sim.close()
 
     def test_mesh_cache_hit_avoids_regeneration(self):
@@ -1070,14 +1063,10 @@ class TestSoftBodyMeshCaching:
 
         tissue = TissueConfig(
             name="test_tissue",
-            geometry=TissueMeshDefinition(
-                primitive="box", dimensions=(0.1, 0.1, 0.01)
-            ),
+            geometry=TissueMeshDefinition(primitive="box", dimensions=(0.1, 0.1, 0.01)),
         )
 
-        with patch(
-            "surg_rl.simulators.pybullet_simulator.generate_box_tet_mesh"
-        ) as mock_gen:
+        with patch("surg_rl.simulators.pybullet_simulator.generate_box_tet_mesh") as mock_gen:
             mock_gen.return_value = (
                 np.zeros((8, 3)),
                 np.zeros((5, 4), dtype=int),
@@ -1103,20 +1092,14 @@ class TestSoftBodyMeshCaching:
 
         tissue_a = TissueConfig(
             name="tissue_a",
-            geometry=TissueMeshDefinition(
-                primitive="box", dimensions=(0.1, 0.1, 0.01)
-            ),
+            geometry=TissueMeshDefinition(primitive="box", dimensions=(0.1, 0.1, 0.01)),
         )
         tissue_b = TissueConfig(
             name="tissue_b",
-            geometry=TissueMeshDefinition(
-                primitive="box", dimensions=(0.2, 0.2, 0.02)
-            ),
+            geometry=TissueMeshDefinition(primitive="box", dimensions=(0.2, 0.2, 0.02)),
         )
 
-        with patch(
-            "surg_rl.simulators.pybullet_simulator.generate_box_tet_mesh"
-        ) as mock_gen:
+        with patch("surg_rl.simulators.pybullet_simulator.generate_box_tet_mesh") as mock_gen:
             mock_gen.return_value = (
                 np.zeros((8, 3)),
                 np.zeros((5, 4), dtype=int),
@@ -1239,7 +1222,9 @@ class TestPyBulletSoftBodyLoad:
         vertices = data[1]
         assert len(vertices) > 0
 
-    @pytest.mark.skipif(sys.platform == "darwin", reason="PyBullet createSoftBodyAnchor API incompatible on macOS")
+    @pytest.mark.skipif(
+        sys.platform == "darwin", reason="PyBullet createSoftBodyAnchor API incompatible on macOS"
+    )
     def test_pybullet_soft_body_anchor_to_world(self):
         """Anchoring a node to world should prevent gravity-driven motion."""
         from surg_rl.scene_definition.schema import (
@@ -1316,12 +1301,16 @@ class TestStateSaveRestore:
         state_before = sim.get_state()
         obs_before = sim._get_observation()
         assert state_before.qpos is not None and len(state_before.qpos) > 0
-        assert not np.allclose(state_before.qpos, 0.0, atol=1e-3), "qpos must be non-zero for a meaningful test"
+        assert not np.allclose(
+            state_before.qpos, 0.0, atol=1e-3
+        ), "qpos must be non-zero for a meaningful test"
 
         # Perturb body positions and joint states
         for name in sim._body_ids:
             sim._pb.resetBasePositionAndOrientation(
-                sim._body_ids[name], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0],
+                sim._body_ids[name],
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
                 physicsClientId=sim._physics_client,
             )
         for robot_name, joint_dict in sim._joint_ids.items():
@@ -1330,7 +1319,10 @@ class TestStateSaveRestore:
             body_id = sim._body_ids[robot_name]
             for joint_idx in joint_dict.values():
                 sim._pb.resetJointState(
-                    body_id, joint_idx, targetValue=0.5, targetVelocity=0.0,
+                    body_id,
+                    joint_idx,
+                    targetValue=0.5,
+                    targetVelocity=0.0,
                     physicsClientId=sim._physics_client,
                 )
 
@@ -1342,7 +1334,9 @@ class TestStateSaveRestore:
         assert np.allclose(state_after.qpos, state_before.qpos, atol=1e-6)
         assert np.allclose(state_after.qvel, state_before.qvel, atol=1e-6)
         for name in state_before.body_positions:
-            assert np.allclose(state_after.body_positions[name], state_before.body_positions[name], atol=1e-3)
+            assert np.allclose(
+                state_after.body_positions[name], state_before.body_positions[name], atol=1e-3
+            )
 
 
 class TestSoftBodyStateRoundtrip:

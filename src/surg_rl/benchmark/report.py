@@ -70,6 +70,26 @@ class ReportGenerator:
         """
         results_by_backend = {}
         dreamer_status = "pending — Phase 24"
+        spike_metrics = None
+        deferral_reason = None
+
+        # Check spike report
+        spike_report_path = Path("models/dreamerv3/spike_report.json")
+        if spike_report_path.exists():
+            try:
+                with open(spike_report_path) as f:
+                    spike_report = json.load(f)
+                dreamer_status = spike_report.get("status", "unknown")
+                if dreamer_status == "failed":
+                    spike_metrics = {
+                        "reconstruction_mse": spike_report.get("results", {}).get(
+                            "reconstruction_mse"
+                        ),
+                        "reward_mae": spike_report.get("results", {}).get("reward_mae"),
+                    }
+                    deferral_reason = spike_report.get("deferral_reason")
+            except Exception:
+                pass
 
         for (algo, backend), stats in self.results.items():
             if backend not in results_by_backend:
@@ -77,7 +97,6 @@ class ReportGenerator:
 
             if "status" in stats:
                 results_by_backend[backend][algo] = {"status": stats["status"]}
-                dreamer_status = stats["status"]
             else:
                 ms = stats.get("learning_curve_mean_std", {})
                 sm = stats.get("scalar_metrics", {})
@@ -86,8 +105,16 @@ class ReportGenerator:
                 mean_series = ms.get("mean")
                 std_series = ms.get("std")
 
-                mean_reward = float(mean_series.mean()) if mean_series is not None and hasattr(mean_series, "mean") else 0.0
-                std_reward = float(std_series.mean()) if std_series is not None and hasattr(std_series, "mean") else 0.0
+                mean_reward = (
+                    float(mean_series.mean())
+                    if mean_series is not None and hasattr(mean_series, "mean")
+                    else 0.0
+                )
+                std_reward = (
+                    float(std_series.mean())
+                    if std_series is not None and hasattr(std_series, "mean")
+                    else 0.0
+                )
 
                 results_by_backend[backend][algo] = {
                     "mean_reward": mean_reward,
@@ -96,9 +123,28 @@ class ReportGenerator:
                     "mean_episode_length": sm.get("mean_episode_length", 0.0),
                     "wall_clock_time": sm.get("wall_clock_time", 0.0),
                     "sample_efficiency": sm.get("sample_efficiency", 0.0),
-                    "learning_curve_iqm": self._make_json_serializable(stats.get("learning_curve_iqm", {})),
+                    "learning_curve_iqm": self._make_json_serializable(
+                        stats.get("learning_curve_iqm", {})
+                    ),
                     "learning_curve_mean_std": self._make_json_serializable(ms),
                 }
+
+        # Build dreamer_v3 section
+        dreamer_v3_section = {"status": dreamer_status}
+        if spike_metrics:
+            dreamer_v3_section["spike_metrics"] = spike_metrics
+        if deferral_reason:
+            dreamer_v3_section["deferral_reason"] = deferral_reason
+        # Include DreamerV3 results if available
+        dreamer_results = {}
+        for (algo, backend), stats in self.results.items():
+            if algo.startswith("DreamerV3") and "status" not in stats:
+                dreamer_results[f"{algo}_{backend}"] = stats
+        if dreamer_results:
+            dreamer_v3_section["results"] = dreamer_results
+
+        # Determine benchmark scope
+        benchmark_scope = "sb3_and_dreamer" if dreamer_status == "passed" else "sb3_only"
 
         return {
             "experiment": {
@@ -108,7 +154,8 @@ class ReportGenerator:
                 "config": self.config.model_dump(mode="json"),
             },
             "results": results_by_backend,
-            "dreamer_v3_status": dreamer_status,
+            "dreamer_v3": dreamer_v3_section,
+            "benchmark_scope": benchmark_scope,
         }
 
     def generate_json(self) -> Path:
@@ -207,11 +254,46 @@ class ReportGenerator:
         # DreamerV3 banner
         dreamer_banner = ""
         if self.config.dreamer_comparison:
-            dreamer_banner = f"""
-    <div class="dreamer-banner">
-      <strong>DreamerV3 Comparison:</strong> {data["dreamer_v3_status"]}
+            spike_report_path = Path("models/dreamerv3/spike_report.json")
+            spike_status = "pending — Phase 24"
+            spike_metrics = None
+            if spike_report_path.exists():
+                try:
+                    with open(spike_report_path) as f:
+                        spike_report = json.load(f)
+                    spike_status = spike_report.get("status", "unknown")
+                    spike_metrics = {
+                        "reconstruction_mse": spike_report.get("results", {}).get(
+                            "reconstruction_mse"
+                        ),
+                        "reward_mae": spike_report.get("results", {}).get("reward_mae"),
+                    }
+                except Exception:
+                    pass
+
+            if spike_status == "failed":
+                # Deferred - show failure details, no DreamerV3 rows in tables
+                dreamer_banner = f"""
+    <div class="dreamer-banner" style="background: #ffebee; border-color: #ef9a9a;">
+      <strong>DreamerV3 Comparison: DEFERRED TO v0.5.0</strong>
+      <br>Feasibility spike failed: Reconstruction MSE={spike_metrics.get('reconstruction_mse', 'N/A'):.4f} (threshold: < 0.01), Reward MAE={spike_metrics.get('reward_mae', 'N/A'):.4f} (threshold: < 0.5).
+      <br>See <code>models/dreamerv3/spike_report.json</code> for details.
     </div>
-            """
+                """
+            elif spike_status == "passed":
+                # Active - will show in tables
+                dreamer_banner = """
+    <div class="dreamer-banner" style="background: #e8f5e9; border-color: #a5d6a7;">
+      <strong>DreamerV3 Comparison: ACTIVE</strong> (pixels, state)
+    </div>
+                """
+            else:
+                # Pending
+                dreamer_banner = f"""
+    <div class="dreamer-banner">
+      <strong>DreamerV3 Comparison:</strong> {spike_status}
+    </div>
+                """
 
         # Experiment metadata
         exp = data["experiment"]

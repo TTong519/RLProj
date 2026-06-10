@@ -10,10 +10,8 @@ import os
 import threading
 from typing import Any
 
-import numpy as np
 from stable_baselines3 import PPO, SAC
 from stable_baselines3.common.base_class import BaseAlgorithm
-from stable_baselines3.common.vec_env import VecEnv
 
 from surg_rl.utils.logging import get_logger
 

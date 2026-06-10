@@ -158,7 +158,7 @@ class EnvironmentController:
         use_curriculum: bool = False,
         use_adaptive: bool = False,
         seed: int | None = None,
-    ) -> "EnvironmentController":
+    ) -> EnvironmentController:
         """Create an environment controller from a scene definition.
 
         Args:

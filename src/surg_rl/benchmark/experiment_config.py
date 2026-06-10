@@ -13,14 +13,14 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from surg_rl.scene_definition.schema import BenchmarkConfig
 
 
 class ExperimentConfig(BenchmarkConfig):
     """Complete experiment configuration for benchmark runs.
-    
+
     Extends BenchmarkConfig with benchmark-specific fields. All fields must
     be present in YAML output (no None elision) for deterministic round-trip.
     """
@@ -84,6 +84,18 @@ class ExperimentConfig(BenchmarkConfig):
         description="Save aggregated metrics.json",
     )
 
+    # DreamerV3 comparison (Phase 24)
+    dreamer_comparison: bool = Field(
+        default=False,
+        description="Include DreamerV3 comparison (auto-discovers checkpoints from models/dreamerv3/)",
+    )
+    dreamer_obs_types: list[Literal["pixels", "state"]] = Field(
+        default_factory=lambda: ["state"], description="Observation types to evaluate for DreamerV3"
+    )
+    dreamer_eval_episodes: int = Field(
+        default=10, ge=1, description="Evaluation episodes for DreamerV3"
+    )
+
     @field_validator("backends", mode="before")
     @classmethod
     def _normalize_backends(cls, v: Any) -> list[str]:
@@ -108,7 +120,7 @@ class ExperimentConfig(BenchmarkConfig):
 
         # Use model_dump with mode='json' to get JSON-serializable types
         data = self.model_dump(mode="json")
-        
+
         # Write with sort_keys=True for deterministic output
         with open(path, "w") as f:
             yaml.dump(data, f, sort_keys=True, default_flow_style=False, allow_unicode=True)
@@ -117,18 +129,18 @@ class ExperimentConfig(BenchmarkConfig):
     def from_yaml(cls, path: str | Path) -> "ExperimentConfig":
         """Load ExperimentConfig from YAML file."""
         path = Path(path)
-        with open(path, "r") as f:
+        with open(path) as f:
             data = yaml.safe_load(f)
         return cls.model_validate(data)
 
     @classmethod
     def merge(cls, base: "ExperimentConfig", overrides: dict) -> "ExperimentConfig":
         """Merge CLI overrides over YAML base config.
-        
+
         Performs shallow merge for nested dicts (like hyperparameters).
         """
         base_data = base.model_dump(mode="json")
-        
+
         def deep_merge(base_dict: dict, override_dict: dict) -> dict:
             """Merge two dicts, with overrides taking precedence."""
             result = base_dict.copy()
@@ -139,7 +151,7 @@ class ExperimentConfig(BenchmarkConfig):
                 else:
                     result[key] = value
             return result
-        
+
         merged_data = deep_merge(base_data, overrides)
         return cls.model_validate(merged_data)
 

@@ -10,17 +10,17 @@ from unittest.mock import patch
 
 import pytest
 
-
 # --------------------------------------------------------------------------- #
 # GPU auto-configuration (already partially covered in test_rllib_env_registration)
 # --------------------------------------------------------------------------- #
 
+
 def test_multi_gpu_two_gpus():
     """Two GPUs → two remote learners, one GPU each."""
-    from unittest.mock import MagicMock
     import torch
-    from surg_rl.rl.training import TrainingConfig
+
     from surg_rl.rl.rllib.config import RllibConfig
+    from surg_rl.rl.training import TrainingConfig
 
     with patch.object(torch.cuda, "device_count", return_value=2):
         rc = RllibConfig.from_training_config(TrainingConfig(), env_config={})
@@ -31,8 +31,9 @@ def test_multi_gpu_two_gpus():
 def test_single_gpu_local_learner():
     """One GPU → local learner for better throughput."""
     import torch
-    from surg_rl.rl.training import TrainingConfig
+
     from surg_rl.rl.rllib.config import RllibConfig
+    from surg_rl.rl.training import TrainingConfig
 
     with patch.object(torch.cuda, "device_count", return_value=1):
         rc = RllibConfig.from_training_config(TrainingConfig(), env_config={})
@@ -43,8 +44,9 @@ def test_single_gpu_local_learner():
 def test_cpu_only_zero_gpus():
     """No GPU → CPU learners."""
     import torch
-    from surg_rl.rl.training import TrainingConfig
+
     from surg_rl.rl.rllib.config import RllibConfig
+    from surg_rl.rl.training import TrainingConfig
 
     with patch.object(torch.cuda, "device_count", return_value=0):
         rc = RllibConfig.from_training_config(TrainingConfig(), env_config={})
@@ -55,6 +57,7 @@ def test_cpu_only_zero_gpus():
 # --------------------------------------------------------------------------- #
 # Ray is installed checks — skip if ray not available
 # --------------------------------------------------------------------------- #
+
 
 @pytest.mark.skipif(
     __import__("importlib").util.find_spec("ray") is None,

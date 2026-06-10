@@ -13,9 +13,9 @@ from surg_rl.scene_definition.schema import HardwareBackend
 from surg_rl.utils.gpu import select_backend
 from surg_rl.utils.logging import get_logger
 
+from ..render_thread import RenderThread
 from .base_simulator import BaseSimulator, Observation, State, StepResult
 from .scene_builder import SceneBuilder
-from ..render_thread import RenderThread
 
 logger = get_logger(__name__)
 
@@ -592,8 +592,11 @@ class MuJoCoSimulator(BaseSimulator):
         ctrl_offset = 0
         for robot in scene.robots:
             # Count non-gripper controls for this robot
-            robot_ctrls = [m for m in self._control_map
-                           if m["robot_name"] == robot.name and not m.get("is_gripper")]
+            robot_ctrls = [
+                m
+                for m in self._control_map
+                if m["robot_name"] == robot.name and not m.get("is_gripper")
+            ]
             n_ctrls = len(robot_ctrls)
             if n_ctrls == 0:
                 continue
@@ -613,8 +616,11 @@ class MuJoCoSimulator(BaseSimulator):
 
             ctrl_offset += n_ctrls
             # Skip gripper controls in offset counting
-            gripper_ctrls = [m for m in self._control_map
-                             if m["robot_name"] == robot.name and m.get("is_gripper")]
+            gripper_ctrls = [
+                m
+                for m in self._control_map
+                if m["robot_name"] == robot.name and m.get("is_gripper")
+            ]
             ctrl_offset += len(gripper_ctrls)
 
     def get_num_controls(self) -> int:
@@ -688,9 +694,7 @@ class MuJoCoSimulator(BaseSimulator):
         try:
             # Pick the end-effector body (heuristic: last link or robot base)
             ee_name = f"{robot_name}_link_{n - 1}"
-            body_id = self._mujoco.mj_name2id(
-                self._model, self._mujoco.mjtObj.mjOBJ_BODY, ee_name
-            )
+            body_id = self._mujoco.mj_name2id(self._model, self._mujoco.mjtObj.mjOBJ_BODY, ee_name)
             if body_id < 0:
                 body_id = self._mujoco.mj_name2id(
                     self._model, self._mujoco.mjtObj.mjOBJ_BODY, robot_name
@@ -746,9 +750,7 @@ class MuJoCoSimulator(BaseSimulator):
             alpha = 0.1
             lam_sq = 0.001
             J = reduced_jac[:, :col]
-            dq = alpha * np.linalg.solve(
-                J.T @ J + lam_sq * np.eye(col), J.T @ err
-            )
+            dq = alpha * np.linalg.solve(J.T @ J + lam_sq * np.eye(col), J.T @ err)
 
             # Current qpos for these joints
             current_q = []
@@ -1011,10 +1013,7 @@ class MuJoCoSimulator(BaseSimulator):
 
         # Incision progress: completion ratio
         total = len(task.objectives)
-        completed = sum(
-            1 for obj in task.objectives
-            if "complete" in obj.success_criteria.lower()
-        )
+        completed = sum(1 for obj in task.objectives if "complete" in obj.success_criteria.lower())
         obs.incision_progress = completed / total if total > 0 else 0.0
 
     def _compute_reward(self) -> float:
@@ -1166,18 +1165,16 @@ class MuJoCoSimulator(BaseSimulator):
 
         tet_elem_adr = self._model.flex_elemadr[flex_id]
         tet_elem_num = self._model.flex_elemnum[flex_id]
-        tetrahedra = self._model.flex_elem[tet_elem_adr : tet_elem_adr + tet_elem_num].reshape(-1, 4)
-
-        cut_origin = np.array([
-            cut_action.surface_point.x, cut_action.surface_point.y, cut_action.surface_point.z
-        ])
-        cut_dir = np.array([
-            cut_action.direction.x, cut_action.direction.y, cut_action.direction.z
-        ])
-
-        new_verts, new_tets, _ = cut_tetrahedral_mesh(
-            current_pos, tetrahedra, cut_origin, cut_dir
+        tetrahedra = self._model.flex_elem[tet_elem_adr : tet_elem_adr + tet_elem_num].reshape(
+            -1, 4
         )
+
+        cut_origin = np.array(
+            [cut_action.surface_point.x, cut_action.surface_point.y, cut_action.surface_point.z]
+        )
+        cut_dir = np.array([cut_action.direction.x, cut_action.direction.y, cut_action.direction.z])
+
+        new_verts, new_tets, _ = cut_tetrahedral_mesh(current_pos, tetrahedra, cut_origin, cut_dir)
 
         qpos = self._data.qpos.copy()
         qvel = self._data.qvel.copy()
@@ -1212,22 +1209,16 @@ class MuJoCoSimulator(BaseSimulator):
             logger.warning("Flex '%s' not found in MJCF XML", flex_name)
             return
 
-        vert_str = "\n".join(
-            f"{v[0]:.6f} {v[1]:.6f} {v[2]:.6f}" for v in vertices
-        )
+        vert_str = "\n".join(f"{v[0]:.6f} {v[1]:.6f} {v[2]:.6f}" for v in vertices)
         for vtx_elem in flex.findall("vertex"):
             vtx_elem.text = vert_str
 
-        elem_str = "\n".join(
-            f"{int(e[0])} {int(e[1])} {int(e[2])} {int(e[3])}" for e in tetrahedra
-        )
+        elem_str = "\n".join(f"{int(e[0])} {int(e[1])} {int(e[2])} {int(e[3])}" for e in tetrahedra)
         for el_elem in flex.findall("element"):
             el_elem.text = elem_str
 
         ET.indent(root)
-        self._mjcf_path.write_text(
-            ET.tostring(root, encoding="unicode")
-        )
+        self._mjcf_path.write_text(ET.tostring(root, encoding="unicode"))
 
     def apply_force(
         self,

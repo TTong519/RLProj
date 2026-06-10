@@ -98,6 +98,7 @@ def _has_metal() -> bool:
     # Fallback: try torch if installed
     try:
         import torch
+
         return torch.backends.mps.is_available()  # type: ignore[no-any-return]
     except ImportError:
         pass

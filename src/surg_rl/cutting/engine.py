@@ -76,10 +76,7 @@ def cut_tetrahedral_mesh(
     eps = 1e-12 * max(max_extent, 1e-6)
 
     tet_distances = distances[tetrahedra]
-    tet_cases = np.array([
-        classify_tet_case(d[0], d[1], d[2], d[3], eps)
-        for d in tet_distances
-    ])
+    tet_cases = np.array([classify_tet_case(d[0], d[1], d[2], d[3], eps) for d in tet_distances])
 
     straddle_mask = (tet_cases >= 1) & (tet_cases <= 3)
     keep_mask = ~straddle_mask
@@ -148,7 +145,11 @@ def cut_tetrahedral_mesh(
         new_vertices_all = vertices.copy()
 
     if new_tets_accum:
-        new_tets_all = np.vstack([keep_tets] + new_tets_accum) if len(keep_tets) > 0 else np.vstack(new_tets_accum)
+        new_tets_all = (
+            np.vstack([keep_tets] + new_tets_accum)
+            if len(keep_tets) > 0
+            else np.vstack(new_tets_accum)
+        )
     else:
         new_tets_all = keep_tets.copy()
 

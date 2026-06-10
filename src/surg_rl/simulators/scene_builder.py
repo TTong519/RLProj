@@ -7,9 +7,10 @@ automatic fallback to primitive shapes for missing assets.
 
 import tempfile
 import xml.etree.ElementTree as ET
-import numpy as np
 from pathlib import Path
 from typing import Any
+
+import numpy as np
 
 from surg_rl.utils.logging import get_logger
 
@@ -39,7 +40,7 @@ def _parse_tetgen_node(node_path: Path) -> "np.ndarray":
         <#vertices> <dim> <#attributes> <boundary_markers_flag>
         <index> <x> <y> <z> [attributes] [boundary marker]
     """
-    with open(node_path, "r") as f:
+    with open(node_path) as f:
         lines = f.readlines()
     header = lines[0].strip().split()
     n_verts = int(header[0])
@@ -63,7 +64,7 @@ def _parse_tetgen_ele(ele_path: Path) -> "np.ndarray":
 
     tetgen uses 1-indexed vertex IDs -> converts to 0-indexed.
     """
-    with open(ele_path, "r") as f:
+    with open(ele_path) as f:
         lines = f.readlines()
     header = lines[0].strip().split()
     n_tets = int(header[0])
@@ -168,8 +169,7 @@ class SceneBuilder:
             return
         self._missing_assets.add(asset_path)
         logger.warning(
-            f"Asset missing for '{entity_name}': {asset_path}. "
-            f"Using primitive fallback."
+            f"Asset missing for '{entity_name}': {asset_path}. " f"Using primitive fallback."
         )
 
     def _load_instrument_geometry(self, instrument_config) -> str:
@@ -757,10 +757,7 @@ f 5 4 8
             margin=str(margin_val),
         )
 
-        edge_stiff = mc.edge_stiffness or physics.stiffness
-        edge_damp = mc.edge_damping or physics.damping
-        ET.SubElement(flex, "edge", stiffness=str(edge_stiff), damping=str(edge_damp))
-
+        # edge element only for dim=1 (cables), use elasticity for 3D flex
         young = mc.youngs_modulus or physics.youngs_modulus
         poisson = mc.poissons_ratio or physics.poissons_ratio
         fem_damping = mc.fem_damping or (physics.damping * 0.1)
@@ -771,9 +768,7 @@ f 5 4 8
         vert_str = "\n".join(f"{v[0]:.6f} {v[1]:.6f} {v[2]:.6f}" for v in vertices)
         ET.SubElement(flex, "vertex").text = vert_str
 
-        elem_str = "\n".join(
-            f"{int(e[0])} {int(e[1])} {int(e[2])} {int(e[3])}" for e in elements
-        )
+        elem_str = "\n".join(f"{int(e[0])} {int(e[1])} {int(e[2])} {int(e[3])}" for e in elements)
         ET.SubElement(flex, "element").text = elem_str
 
         if dc.boundary_conditions:
@@ -819,8 +814,8 @@ f 5 4 8
             deformable = getattr(tissue, "deformable", None)
             if deformable is not None and deformable.mesh_source == "tetgen":
                 from surg_rl.utils.mesh_generation import (
-                    _try_external_tetrahedralization,
                     _generate_box_surface,
+                    _try_external_tetrahedralization,
                 )
 
                 dims = getattr(tissue.geometry, "dimensions", (0.1, 0.1, 0.01))
@@ -857,23 +852,23 @@ f 5 4 8
             ET.SubElement(
                 flexcomp,
                 "contact",
-                selfcollide="true" if tissue.physics.self_collision else "false",
+                selfcollide="pair" if tissue.physics.self_collision else "none",
                 solref="0.01 1",
             )
-            # Edge stiffness (Young's modulus proxy)
-            ET.SubElement(
-                flexcomp,
-                "edge",
-                stiffness=str(tissue.physics.youngs_modulus),
-                damping=str(tissue.physics.damping),
-            )
-            # Bending stiffness (if supported by the simulator)
-            if tissue.physics.bending_stiffness > 0:
-                ET.SubElement(
-                    flexcomp,
-                    "plugin",
-                    plugin="mujoco.elasticity.cable",
-                )
+            # Edge stiffness (Young's modulus proxy) - only for dim=1, use elasticity for 3D
+            # ET.SubElement(
+            #     flexcomp,
+            #     "edge",
+            #     stiffness=str(tissue.physics.youngs_modulus),
+            #     damping=str(tissue.physics.damping),
+            # )
+            # Bending stiffness (if supported by the simulator) - commented out due to plugin compatibility
+            # if tissue.physics.bending_stiffness > 0:
+            #     ET.SubElement(
+            #         flexcomp,
+            #         "plugin",
+            #         plugin="mujoco.elasticity.cable",
+            #     )
         else:
             # Rigid body tissue — prefer real mesh if available, fall back to primitive
             mesh_asset = getattr(tissue.geometry, "mesh", None)
@@ -897,7 +892,9 @@ f 5 4 8
                     ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="box", size=size)
                 elif geom_type == "sphere":
                     r = tissue.geometry.radius or 0.05
-                    ET.SubElement(body, "geom", name=f"{tissue.name}_geom", type="sphere", size=str(r))
+                    ET.SubElement(
+                        body, "geom", name=f"{tissue.name}_geom", type="sphere", size=str(r)
+                    )
                 elif geom_type == "cylinder":
                     dims = tissue.geometry.dimensions or (0.05, 0.1)
                     r = dims[0] / 2 if len(dims) > 0 else 0.025

@@ -8,20 +8,16 @@ import pytest
 from surg_rl.scene_definition.schema import (
     InstrumentConfig,
     InstrumentType,
-    Metadata,
     Orientation,
     Pose,
     Position,
-    RobotConfig,
-    RobotType,
     SceneDefinition,
     SimulatorType,
-    TaskConfig,
     TaskObjective,
     TissueConfig,
     TissueType,
 )
-from surg_rl.simulators import MuJoCoSimulator, Observation, PyBulletSimulator
+from surg_rl.simulators import MuJoCoSimulator, PyBulletSimulator
 
 
 def _scene_with_target_body(

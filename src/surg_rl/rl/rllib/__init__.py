@@ -22,8 +22,7 @@ except ImportError:  # pragma: no cover
 def _check_rllib():
     if ray is None:
         raise ImportError(
-            "Ray/RLlib is not installed. "
-            'Install with: pip install "surg-rl[distributed]"'
+            "Ray/RLlib is not installed. " 'Install with: pip install "surg-rl[distributed]"'
         )
 
 
@@ -43,9 +42,9 @@ except ImportError:
 
 try:
     from .checkpoint_utils import (
+        compare_checkpoints,
         inspect_rllib_checkpoint,
         inspect_sb3_checkpoint,
-        compare_checkpoints,
     )
 except ImportError:
     inspect_rllib_checkpoint = None  # type: ignore[assignment,misc]
@@ -62,4 +61,4 @@ __all__ = [
     "inspect_rllib_checkpoint",
     "inspect_sb3_checkpoint",
     "compare_checkpoints",
-];
+]
