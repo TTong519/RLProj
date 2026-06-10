@@ -568,6 +568,42 @@ class SurgicalEnv(gym.Env):
         if self._controller is not None:
             processed_action = self._controller.get_randomized_action(processed_action)
 
+        return self._step_simulator_and_build_outputs(processed_action, source_action=action)
+
+    def passthrough_step(self) -> tuple[dict[str, np.ndarray], float, bool, bool, dict[str, Any]]:
+        """Step the environment when per-arm actions were applied via simulator.apply_action(arm_id=...) directly.
+
+        MultiAgentSurgicalEnv routes per-arm actions to the simulator BEFORE
+        calling this method, so the surgical env's action builder is bypassed
+        entirely. The simulator is stepped with a no-op action of the correct
+        shape; the per-arm joint targets already set via apply_action() drive
+        the actual motion.
+
+        Returns:
+            Tuple of (observation, reward, terminated, truncated, info).
+        """
+        if self._simulator is None:
+            raise RuntimeError(
+                "SurgicalEnv.passthrough_step() called before simulator loaded"
+            )
+        num_controls = self._simulator.get_num_controls()
+        no_op = np.zeros(num_controls, dtype=np.float32)
+        return self._step_simulator_and_build_outputs(no_op, source_action=None)
+
+    def _step_simulator_and_build_outputs(
+        self, processed_action: np.ndarray, source_action: np.ndarray | None
+    ) -> tuple[dict[str, np.ndarray], float, bool, bool, dict[str, Any]]:
+        """Build (obs, reward, terminated, truncated, info) given an already-processed action.
+
+        Shared body used by both step() and passthrough_step(). The caller
+        has already routed the action through the action builder and
+        controller; this method steps the simulator and produces the env
+        outputs. ``source_action`` is the pre-builder action used for
+        reward shaping (None for passthrough callers).
+
+        Returns:
+            Tuple of (observation, reward, terminated, truncated, info).
+        """
         # Step simulator
         try:
             step_result = self._simulator.step(processed_action)
@@ -609,7 +645,7 @@ class SurgicalEnv(gym.Env):
         # Compute reward using reward function
         reward_result = self._reward_fn.compute(
             observation=obs_dict,
-            action=action,
+            action=source_action if source_action is not None else processed_action,
             info={
                 **sim_info,
                 "terminated": terminated,
