@@ -69,3 +69,68 @@ class TestBenchmarkSceneCoverage:
             scene = SceneLoader().load(scene_path)  # MUST NOT raise
             if scene.instruments:
                 assert len(scene.instruments) > 0
+
+
+import os
+
+import yaml
+
+from surg_rl.benchmark.experiment_config import ExperimentConfig
+from surg_rl.benchmark.experiment_runner import ExperimentRunner
+
+
+class TestExperimentRunnerExperimentsWrite:
+    """Regression tests for v0.4.0 audit 'Benchmark-experiments-dir' gap.
+
+    Phase 27 closes the misleading CLI hint at cli.py:1286 by writing
+    the effective config to experiments/{experiment_name}.yaml on every
+    ExperimentRunner construction.
+    """
+
+    def test_experiment_runner_writes_experiments_yaml(self, tmp_path, monkeypatch):
+        """After construction, experiments/{name}.yaml must exist and round-trip."""
+        monkeypatch.chdir(tmp_path)
+        cfg = ExperimentConfig(experiment_name="test_audit_xyz", timesteps=1000)
+        ExperimentRunner(cfg)
+
+        out_path = tmp_path / "experiments" / "test_audit_xyz.yaml"
+        assert out_path.exists(), f"Missing: {out_path}"
+        with open(out_path) as f:
+            data = yaml.safe_load(f)
+        assert data["experiment_name"] == "test_audit_xyz"
+        assert data["timesteps"] == 1000
+        cfg2 = ExperimentConfig.from_yaml(out_path)
+        assert cfg2.experiment_name == "test_audit_xyz"
+        assert cfg2.timesteps == 1000
+
+    def test_experiment_runner_creates_experiments_dir(self, tmp_path, monkeypatch):
+        """The experiments/ directory must be auto-created by to_yaml."""
+        monkeypatch.chdir(tmp_path)
+        assert not (tmp_path / "experiments").exists()
+        cfg = ExperimentConfig(experiment_name="test_audit_dir_creation")
+        ExperimentRunner(cfg)
+        assert (tmp_path / "experiments").exists()
+        assert (tmp_path / "experiments").is_dir()
+
+    def test_cli_reproduce_hint_path_resolves(self, tmp_path, monkeypatch):
+        """The path printed by CLI reproduce hint must point to a real file."""
+        monkeypatch.chdir(tmp_path)
+        experiment_name = "test_audit_repro_hint"
+        cfg = ExperimentConfig(experiment_name=experiment_name)
+        ExperimentRunner(cfg)
+        cli_hint_path = Path("experiments") / f"{cfg.experiment_name}.yaml"
+        assert cli_hint_path.exists(), (
+            f"CLI hint path does not resolve: {cli_hint_path}. "
+            f"Phase 27 D-09 must write this file in ExperimentRunner.__init__."
+        )
+
+    def test_existing_save_aggregated_json_flag_still_works(self, tmp_path, monkeypatch):
+        """save_aggregated_json=False should still suppress the effective_config.yaml write
+        in base_output_dir (existing behavior at line 163-164 must not regress)."""
+        monkeypatch.chdir(tmp_path)
+        cfg = ExperimentConfig(experiment_name="test_audit_flag", save_aggregated_json=False)
+        runner = ExperimentRunner(cfg)
+        eff = runner.base_output_dir / "effective_config.yaml"
+        assert not eff.exists(), f"Flag was False but file exists: {eff}"
+        exp = Path("experiments") / "test_audit_flag.yaml"
+        assert exp.exists()

@@ -163,6 +163,13 @@ class ExperimentRunner:
         if config.save_aggregated_json:
             config.to_yaml(self.base_output_dir / "effective_config.yaml")
 
+        # Phase 27 (audit gap "Benchmark-experiments-dir"): write the effective
+        # config to experiments/{experiment_name}.yaml so the CLI's "Reproduce
+        # with: surg-rl benchmark --config experiments/{name}.yaml" hint
+        # (cli.py:1286) points to a real file. to_yaml() auto-mkdirs the
+        # experiments/ directory (experiment_config.py:119).
+        self.config.to_yaml(Path("experiments") / f"{self.experiment_name}.yaml")
+
         self._aggregator = Aggregator()
 
     def run(self) -> dict[tuple[str, str], dict[str, Any]]:
