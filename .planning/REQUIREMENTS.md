@@ -33,7 +33,7 @@
 - [x] **MARL-01**: `MultiAgentSurgicalEnv` implements PettingZoo `ParallelEnv` with asymmetric roles: surgeon arm (dexterous manipulation) and assistant/camera arm (positioning/visualization), each with distinct observation and action spaces
 - [x] **MARL-02**: SuperSuit wrappers enable SB3-compatible policy training from PettingZoo environments without manual Gymnasium conversion
 - [x] **MARL-03**: Multi-agent configuration (`MultiAgentConfig`) supports both shared policy (both agents learn from a single model) and independent per-agent policies
-- [ ] **MARL-04**: The multi-agent env delegates to the canonical `SurgicalEnv` for simulation — never duplicates sim logic; MARL is a thin adapter layer
+- [x] **MARL-04**: The multi-agent env delegates to the canonical `SurgicalEnv` for simulation — never duplicates sim logic; MARL is a thin adapter layer
 
 ### DreamerV3 World Models
 
@@ -84,7 +84,7 @@
 | MARL-01 | Phase 22 | Complete |
 | MARL-02 | Phase 22 | Complete |
 | MARL-03 | Phase 22 | Complete |
-| MARL-04 | Phase 25 | Pending |
+| MARL-04 | Phase 25 | Complete |
 | DMV3-01 | Phase 24 | Complete |
 | DMV3-02 | Phase 24 | Complete |
 | DMV3-03 | Phase 24 | Complete |
