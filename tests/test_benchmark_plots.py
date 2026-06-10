@@ -1,7 +1,5 @@
 """Tests for benchmark PlotRenderer color constants (Phase 26 D-03)."""
 
-import pytest
-
 from surg_rl.benchmark.plots import COLOR_PALETTE, DREAMER_COLOR
 
 
