@@ -83,6 +83,8 @@
 <summary>📋 v0.4.1 Audit Gap Closure (Phases 25–28)</summary>
 
 - [ ] Phase 25: Fix MARL Runtime Wiring (MARL-04, MARL-step, MARL-CLI, ArmConfig export)
+  **Plans:** 1 plan
+  - [ ] 25-01-PLAN.md — Add `SurgicalEnv.passthrough_step()` for MARL per-arm action passthrough; fix `MultiAgentSurgicalEnv.step()` + `self.agents` init + `marl-train` CLI constructor + `ArmConfig`/`ArmRole` top-level exports
 - [ ] Phase 26: Fix DreamerV3 Training Bugs (`indig` typo, subprocess pipe, color)
 - [ ] Phase 27: Complete Benchmark Scene Coverage (BENCH-01, 5 task scenes, task_type wiring, experiments/)
 - [ ] Phase 28: Audit Gap Closure (Retroactive Verification) (Phase 21-23 verify, REQUIREMENTS checkboxes)
@@ -117,7 +119,7 @@
 | 22. Multi-Agent RL | v0.4.0 | 3/3 | Complete | 2026-05-18 |
 | 23. Performance Benchmarking | v0.4.0 | 3/3 | Complete | 2026-06-08 |
 | 24. DreamerV3 World Models | v0.4.0 | 5/5 | Complete | 2026-06-09 |
-| 25. Fix MARL Runtime Wiring | v0.4.1 | 0/? | Pending | — |
+| 25. Fix MARL Runtime Wiring | v0.4.1 | 0/1 | Pending | — |
 | 26. Fix DreamerV3 Training Bugs | v0.4.1 | 0/? | Pending | — |
 | 27. Complete Benchmark Scene Coverage | v0.4.1 | 0/? | Pending | — |
 | 28. Audit Gap Closure (Retroactive Verification) | v0.4.1 | 0/? | Pending | — |
