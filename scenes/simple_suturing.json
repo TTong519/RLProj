@@ -153,6 +153,7 @@
   ],
   "task": {
     "name": "suturing_task",
+    "task_type": "suturing",
     "description": "Thread a needle through the tissue to create a surgical suture",
     "objectives": [
       {
