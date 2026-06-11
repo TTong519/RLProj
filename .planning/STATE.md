@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.4.1
 milestone_name: Audit Gap Closure
-status: executing
-stopped_at: Phase 27 planning complete (1 plan ready to execute)
-last_updated: "2026-06-10T17:00:00.000Z"
-last_activity: 2026-06-10 -- Phase 27 planning complete
+status: complete
+stopped_at: Phase 28 complete — v0.4.1 milestone (Audit Gap Closure) ready to ship
+last_updated: "2026-06-11T18:15:00.000Z"
+last_activity: 2026-06-11 -- Phase 28 complete (28-VERIFICATION.md: passed, 7/7)
 progress:
   total_phases: 28
-  completed_phases: 26
-  total_plans: 81
-  completed_plans: 71
-  percent: 90
+  completed_phases: 28
+  total_plans: 82
+  completed_plans: 82
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-06-09)
 
 ## Current Position
 
-Milestone: v0.4.1 — Audit Gap Closure (in progress)
-Phase: 27 of 28 planned (Phase 25, 26 complete; Phase 27 planning complete; Phase 28 pending)
-Status: Phase 27 ready to execute (1 plan, 3 tasks)
-Last activity: 2026-06-10 -- Phase 27 planning complete
+Milestone: v0.4.1 — Audit Gap Closure (COMPLETE)
+Phase: 28 of 28 — FINAL phase complete (VERIFICATION.md: passed, 7/7)
+Status: v0.4.1 milestone ready to ship. v0.4.0 audit re-runnable: 12/14 gaps fully closed, 1 partial (TASK-02-3-difficulty-levels → v0.5.0 backlog), 1 deferred (DreamerV3 real-E2E → v0.5.0 backlog with rationale)
+Last activity: 2026-06-11 -- Phase 28 complete (1 plan, 3 tasks, ~14 min)
 
-Progress: ████████████████████████████████ 90%
+Progress: ████████████████████████████████████████████ 100%
 
 ## Performance Metrics
 
