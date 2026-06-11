@@ -173,3 +173,21 @@ $ PYTHONPATH=src /Users/tt/.pyenv/versions/3.13.3/bin/python3.13 -m pytest tests
 *Verifier: OpenCode (gsd-executor subagent)*
 *Source audit: .planning/v0.4.0-MILESTONE-AUDIT.md*
 *Closing phases: Phase 25, Phase 26, Phase 27*
+
+## Self-Check: PASSED
+
+- [x] `.planning/phases/21-surgical-task-curriculum/21-VERIFICATION.md` exists (created in task 1)
+- [x] `.planning/phases/22-multi-agent-rl/22-VERIFICATION.md` exists (created in task 1)
+- [x] `.planning/phases/23-performance-benchmarking/23-VERIFICATION.md` exists (created in task 1)
+- [x] `.planning/phases/28-audit-gap-closure-retroactive/28-CLOSURE-REPORT.md` exists (created in task 3)
+- [x] `.planning/phases/28-audit-gap-closure-retroactive/28-01-SUMMARY.md` exists (this file, auto-generated)
+- [x] `.planning/phases/21-surgical-task-curriculum/21-VALIDATION.md` modified (task 2 — frontmatter only)
+- [x] `.planning/REQUIREMENTS.md` modified (task 2 — line 25 BENCH-01 + line 79 traceability)
+- [x] Commit `4ac65df` verified in git log (task 1 — 3 VERIFICATION.md files)
+- [x] Commit `ea5daa8` verified in git log (task 2 — VALIDATION promotion + BENCH-01 flip)
+- [x] Commit `5f0923b` verified in git log (task 3 — closure report + regression sweep)
+- [x] Commit `7d6284f` verified in git log (this SUMMARY.md)
+- [x] Full non-integration pytest suite: 1052 passed, 10 skipped, 20 deselected, 0 failed (matches Phase 27 baseline)
+- [x] All grep gates pass: V3_OK, VAL_OK, REQ_OK, CLOSURE_OK, TASK3_CLOSURE_REPORT_AND_REGRESSION_OK
+- [x] No source code changes; documentation-only phase per plan constraint
+- [x] No modifications to STATE.md, ROADMAP.md, or REQUIREMENTS.md body checkboxes other than BENCH-01 (per parallel_execution instructions)
