@@ -126,4 +126,4 @@
 | 25. Fix MARL Runtime Wiring | v0.4.1 | 0/1 | Pending | — |
 | 26. Fix DreamerV3 Training Bugs | v0.4.1 | 0/? | Pending | — |
 | 27. Complete Benchmark Scene Coverage | v0.4.1 | 0/1 | Pending | — |
-| 28. Audit Gap Closure (Retroactive Verification) | v0.4.1 | 0/? | Pending | — |
+| 28. Audit Gap Closure (Retroactive Verification) | v0.4.1 | 1/1 | Complete   | 2026-06-11 |
