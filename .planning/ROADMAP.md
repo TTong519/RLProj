@@ -8,8 +8,7 @@
 - ✅ **v0.3.1 Audit Gap Closure** — Phase 14 (shipped 2026-05-04) · [archive](milestones/v0.3.1-ROADMAP.md)
 - ✅ **v0.3.2 Advanced Simulation** — Phases 15–18 (shipped 2026-05-05)
 - ✅ **v0.4.0 Training Infrastructure & Realism** — Phases 19–24 (shipped 2026-06-09) · [archive](milestones/v0.4.0-ROADMAP.md)
-- ✅ **v0.4.0 Training Infrastructure & Realism** — Phases 19–24 (shipped 2026-06-09) · [archive](milestones/v0.4.0-ROADMAP.md)
-- 📋 **v0.4.1 [Next]** — Audit Gap Closure — Phases 25–28
+- ✅ **v0.4.1 Audit Gap Closure** — Phases 25–28 (shipped 2026-06-11) · [archive](milestones/v0.4.1-ROADMAP.md)
 - 📋 **v0.5.0** — not yet planned
 
 ## Phases
@@ -74,26 +73,19 @@
 
 </details>
 
-## Next Milestone
-
-**v0.4.1** — Audit Gap Closure (Phases 25–28). Closes gaps from v0.4.0 milestone audit (2026-06-10).
-**v0.5.0** — not yet planned. Start with `/gsd-new-milestone` (questioning → research → requirements → roadmap).
-
 <details>
-<summary>📋 v0.4.1 Audit Gap Closure (Phases 25–28)</summary>
+<summary>✅ v0.4.1 Audit Gap Closure (Phases 25–28) — SHIPPED 2026-06-11</summary>
 
-- [ ] Phase 25: Fix MARL Runtime Wiring (MARL-04, MARL-step, MARL-CLI, ArmConfig export)
-  **Plans:** 1 plan
-  - [ ] 25-01-PLAN.md — Add `SurgicalEnv.passthrough_step()` for MARL per-arm action passthrough; fix `MultiAgentSurgicalEnv.step()` + `self.agents` init + `marl-train` CLI constructor + `ArmConfig`/`ArmRole` top-level exports
-- [ ] Phase 26: Fix DreamerV3 Training Bugs (`indig` typo, subprocess pipe, color)
-  **Plans:** 1 plan
-  - [ ] 26-01-PLAN.md — Fix `indig`→`indent` typo in `training.py:342` + replace `os.fdopen` with `_JsonStdout` wrapper in `subprocess.py:23` + change `DREAMER_COLOR` to `#FF8C00` in `plots.py:30`; add 3 regression tests (all CPU-only mocked)
-- [ ] Phase 27: Complete Benchmark Scene Coverage (BENCH-01, 5 task scenes, task_type wiring, experiments/)
-  **Plans:** 1 plan
-  - [ ] 27-01-PLAN.md — Create 5 missing task scene JSONs (knot_tying/needle_insertion/grasping/cutting/dissection) + add `task_type` to simple_suturing.json (activates dormant TaskRewardRouter) + write `experiments/{name}.yaml` on `ExperimentRunner.__init__` (closes misleading CLI reproduce hint) + 9 regression tests in `tests/test_benchmark_scenes.py`
-- [ ] Phase 28: Audit Gap Closure (Retroactive Verification) (Phase 21-23 verify, REQUIREMENTS checkboxes)
+- [x] Phase 25: Fix MARL Runtime Wiring (1/1 plan) — completed 2026-06-10
+- [x] Phase 26: Fix DreamerV3 Training Bugs (1/1 plan) — completed 2026-06-10
+- [x] Phase 27: Complete Benchmark Scene Coverage (1/1 plan) — completed 2026-06-10
+- [x] Phase 28: Audit Gap Closure Retroactive Verification (1/1 plan, VERIFICATION 7/7) — completed 2026-06-11
 
 </details>
+
+## Next Milestone
+
+**v0.5.0** — not yet planned. Start with `/gsd-new-milestone` (questioning → research → requirements → roadmap).
 
 ## Progress
 
@@ -123,7 +115,7 @@
 | 22. Multi-Agent RL | v0.4.0 | 3/3 | Complete | 2026-05-18 |
 | 23. Performance Benchmarking | v0.4.0 | 3/3 | Complete | 2026-06-08 |
 | 24. DreamerV3 World Models | v0.4.0 | 5/5 | Complete | 2026-06-09 |
-| 25. Fix MARL Runtime Wiring | v0.4.1 | 0/1 | Pending | — |
-| 26. Fix DreamerV3 Training Bugs | v0.4.1 | 0/? | Pending | — |
-| 27. Complete Benchmark Scene Coverage | v0.4.1 | 0/1 | Pending | — |
-| 28. Audit Gap Closure (Retroactive Verification) | v0.4.1 | 1/1 | Complete   | 2026-06-11 |
+| 25. Fix MARL Runtime Wiring | v0.4.1 | 1/1 | Complete | 2026-06-10 |
+| 26. Fix DreamerV3 Training Bugs | v0.4.1 | 1/1 | Complete | 2026-06-10 |
+| 27. Complete Benchmark Scene Coverage | v0.4.1 | 1/1 | Complete | 2026-06-10 |
+| 28. Audit Gap Closure Retroactive Verification | v0.4.1 | 1/1 | Complete | 2026-06-11 |
