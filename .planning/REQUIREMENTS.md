@@ -22,7 +22,7 @@
 
 ### Performance Benchmarking
 
-- [ ] **BENCH-01**: `ExperimentRunner` wraps the existing `TrainingManager` and runs configurable multi-seed, multi-algorithm experiments on surgical tasks with automatic results aggregation
+- [x] **BENCH-01**: `ExperimentRunner` wraps the existing `TrainingManager` and runs configurable multi-seed, multi-algorithm experiments on surgical tasks with automatic results aggregation
 - [ ] **BENCH-02**: Benchmarking compares SB3 algorithms (PPO, SAC, TD3, DDPG, A2C) against DreamerV3 world models with standardized metrics: mean reward, success rate, episode length, wall-clock time, sample efficiency
 - [ ] **BENCH-03**: Benchmark output includes publication-quality plots (learning curves with mean ± std across seeds, success rate bar charts) and tables (algorithm comparison with statistical significance via rliable)
 - [ ] **BENCH-04**: Experiment configurations are serializable (JSON/YAML) for reproducibility — a single command (`surg-rl benchmark`) reproduces an entire experiment run
@@ -76,7 +76,7 @@
 | TASK-02 | Phase 27 | Pending |
 | TASK-03 | Phase 21 | Complete |
 | TASK-04 | Phase 21 | Complete |
-| BENCH-01 | Phase 27 | Pending |
+| BENCH-01 | Phase 27 | Complete |
 | BENCH-02 | Phase 23 | Complete |
 | BENCH-03 | Phase 23 | Complete |
 | BENCH-04 | Phase 23 | Complete |

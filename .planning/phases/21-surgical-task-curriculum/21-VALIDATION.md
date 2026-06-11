@@ -1,10 +1,12 @@
 ---
 phase: 21
 slug: surgical-task-curriculum
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: complete
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-05-17
+promoted_to_complete: 2026-06-10
+promoted_by: phase 28-audit-gap-closure-retroactive
 ---
 
 # Phase 21 — Validation Strategy
