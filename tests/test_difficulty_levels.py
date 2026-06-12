@@ -237,5 +237,179 @@ def test_get_params_delegates_to_interpolate_params():
             )
 
 
+# =============================================================================
+# Plan 29-02 tests: Thread DifficultyLevel through router, schema, curriculum
+# =============================================================================
+
+
+from pathlib import Path  # noqa: E402
+
+from surg_rl.dynamics.curriculum import (  # noqa: E402
+    CurriculumStage,
+    CurriculumStageConfig,
+)
+from surg_rl.rl.task_reward_router import TaskRewardRouter  # noqa: E402
+from surg_rl.scene_definition.loader import SceneLoader  # noqa: E402
+from surg_rl.scene_definition.schema import TaskConfig  # noqa: E402
+
+
+class TestDifficultyWiring:
+    """Plan 29-02 task 1: DifficultyLevel threaded through router/schema/curriculum."""
+
+    def test_router_accepts_enum_normalizes_to_scalar(self):
+        """Router normalizes DifficultyLevel to its .value scalar (D-PLUMB-05)."""
+        router = TaskRewardRouter(difficulty=DifficultyLevel.HARD)
+        # Float mixin makes DifficultyLevel.HARD == 1.0 True, but the actual
+        # stored value should be a plain float, not the enum member. Check type
+        # to enforce the normalization contract.
+        assert router._difficulty == 1.0
+        assert type(router._difficulty) is float, (
+            f"Expected float, got {type(router._difficulty)}"
+        )
+
+    def test_router_accepts_float_preserved(self):
+        """Float path is preserved unchanged (backward compat)."""
+        router = TaskRewardRouter(difficulty=0.7)
+        assert router._difficulty == 0.7
+        assert type(router._difficulty) is float
+
+    def test_router_default_is_0_5(self):
+        """Default difficulty remains 0.5 (MEDIUM equivalent)."""
+        router = TaskRewardRouter()
+        assert router._difficulty == 0.5
+
+    def test_task_config_accepts_difficulty_level(self):
+        """TaskConfig accepts a DifficultyLevel member."""
+        task = TaskConfig(
+            name="suturing_task",
+            description="test",
+            difficulty_level=DifficultyLevel.HARD,
+        )
+        assert task.difficulty_level == DifficultyLevel.HARD
+
+    def test_task_config_difficulty_level_default_is_none(self):
+        """TaskConfig.difficulty_level defaults to None (float-path fallback)."""
+        task = TaskConfig(name="x", description="y")
+        assert task.difficulty_level is None
+
+    def test_task_config_accepts_float_coerced_to_enum(self):
+        """TaskConfig accepts the float value 1.0 and coerces to HARD enum."""
+        task = TaskConfig(
+            name="x", description="y", difficulty_level=1.0
+        )
+        assert task.difficulty_level == DifficultyLevel.HARD
+
+    def test_task_config_accepts_float_zero_coerced_to_easy(self):
+        """TaskConfig accepts 0.0 and coerces to EASY enum."""
+        task = TaskConfig(
+            name="x", description="y", difficulty_level=0.0
+        )
+        assert task.difficulty_level == DifficultyLevel.EASY
+
+    def test_curriculum_stage_config_accepts_enum(self):
+        """CurriculumStageConfig.difficulty accepts DifficultyLevel."""
+        stage = CurriculumStageConfig(
+            name="stage1", stage=CurriculumStage.EASY, difficulty=DifficultyLevel.HARD
+        )
+        assert stage.difficulty == DifficultyLevel.HARD
+
+    def test_curriculum_stage_config_accepts_float(self):
+        """CurriculumStageConfig.difficulty still accepts float (backward compat)."""
+        stage = CurriculumStageConfig(
+            name="stage1", stage=CurriculumStage.EASY, difficulty=0.7
+        )
+        assert stage.difficulty == 0.7
+
+
+class TestDifficultyIntegration:
+    """Plan 29-02 task 2: Router float/enum equivalence + scene JSON load."""
+
+    FIXTURE_DIR = Path(__file__).parent / "fixtures" / "scenes"
+    HARD_FIXTURE = FIXTURE_DIR / "suturing_difficulty_hard.json"
+
+    @pytest.mark.parametrize(
+        "task_type",
+        [
+            "suturing",
+            "dissection",
+            "needle_insertion",
+            "knot_tying",
+            "grasping",
+            "cutting",
+        ],
+    )
+    def test_router_float_enum_equivalence(self, task_type):
+        """D-TEST-04: float 0.5 and DifficultyLevel.MEDIUM produce equivalent rewards."""
+        float_router = TaskRewardRouter(difficulty=0.5)
+        enum_router = TaskRewardRouter(difficulty=DifficultyLevel.MEDIUM)
+        float_rewards = float_router.build(task_type)
+        enum_rewards = enum_router.build(task_type)
+        assert len(float_rewards) == len(enum_rewards)
+        fr = float_rewards[0]
+        er = enum_rewards[0]
+        assert type(fr) is type(er), (
+            f"router produced different reward types: {type(fr)} vs {type(er)}"
+        )
+        for attr_name in dir(fr):
+            if attr_name.startswith("_"):
+                continue
+            attr = getattr(fr, attr_name, None)
+            other = getattr(er, attr_name, None)
+            if isinstance(attr, float) and isinstance(other, float):
+                assert attr == other, (
+                    f"{task_type}: float/enum produced different {attr_name} "
+                    f"({attr} vs {other})"
+                )
+
+    def test_router_applies_difficulty_to_task_reward(self):
+        """D-PLUMB-01: TaskRewardRouter.build() calls apply_difficulty on constructed task reward."""
+        router = TaskRewardRouter(difficulty=DifficultyLevel.HARD)
+        rewards = router.build("suturing")
+        suturing = rewards[0]
+        # HARD interpolates needle_position_tolerance to 0.002
+        assert suturing.position_threshold == pytest.approx(0.002, abs=1e-6)
+
+    def test_scene_load_with_difficulty_level_hard(self):
+        """D-TEST-05: scene JSON with task.difficulty_level = 1.0 loads to enum."""
+        if not self.HARD_FIXTURE.exists():
+            pytest.skip("Fixture not yet created")
+        scene = SceneLoader().load(str(self.HARD_FIXTURE))
+        assert scene.task is not None
+        assert scene.task.difficulty_level == DifficultyLevel.HARD
+        assert scene.task.task_type == "suturing"
+
+    def test_scene_load_without_difficulty_level_defaults_to_none(self):
+        """D-TEST-05: scene JSON without difficulty_level loads with default None."""
+        production_scene_path = (
+            Path(__file__).parent.parent / "scenes" / "simple_suturing.json"
+        )
+        if not production_scene_path.exists():
+            pytest.skip("scenes/simple_suturing.json not found")
+        scene = SceneLoader().load(str(production_scene_path))
+        assert scene.task is not None
+        assert scene.task.difficulty_level is None
+        assert scene.task.task_type == "suturing"
+
+    @pytest.mark.parametrize(
+        "scene_file",
+        [
+            "suturing.json",
+            "knot_tying.json",
+            "needle_insertion.json",
+            "grasping.json",
+            "cutting.json",
+            "dissection.json",
+        ],
+    )
+    def test_all_phase27_scenes_load_with_difficulty_level_none(self, scene_file):
+        """D-BC-02: all 6 Phase 27 benchmark scenes still load without difficulty_level."""
+        scene_path = Path(__file__).parent.parent / "scenes" / scene_file
+        if not scene_path.exists():
+            pytest.skip(f"scenes/{scene_file} not found")
+        scene = SceneLoader().load(str(scene_path))
+        assert scene.task is not None
+        assert scene.task.difficulty_level is None
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
