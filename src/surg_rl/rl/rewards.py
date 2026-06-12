@@ -158,6 +158,23 @@ class BaseRewardFunction(ABC):
         """Reset internal state for a new episode."""
         pass
 
+    def apply_difficulty(self, difficulty: float) -> None:
+        """Apply interpolated difficulty parameters to this reward instance.
+
+        Default implementation is a no-op for generic rewards (DistanceReward,
+        ActionPenalty, TimePenalty, CollisionPenalty, OrientationReward,
+        SuccessReward, CompositeReward). Task-specific subclasses
+        (SuturingReward, DissectionReward, NeedlePassingReward,
+        KnotTyingReward, GraspingReward, CuttingReward) override this
+        method to map `interpolate_params(difficulty)` results to their
+        own ctor fields. Called by TaskRewardRouter.build() after
+        reward construction.
+
+        Args:
+            difficulty: Scalar difficulty in [0.0, 1.0] (0.0=EASY, 1.0=HARD).
+        """
+        pass
+
 
 class DistanceReward(BaseRewardFunction):
     """Distance-based reward function.
@@ -655,6 +672,29 @@ class SuturingReward(BaseRewardFunction):
             for name, bounds in cls.PARAM_BOUNDS.items()
         }
 
+    @classmethod
+    def get_params_for_difficulty(cls, level) -> dict[str, float]:
+        """Public read-only accessor for difficulty parameters.
+
+        Delegates to interpolate_params() — does NOT mutate the instance.
+        Use apply_difficulty() to mutate. The type hint is intentionally
+        `level` (no import) to avoid coupling this method to the
+        DifficultyLevel enum at runtime; callers may pass a
+        DifficultyLevel member (its .value is used implicitly) or any
+        object with a .value attribute.
+        """
+        return cls.interpolate_params(level.value)
+
+    def apply_difficulty(self, difficulty: float) -> None:
+        """Apply interpolated difficulty parameters to this reward instance.
+
+        Maps a subset of PARAM_BOUNDS keys to ctor fields (D-PLUMB-02:
+        partial mapping is acceptable). Unmapped keys are skipped.
+        """
+        params = self.interpolate_params(difficulty)
+        if "needle_position_tolerance" in params and hasattr(self, "position_threshold"):
+            self.position_threshold = params["needle_position_tolerance"]
+
 
 class DissectionReward(BaseRewardFunction):
     """Task-specific reward for tissue dissection tasks.
@@ -792,6 +832,24 @@ class DissectionReward(BaseRewardFunction):
             for name, bounds in cls.PARAM_BOUNDS.items()
         }
 
+    @classmethod
+    def get_params_for_difficulty(cls, level) -> dict[str, float]:
+        """Public read-only accessor for difficulty parameters.
+
+        Delegates to interpolate_params() — does NOT mutate the instance.
+        Use apply_difficulty() to mutate.
+        """
+        return cls.interpolate_params(level.value)
+
+    def apply_difficulty(self, difficulty: float) -> None:
+        """Apply interpolated difficulty parameters to this reward instance.
+
+        Maps a subset of PARAM_BOUNDS keys to ctor fields (D-PLUMB-02).
+        """
+        params = self.interpolate_params(difficulty)
+        if "force_precision" in params and hasattr(self, "force_threshold"):
+            self.force_threshold = params["force_precision"]
+
 
 class NeedlePassingReward(BaseRewardFunction):
     """Task-specific reward for needle passing/handoff tasks.
@@ -920,6 +978,24 @@ class NeedlePassingReward(BaseRewardFunction):
             name: bounds[0] + (bounds[1] - bounds[0]) * difficulty
             for name, bounds in cls.PARAM_BOUNDS.items()
         }
+
+    @classmethod
+    def get_params_for_difficulty(cls, level) -> dict[str, float]:
+        """Public read-only accessor for difficulty parameters.
+
+        Delegates to interpolate_params() — does NOT mutate the instance.
+        Use apply_difficulty() to mutate.
+        """
+        return cls.interpolate_params(level.value)
+
+    def apply_difficulty(self, difficulty: float) -> None:
+        """Apply interpolated difficulty parameters to this reward instance.
+
+        Maps a subset of PARAM_BOUNDS keys to ctor fields (D-PLUMB-02).
+        """
+        params = self.interpolate_params(difficulty)
+        if "handoff_proximity_tolerance" in params and hasattr(self, "handoff_threshold"):
+            self.handoff_threshold = params["handoff_proximity_tolerance"]
 
 
 class KnotTyingReward(BaseRewardFunction):
@@ -1066,6 +1142,24 @@ class KnotTyingReward(BaseRewardFunction):
             name: bounds[0] + (bounds[1] - bounds[0]) * difficulty
             for name, bounds in cls.PARAM_BOUNDS.items()
         }
+
+    @classmethod
+    def get_params_for_difficulty(cls, level) -> dict[str, float]:
+        """Public read-only accessor for difficulty parameters.
+
+        Delegates to interpolate_params() — does NOT mutate the instance.
+        Use apply_difficulty() to mutate.
+        """
+        return cls.interpolate_params(level.value)
+
+    def apply_difficulty(self, difficulty: float) -> None:
+        """Apply interpolated difficulty parameters to this reward instance.
+
+        Maps a subset of PARAM_BOUNDS keys to ctor fields (D-PLUMB-02).
+        """
+        params = self.interpolate_params(difficulty)
+        if "loop_deviation_tolerance" in params and hasattr(self, "loop_deviation_threshold"):
+            self.loop_deviation_threshold = params["loop_deviation_tolerance"]
 
 
 class GraspingReward(BaseRewardFunction):
@@ -1215,6 +1309,24 @@ class GraspingReward(BaseRewardFunction):
             for name, bounds in cls.PARAM_BOUNDS.items()
         }
 
+    @classmethod
+    def get_params_for_difficulty(cls, level) -> dict[str, float]:
+        """Public read-only accessor for difficulty parameters.
+
+        Delegates to interpolate_params() — does NOT mutate the instance.
+        Use apply_difficulty() to mutate.
+        """
+        return cls.interpolate_params(level.value)
+
+    def apply_difficulty(self, difficulty: float) -> None:
+        """Apply interpolated difficulty parameters to this reward instance.
+
+        Maps a subset of PARAM_BOUNDS keys to ctor fields (D-PLUMB-02).
+        """
+        params = self.interpolate_params(difficulty)
+        if "approach_tolerance" in params and hasattr(self, "grasp_threshold"):
+            self.grasp_threshold = params["approach_tolerance"]
+
 
 class CuttingReward(BaseRewardFunction):
     """Task-specific reward for cutting tasks.
@@ -1358,6 +1470,24 @@ class CuttingReward(BaseRewardFunction):
             name: bounds[0] + (bounds[1] - bounds[0]) * difficulty
             for name, bounds in cls.PARAM_BOUNDS.items()
         }
+
+    @classmethod
+    def get_params_for_difficulty(cls, level) -> dict[str, float]:
+        """Public read-only accessor for difficulty parameters.
+
+        Delegates to interpolate_params() — does NOT mutate the instance.
+        Use apply_difficulty() to mutate.
+        """
+        return cls.interpolate_params(level.value)
+
+    def apply_difficulty(self, difficulty: float) -> None:
+        """Apply interpolated difficulty parameters to this reward instance.
+
+        Maps a subset of PARAM_BOUNDS keys to ctor fields (D-PLUMB-02).
+        """
+        params = self.interpolate_params(difficulty)
+        if "force_precision" in params and hasattr(self, "force_threshold"):
+            self.force_threshold = params["force_precision"]
 
 
 class CompositeReward(BaseRewardFunction):
