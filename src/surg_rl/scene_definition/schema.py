@@ -4,10 +4,20 @@ This module defines the data structures for surgical robotics scene definitions,
 including robots, tissues, instruments, environment settings, and physics parameters.
 """
 
+from __future__ import annotations
+
 from enum import Enum
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+if TYPE_CHECKING:
+    # DifficultyLevel is imported lazily at module bottom to break the
+    # surg_rl.scene_definition -> surg_rl.rl -> surg_rl.dynamics.environment_controller
+    # -> surg_rl.scene_definition.schema import cycle. With
+    # `from __future__ import annotations` + string annotation + model_rebuild,
+    # the runtime import can be deferred until all classes are defined.
+    from surg_rl.rl.difficulty import DifficultyLevel  # noqa: F401
 
 # ============================================================================
 # Enums
@@ -1088,6 +1098,13 @@ class TaskConfig(BaseModel):
         default=None,
         description="Surgical task type (None = generic/unspecified)",
     )
+    difficulty_level: "DifficultyLevel | None" = Field(  # noqa: F821 — forward ref resolved at bottom of file
+        default=None,
+        description="Surgical difficulty preset (EASY/MEDIUM/HARD). "
+        "None = use the float difficulty path. Pydantic v2 validates "
+        "the enum literal (by float value 0.0/0.5/1.0); downstream code "
+        "uses the scalar .value via interpolate_params(level.value).",
+    )
 
 
 class BenchmarkConfig(BaseModel):
@@ -1455,3 +1472,21 @@ class FluidConfig(BaseModel):
         if v[0] > 128 or v[1] > 128:
             raise ValueError("Resolution capped at 128 per dimension")
         return v
+
+
+# Phase 29 (D-SCHEMA-01): Late import of DifficultyLevel to break the
+# surg_rl.scene_definition.schema -> surg_rl.rl -> surg_rl.dynamics.environment_controller
+# -> surg_rl.scene_definition.schema import cycle. With `from __future__ import
+# annotations` + string annotation on TaskConfig.difficulty_level, the type
+# is not resolved at class body time. We import DifficultyLevel AFTER all
+# classes are defined, then call model_rebuild() to resolve the forward ref.
+# The TYPE_CHECKING import at the top is for type checkers only; the runtime
+# import here is what makes the validation work. We bind the name
+# `DifficultyLevel` (not aliased) so model_rebuild() can resolve the string
+# forward reference in TaskConfig.
+from surg_rl.rl.difficulty import (  # noqa: E402
+    DifficultyLevel,
+)  # noqa: F401 — module-level binding for forward ref resolution
+
+# Resolve the forward reference in TaskConfig.difficulty_level.
+TaskConfig.model_rebuild()

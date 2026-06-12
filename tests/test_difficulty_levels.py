@@ -393,7 +393,7 @@ class TestDifficultyIntegration:
     @pytest.mark.parametrize(
         "scene_file",
         [
-            "suturing.json",
+            "simple_suturing.json",
             "knot_tying.json",
             "needle_insertion.json",
             "grasping.json",

@@ -21,9 +21,9 @@ from surg_rl.dynamics.environment_controller import (
     EnvironmentController,
     EnvironmentControllerConfig,
 )
+from surg_rl.rl.difficulty import DifficultyLevel
 from surg_rl.ros2 import HAS_ROS2  # noqa: F401 — used by bridge lifecycle
 from surg_rl.ros2.config import Ros2BridgeConfig
-from surg_rl.scene_definition.loader import SceneLoader
 from surg_rl.scene_definition.schema import SceneDefinition
 from surg_rl.simulators.base_simulator import BaseSimulator, Observation
 from surg_rl.simulators.mujoco_simulator import MuJoCoSimulator
@@ -197,15 +197,31 @@ class SurgicalEnv(gym.Env):
             task_type = getattr(self._scene.task, "task_type", None)
 
         # Phase 21: Use TaskRewardRouter when task_type is configured (D-02, D-03)
+        # Phase 29: Read difficulty from TaskConfig.difficulty_level first, then
+        # fall back to env config difficulty (if present), then default 0.5.
         if task_type is not None:
-            router = TaskRewardRouter()
+            if self._scene.task is not None and self._scene.task.difficulty_level is not None:
+                difficulty: float | DifficultyLevel = self._scene.task.difficulty_level
+            else:
+                # SurgicalEnvConfig may or may not have a difficulty field; getattr is safe
+                difficulty = getattr(self.config, "difficulty", 0.5)
+            router = TaskRewardRouter(difficulty=difficulty)
             reward_list = router.build(task_type)
             self._reward_fn = CompositeReward([(r, 1.0) for r in reward_list])
         else:
             self._reward_fn = create_default_reward(self.config.reward_config, task_name=task_name)
 
-        # Phase 21: Track difficulty for TaskResult population
-        self._task_difficulty = 0.5
+        # Phase 21 / Phase 29: Track difficulty for TaskResult population.
+        # Use task.difficulty_level.value if set, else env config difficulty,
+        # else default 0.5. The float() coercion handles both enum and float
+        # difficulty values (Phase 29 union: CurriculumStageConfig.difficulty
+        # is float | DifficultyLevel; TaskConfig.difficulty_level is enum | None).
+        if self._scene.task is not None and self._scene.task.difficulty_level is not None:
+            self._task_difficulty = float(self._scene.task.difficulty_level.value)
+        elif hasattr(self.config, "difficulty"):
+            self._task_difficulty = float(self.config.difficulty)
+        else:
+            self._task_difficulty = 0.5
 
         # Initialize environment controller
         self._controller: EnvironmentController | None = None
@@ -265,6 +281,11 @@ class SurgicalEnv(gym.Env):
             return self.config.scene
 
         if self.config.scene_path is not None:
+            # Lazy import to break the import cycle:
+            # environment.py -> loader.py -> schema.py -> rl.__init__
+            # The SceneLoader is only needed at runtime (not at module load).
+            from surg_rl.scene_definition.loader import SceneLoader
+
             return SceneLoader().load(self.config.scene_path)
 
         # Create a minimal default scene

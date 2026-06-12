@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from surg_rl.rl.difficulty import DifficultyLevel
 from surg_rl.utils.logging import get_logger
 
 from .base_controller import (
@@ -52,7 +53,7 @@ class CurriculumStageConfig:
 
     name: str
     stage: CurriculumStage
-    difficulty: float = 0.5
+    difficulty: float | DifficultyLevel = 0.5
     parameter_overrides: dict[str, Any] = field(default_factory=dict)
     success_threshold: float = 0.8
     episode_threshold: int = 100
