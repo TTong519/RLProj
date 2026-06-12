@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.4.2
 milestone_name: Audit Leftovers
-status: planning
-stopped_at: Phase 29 context gathered
-last_updated: "2026-06-11T22:00:00.000Z"
-last_activity: 2026-06-11 -- Phase 29 CONTEXT.md + DISCUSSION-LOG.md written; ready for /gsd-plan-phase 29
+status: in_progress
+stopped_at: Phase 29 verified complete; ready for Phase 30
+last_updated: "2026-06-12T19:00:00.000Z"
+last_activity: 2026-06-12 -- Phase 29 complete: TASK-02 3-difficulty-levels (verifier: passed, 6/6 must-haves, 44/44 difficulty tests pass)
 progress:
   total_phases: 2
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  completed_phases: 1
+  total_plans: 2
+  completed_plans: 2
+  percent: 50
 ---
 
 # Project State
@@ -25,13 +25,13 @@ See: .planning/PROJECT.md (updated 2026-06-11)
 
 ## Current Position
 
-Milestone: v0.4.2 — Audit Leftovers (PLANNING)
-Phase: Roadmap complete (2 phases defined: 29, 30)
+Milestone: v0.4.2 — Audit Leftovers (IN PROGRESS)
+Phase: 30 (DreamerV3 Real-Subprocess E2E Test)
 Plan: —
-Status: Roadmap created; ready for `/gsd-discuss-phase 29`
-Last activity: 2026-06-11 -- v0.4.2 roadmap created (Phase 29: TASK-02 3-difficulty-levels [TASK-02-01..06]; Phase 30: DreamerV3 real-subprocess E2E [DMV3-E2E-01..05])
+Status: Phase 29 verified complete (6/6 must-haves, all TASK-02-01..06 closed); ready for `/gsd-discuss-phase 30` → `/gsd-plan-phase 30` → `/gsd-execute-phase 30`
+Last activity: 2026-06-12 -- Phase 29 verified passed (DifficultyLevel enum + 6 reward overrides + router + TaskConfig + CurriculumStageConfig + scene fixture + 44 tests; 1123 non-integration tests pass)
 
-Progress: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0%
+Progress: ██████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 50%
 
 ## Performance Metrics
 
@@ -69,6 +69,7 @@ Progress: ░░░░░░░░░░░░░░░░░░░░░░░�
 - [v0.4.2]: User selected v0.4.2 (not v0.5.0) for the audit leftovers — small focused gap closure. Tech debt cleanup (421 ruff in dreamer/, cut cooldown test, fluid step hook, 3D fluid flag, K8s e2e, etc.) explicitly deferred to v0.5.0+.
 - [v0.4.2 D-29-01..05]: TASK-02 closes with DifficultyLevel enum (EASY=0.0, MEDIUM=0.5, HARD=1.0) + per-task `get_params_for_difficulty()` wrappers around existing `interpolate_params()` + TaskRewardRouter accepting both float and enum + TaskConfig.difficulty_level optional field + CurriculumScheduler accepting both float and enum. No new DifficultyLevelConfig schema model — out of scope.
 - [v0.4.2 D-30-01..05]: DreamerV3 E2E is a single pytest test in `tests/dreamer/test_dreamerv3_subprocess_e2e.py` (or `tests/test_dreamerv3_subprocess_e2e.py` if `tests/dreamer/` is not a directory). Gated by `@pytest.mark.skipif` on (GPU + dreamerv3 + jax). macOS local xfail-skip expected; CI with GPU validates.
+- [v0.4.2 Phase 29]: DifficultyLevel uses `_FloatMixin(float, Enum)` to make `DifficultyLevel.EASY == 0.0` True (no stdlib FloatEnum). Pydantic v2 cycle resolution pattern established: `from __future__ import annotations` + string forward-ref + late import + `Model.model_rebuild()`; plus lazy local import of `SceneLoader` inside `_load_scene()` to break the second cycle. Code review identified 3 MEDIUM future-hardening items: CurriculumScheduler.current_difficulty type lie, missing end-to-end env-construction test, and CurriculumStageConfig union not normalized at env. These are explicitly deferred per CONTEXT.md scope.
 
 ### Pending Todos
 
@@ -86,11 +87,13 @@ None yet. Next: `/gsd-discuss-phase 29` → `/gsd-plan-phase 29` → `/gsd-execu
 Items acknowledged and carried forward from previous milestone close:
 
 | Category | Item | Status | Deferred At |
-|----------|------|--------|-------------|
-| TASK-02 | 3-difficulty-levels (easy/medium/hard presets) | **In v0.4.2** | v0.4.1 |
+|----------|------|--------|------------|
+| TASK-02 | 3-difficulty-levels (easy/medium/hard presets) | **Closed in v0.4.2** | v0.4.1 |
 | DreamerV3 | Real-subprocess E2E test | **In v0.4.2** | v0.4.1 |
 | TASK-02 | Per-level override schema (DifficultyLevelConfig with tissue_stiffness/target_precision_tolerance/tool_position_noise/time_limit) | Deferred | v0.4.2 |
 | TASK-02 | CurriculumScheduler discrete level progression | Deferred | v0.4.2 |
+| Phase 29 | End-to-end SurgicalEnv-construction integration test for HARD fixture scene | Deferred (code review WR-02) | v0.4.2 |
+| Phase 29 | CurriculumStageConfig.difficulty normalization at env-construction | Deferred (code review WR-03) | v0.4.2 |
 | Phase 17 | Per-tet generation counter for degenerate tets | Deferred | v0.3.2 |
 | Phase 17 | Cut cooldown unit test | Deferred | v0.3.2 |
 | Phase 18 | Fluid step hook in base_simulator.py | Deferred | v0.3.2 |
@@ -107,10 +110,10 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-11
-Stopped at: v0.4.2 roadmap created; 2 phases defined (29: TASK-02 3-difficulty-levels, 30: DreamerV3 E2E); all 11 v0.4.2 requirements mapped (6 TASK-02-01..06 → Phase 29, 5 DMV3-E2E-01..05 → Phase 30)
-Resume file: (none — proceed to /gsd-discuss-phase 29 or /gsd-plan-phase 29)
+Last session: 2026-06-12
+Stopped at: Phase 29 complete (verifier: passed, 6/6 must-haves); awaiting Phase 30 (DreamerV3 E2E)
+Resume file: (none — proceed to /gsd-discuss-phase 30 or /gsd-plan-phase 30)
 
 ---
 
-*Updated: 2026-06-11 — v0.4.2 roadmap created (2 phases, 11 requirements mapped, 0 orphans)*
+*Updated: 2026-06-12 — Phase 29 verified complete (6 TASK-02 requirements closed, 44/44 difficulty tests pass, 1123 non-integration tests pass, code review: 0 blockers / 3 MEDIUM future-hardening items)*
