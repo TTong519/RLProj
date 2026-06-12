@@ -66,6 +66,9 @@ from .callbacks import (
     TrainingProgressCallback,
 )
 
+# Difficulty presets (EASY/MEDIUM/HARD enum with scalar values)
+from .difficulty import DifficultyLevel
+
 # Environment
 from .environment import (
     SurgicalEnv,
@@ -166,6 +169,8 @@ __all__ = [
     "ENDEFFECTOR_POSE_SPEC",
     "ENDEFFECTOR_DELTA_SPEC",
     "GRIPPER_SPEC",
+    # Difficulty presets
+    "DifficultyLevel",
     # Reward
     "ActionPenalty",
     "BaseRewardFunction",
