@@ -170,10 +170,18 @@ class BaseRewardFunction(ABC):
         own ctor fields. Called by TaskRewardRouter.build() after
         reward construction.
 
+        The empty body is INTENTIONAL — see D-PLUMB-06: generic rewards
+        must NOT be modified to consume difficulty. The override pattern
+        in subclasses keeps this method load-bearing for the 6 task
+        rewards while preserving the safe default for the 4 generic ones.
+
         Args:
             difficulty: Scalar difficulty in [0.0, 1.0] (0.0=EASY, 1.0=HARD).
         """
-        pass
+        # Intentional no-op default per D-PLUMB-06. The override pattern in
+        # the 6 task-specific subclasses keeps this method load-bearing
+        # while preserving the safe default for the 4 generic ones.
+        return None  # noqa: B027
 
 
 class DistanceReward(BaseRewardFunction):

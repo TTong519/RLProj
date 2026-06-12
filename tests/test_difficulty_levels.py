@@ -11,6 +11,18 @@ D-PLUMB-06: Generic rewards (Distance/Action/Time/Collision) get no-op default.
 import pytest
 
 from surg_rl.rl import DifficultyLevel
+from surg_rl.rl.rewards import (
+    ActionPenalty,
+    CollisionPenalty,
+    CuttingReward,
+    DissectionReward,
+    DistanceReward,
+    GraspingReward,
+    KnotTyingReward,
+    NeedlePassingReward,
+    SuturingReward,
+    TimePenalty,
+)
 
 
 class TestDifficultyLevel:
@@ -132,15 +144,6 @@ _TASK_REWARD_CLASSES = (
 )
 def test_difficulty_direction(reward_cls, down_keys, up_keys):
     """D-DIR-01: per-family direction assertion between EASY and HARD."""
-    from surg_rl.rl.rewards import (
-        DissectionReward,
-        GraspingReward,
-        CuttingReward,
-        KnotTyingReward,
-        NeedlePassingReward,
-        SuturingReward,
-    )
-
     cls_map = {
         "SuturingReward": SuturingReward,
         "DissectionReward": DissectionReward,
@@ -180,15 +183,6 @@ MAPPED_FIELDS = {
 @pytest.mark.parametrize("reward_cls_name", list(MAPPED_FIELDS.keys()))
 def test_apply_difficulty_mutates_field(reward_cls_name):
     """D-TEST-03: apply_difficulty actually mutates a ctor field on the instance."""
-    from surg_rl.rl.rewards import (
-        DissectionReward,
-        GraspingReward,
-        CuttingReward,
-        KnotTyingReward,
-        NeedlePassingReward,
-        SuturingReward,
-    )
-
     cls_map = {
         "SuturingReward": SuturingReward,
         "DissectionReward": DissectionReward,
@@ -212,13 +206,6 @@ def test_apply_difficulty_mutates_field(reward_cls_name):
 
 def test_generic_rewards_apply_difficulty_is_noop():
     """D-PLUMB-06: DistanceReward/ActionPenalty/TimePenalty/CollisionPenalty get no-op default."""
-    from surg_rl.rl.rewards import (
-        ActionPenalty,
-        CollisionPenalty,
-        DistanceReward,
-        TimePenalty,
-    )
-
     for cls in (DistanceReward, ActionPenalty, TimePenalty, CollisionPenalty):
         instance = cls()
         # Should not raise
@@ -229,15 +216,6 @@ def test_generic_rewards_apply_difficulty_is_noop():
 
 def test_get_params_delegates_to_interpolate_params():
     """D-PLUMB-04: get_params_for_difficulty is a pure delegating wrapper."""
-    from surg_rl.rl.rewards import (
-        DissectionReward,
-        GraspingReward,
-        CuttingReward,
-        KnotTyingReward,
-        NeedlePassingReward,
-        SuturingReward,
-    )
-
     for cls in (
         SuturingReward,
         DissectionReward,
