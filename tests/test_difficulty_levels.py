@@ -263,9 +263,7 @@ class TestDifficultyWiring:
         # stored value should be a plain float, not the enum member. Check type
         # to enforce the normalization contract.
         assert router._difficulty == 1.0
-        assert type(router._difficulty) is float, (
-            f"Expected float, got {type(router._difficulty)}"
-        )
+        assert type(router._difficulty) is float, f"Expected float, got {type(router._difficulty)}"
 
     def test_router_accepts_float_preserved(self):
         """Float path is preserved unchanged (backward compat)."""
@@ -294,16 +292,12 @@ class TestDifficultyWiring:
 
     def test_task_config_accepts_float_coerced_to_enum(self):
         """TaskConfig accepts the float value 1.0 and coerces to HARD enum."""
-        task = TaskConfig(
-            name="x", description="y", difficulty_level=1.0
-        )
+        task = TaskConfig(name="x", description="y", difficulty_level=1.0)
         assert task.difficulty_level == DifficultyLevel.HARD
 
     def test_task_config_accepts_float_zero_coerced_to_easy(self):
         """TaskConfig accepts 0.0 and coerces to EASY enum."""
-        task = TaskConfig(
-            name="x", description="y", difficulty_level=0.0
-        )
+        task = TaskConfig(name="x", description="y", difficulty_level=0.0)
         assert task.difficulty_level == DifficultyLevel.EASY
 
     def test_curriculum_stage_config_accepts_enum(self):
@@ -315,9 +309,7 @@ class TestDifficultyWiring:
 
     def test_curriculum_stage_config_accepts_float(self):
         """CurriculumStageConfig.difficulty still accepts float (backward compat)."""
-        stage = CurriculumStageConfig(
-            name="stage1", stage=CurriculumStage.EASY, difficulty=0.7
-        )
+        stage = CurriculumStageConfig(name="stage1", stage=CurriculumStage.EASY, difficulty=0.7)
         assert stage.difficulty == 0.7
 
 
@@ -347,9 +339,9 @@ class TestDifficultyIntegration:
         assert len(float_rewards) == len(enum_rewards)
         fr = float_rewards[0]
         er = enum_rewards[0]
-        assert type(fr) is type(er), (
-            f"router produced different reward types: {type(fr)} vs {type(er)}"
-        )
+        assert type(fr) is type(
+            er
+        ), f"router produced different reward types: {type(fr)} vs {type(er)}"
         for attr_name in dir(fr):
             if attr_name.startswith("_"):
                 continue
@@ -380,9 +372,7 @@ class TestDifficultyIntegration:
 
     def test_scene_load_without_difficulty_level_defaults_to_none(self):
         """D-TEST-05: scene JSON without difficulty_level loads with default None."""
-        production_scene_path = (
-            Path(__file__).parent.parent / "scenes" / "simple_suturing.json"
-        )
+        production_scene_path = Path(__file__).parent.parent / "scenes" / "simple_suturing.json"
         if not production_scene_path.exists():
             pytest.skip("scenes/simple_suturing.json not found")
         scene = SceneLoader().load(str(production_scene_path))

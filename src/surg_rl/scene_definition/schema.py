@@ -1098,12 +1098,14 @@ class TaskConfig(BaseModel):
         default=None,
         description="Surgical task type (None = generic/unspecified)",
     )
-    difficulty_level: "DifficultyLevel | None" = Field(  # noqa: F821 — forward ref resolved at bottom of file
-        default=None,
-        description="Surgical difficulty preset (EASY/MEDIUM/HARD). "
-        "None = use the float difficulty path. Pydantic v2 validates "
-        "the enum literal (by float value 0.0/0.5/1.0); downstream code "
-        "uses the scalar .value via interpolate_params(level.value).",
+    difficulty_level: "DifficultyLevel | None" = (
+        Field(  # noqa: F821 — forward ref resolved at bottom of file
+            default=None,
+            description="Surgical difficulty preset (EASY/MEDIUM/HARD). "
+            "None = use the float difficulty path. Pydantic v2 validates "
+            "the enum literal (by float value 0.0/0.5/1.0); downstream code "
+            "uses the scalar .value via interpolate_params(level.value).",
+        )
     )
 
 
