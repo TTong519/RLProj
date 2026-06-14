@@ -10,13 +10,55 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 
 ## Current State
 
-**Shipped v0.4.1** (2026-06-11) — Audit Gap Closure. All v0.1.0 through v0.4.1 milestones shipped (7 milestones, 28 phases, 84 plans, 22/23 v1 requirements satisfied, 1 partial).
+**Shipped v0.4.2** (2026-06-14) — Audit Leftovers. All v0.1.0 through v0.4.2 milestones shipped (8 milestones, 30 phases, 87 plans, 23/23 v1 requirements satisfied, 0 partial, 0 deferred). v0.4.2 closed the 2 residual v0.4.0 audit gaps (TASK-02 3-difficulty-levels + DreamerV3 real-subprocess E2E) with 2 surgical phases (3 plans).
 
-## Current Milestone: v0.4.1 Audit Gap Closure (SHIPPED)
+## Current Milestone: v0.4.2 Audit Leftovers (SHIPPED 2026-06-14)
 
-**Goal:** Close 14 gaps from the v0.4.0 milestone audit (`.planning/v0.4.0-MILESTONE-AUDIT.md`, status: `gaps_found`). Pure gap-closure milestone — no new features, only bug fixes, retroactive verification, and process reconciliation.
+**Goal:** Close the 2 remaining items deferred from the v0.4.0 audit gap closure milestone: TASK-02 3-difficulty-levels (easy/medium/hard presets) and DreamerV3 real-subprocess E2E test. Pure gap-closure — no new features, only the missing presets + a real subprocess smoke test for the Phase 26 DreamerV3 fixes.
 
-**Audit verdict:** `passed` — 12/14 gaps fully closed, 1 partial (TASK-02 3-difficulty-levels → v0.5.0 backlog), 1 deferred (DreamerV3 real-subprocess E2E → v0.5.0 testing, requires GPU + dreamerv3 install).
+**Audit verdict:** `passed` — 11/11 v1 requirements satisfied (6 TASK-02-01..06 + 5 DMV3-E2E-01..05), 0 partial, 0 deferred.
+
+**Delivered:**
+- ✓ `DifficultyLevel` enum (EASY=0.0, MEDIUM=0.5, HARD=1.0) with float-mixin semantics — `DifficultyLevel.EASY == 0.0` is True via `_FloatMixin(float, Enum)` (Python stdlib has no `FloatEnum`)
+- ✓ All 6 task reward classes expose `get_params_for_difficulty()` (delegates to existing `interpolate_params()`) and `apply_difficulty()` (per-subclass field mutation). 4 generic rewards inherit a no-op `BaseRewardFunction.apply_difficulty()` default
+- ✓ `TaskRewardRouter` accepts `float | DifficultyLevel` with strict scalar normalization (`type() is float`); float path preserved for backwards compat
+- ✓ `TaskConfig.difficulty_level: DifficultyLevel | None` Pydantic v2 field with default None; coerces by float value (0.0/0.5/1.0 → EASY/MEDIUM/HARD), not by name
+- ✓ `CurriculumStageConfig.difficulty: float | DifficultyLevel` — mixed-stage configs work without migration
+- ✓ Pydantic v2 + cross-package cycle-resolution pattern established: `from __future__ import annotations` + string forward-ref + late import at module bottom + `Model.model_rebuild()` + lazy local imports inside function bodies
+- ✓ `tests/dreamer/test_dreamerv3_subprocess_e2e.py` — 3-test pytest module gated by module-level `pytest.mark.skipif` on (GPU + `dreamerv3` + `jax`); macOS local skips with `pip install '.[dreamer]'` remediation; CI GPU host runs and exercises `_JsonStdout` wrapper + `DREAMER_COLOR` + checkpoint auto-discovery path
+
+**Key Deliverables (v0.4.2):**
+- `src/surg_rl/rl/difficulty.py` — `_FloatMixin(float, Enum)` base + `DifficultyLevel` (EASY=0.0, MEDIUM=0.5, HARD=1.0); leaf-module (zero in-project imports) to break future circular import risk
+- `src/surg_rl/rl/rewards.py` — `BaseRewardFunction.apply_difficulty()` no-op default + 6 task reward overrides (`SuturingReward`, `KnotTyingReward`, `NeedlePassingReward`/`NeedleInsertionReward`, `GraspingReward`, `CuttingReward`, `DissectionReward`)
+- `src/surg_rl/rl/task_reward_router.py` — accepts `float | DifficultyLevel`; normalizes to `float(difficulty.value)` internally; `build()` calls `apply_difficulty(self._difficulty)` on the constructed task reward
+- `src/surg_rl/scene_definition/schema.py` — `TaskConfig.difficulty_level` Pydantic v2 optional field with cycle resolution
+- `src/surg_rl/rl/environment.py` — `SurgicalEnv._setup_rewards()` reads `task.difficulty_level` first, then `config.difficulty`, then defaults to 0.5; lazy local `SceneLoader` import inside `_load_scene()`
+- `src/surg_rl/dynamics/curriculum.py` — `CurriculumStageConfig.difficulty: float | DifficultyLevel = 0.5`
+- `tests/fixtures/scenes/suturing_difficulty_hard.json` — fixture for end-to-end float-value enum coercion test
+- `tests/dreamer/__init__.py` + `tests/dreamer/test_dreamerv3_subprocess_e2e.py` — 3-test E2E smoke test, module-level skipif
+- `29-VERIFICATION.md` — 6/6 must-haves verified
+- `30-VERIFICATION.md` — 10/10 must-haves verified
+
+**Inherited tech debt (NOT in v0.4.2 scope, per user direction):**
+- 421 ruff issues in `src/surg_rl/dreamer/` (pre-existing, deferred)
+- Cut cooldown unit test, per-tet generation counter, fluid step hook in base_simulator
+- Dockerfile.ros2 amd64 hardcode, K8S PVC e2e, KubeRay prerequisite
+- 3D fluid flag (`dim_3d=True`), PhiFlow multi-obstacle union() workaround
+- Linux-only ROS2 subscriber e2e tests
+- Organ mesh source licensing
+- REQUIREMENTS.md BENCH-02..05 body checkboxes (pre-existing v0.4.0 audit process gap)
+- TASK-02 per-level override schema (`DifficultyLevelConfig` with tissue_stiffness/target_precision_tolerance/tool_position_noise/time_limit) — D-29-03 explicit exclusion
+- TASK-02 `CurriculumScheduler` discrete level progression — D-29-03 explicit exclusion
+- TASK-02 scene-level `difficulty_levels: list[3]` blocks — D-29-03 explicit exclusion
+- End-to-end `SurgicalEnv`-construction integration test for HARD fixture scene (Phase 29 code review WR-02)
+- `CurriculumStageConfig.difficulty` normalization at env-construction (Phase 29 code review WR-03)
+- Phase 30 stub-state sentinel flip when real dreamerv3 is integrated (replaces `_build_agent` at `subprocess.py:127-131`)
+
+**v0.4.1 (Archived, 2026-06-11)**
+
+**Goal:** Close 14 gaps from the v0.4.0 milestone audit. Pure gap-closure milestone — no new features, only bug fixes, retroactive verification, and process reconciliation.
+
+**Audit verdict:** `passed` — 12/14 gaps fully closed, 1 partial (TASK-02 3-difficulty-levels → v0.4.2), 1 deferred (DreamerV3 real-subprocess E2E → v0.4.2, requires GPU + dreamerv3 install).
 
 **Delivered:**
 - ✓ Fixed 4 high-severity MARL runtime bugs (MARL-step, MARL-CLI, MARL-agents, ArmConfig-export) + closed MARL-04 requirement
@@ -73,20 +115,18 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 
 ## Requirements
 
-### Validated (v0.4.0–v0.4.1)
+### Validated (v0.4.0–v0.4.2)
 
 - ✓ All v0.3.0–v0.3.2 features (Metal GPU, multi-arch Docker, ros2_control, K8s, tetgen, FEM deformables, volumetric cutting, grid fluids)
 - ✓ **Real Surgical Assets** — trimesh OBJ loading, V-HACD collision, organ OBJ→tetgen, primitive fallback (ASET-01..05) — v0.4.0
-- ✓ **Surgical Task Curriculum** — 6 task types, TaskResult hierarchy, TaskRewardRouter activated, additive CurriculumScheduler (TASK-01..04) — v0.4.0
+- ✓ **Surgical Task Curriculum** — 6 task types, TaskResult hierarchy, TaskRewardRouter activated, additive CurriculumScheduler, DifficultyLevel enum (EASY/MEDIUM/HARD) with per-task `get_params_for_difficulty()` (TASK-01..04) — v0.4.0 + v0.4.2
 - ✓ **Multi-Agent RL** — PettingZoo ParallelEnv dual-arm, SuperSuit wrappers, shared/independent policies, `SurgicalEnv.passthrough_step()` adapter (MARL-01..04) — v0.4.0 + v0.4.1
 - ✓ **Performance Benchmarking** — ExperimentRunner multiprocessing, rliable IQM, per-backend reports, deterministic YAML, 6 task scene JSONs (BENCH-01..05) — v0.4.0 + v0.4.1
-- ✓ **DreamerV3 World Models** — Feasibility spike, process-isolated JAX, `_JsonStdout` wrapper, pixel/state obs, auto-discovery (DMV3-01..05) — v0.4.0 + v0.4.1
+- ✓ **DreamerV3 World Models** — Feasibility spike, process-isolated JAX, `_JsonStdout` wrapper, pixel/state obs, auto-discovery, real-subprocess E2E test gated on GPU+dreamerv3+jax (DMV3-01..05) — v0.4.0 + v0.4.1 + v0.4.2
 
-### Active (Next Milestone — v0.5.0)
+### Active (v0.5.0+)
 
-- TBD (start v0.5.0 with `/gsd-new-milestone`)
-- **TASK-02 3-difficulty-levels** — carried from v0.4.0 audit closure. Each task type must support easy/medium/hard with progressive parameter changes (tissue stiffness, target precision tolerance, tool position noise, time limit). PARAM_BOUNDS + interpolate_params() exists; easy/medium/hard presets not yet defined.
-- **DreamerV3 real-subprocess E2E test** — carried from v0.4.1. Code-level fix verified (`_JsonStdout` wrapper + typo + color); real subprocess end-to-end test requires GPU + dreamerv3 install.
+_None yet — use `/gsd-new-milestone` to define v0.5.0 requirements._
 
 ### Out of Scope
 
@@ -116,6 +156,8 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 | v0.3.2 | 15–18 | 9 | Complete |
 | v0.4.0 | 19–24 | 21 | Complete |
 | v0.4.1 | 25–28 | 4 | Complete |
+| v0.4.2 | 29–30 | 3 | Complete |
+| v0.5.0 | TBD | TBD | Planning |
 
 ## Context
 
@@ -156,6 +198,12 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 - `_JsonStdout` wrapper class replaces `os.fdopen` on PyTorch's non-blocking Pipe for DreamerV3 subprocess stdout
 - 5 new task scene JSONs aligned with Phase 24 `test_dreamer_training.py` parametrize contract (instrument + tissue types per task)
 - `ExperimentRunner.__init__` writes `experiments/{name}.yaml` so CLI "Reproduce with: --config experiments/{name}.yaml" hint is functional
+- `DifficultyLevel` enum uses `_FloatMixin(float, Enum)` (Python stdlib has no `FloatEnum`) to make `DifficultyLevel.EASY == 0.0` True — duck-typed `level.value` consumers mean the enum works transparently in tests and downstream code
+- `DifficultyLevel` is enum-only, not Pydantic-validated scalar; internally only the scalar (`0.0`/`0.5`/`1.0`) is used — avoids confusing double-validation
+- Pydantic v2 + cross-package enum cycle resolution: `from __future__ import annotations` + string forward-ref + late import at module bottom + `Model.model_rebuild()` + lazy local imports inside function bodies (pattern reusable for any future cross-package Pydantic v2 schema work)
+- `TaskRewardRouter` uses strict `type() is float` check (not `==`) in tests to avoid float-mixin equality false-positive (which would mask failure mode where router stored the enum member instead of normalizing)
+- Phase 30 E2E test asserts the EXPECTED `RuntimeError("Agent not configured")` from the current Phase 24 `_build_agent` stub, rather than positive completion — sentinel that will START FAILING when real dreamerv3 is integrated and must be flipped then
+- Phase 30 module-level `pytest.mark.skipif` evaluates at collection time (BEFORE test bodies run); heavy imports (e.g., `run_dreamer_training`) live inside test methods so a missing import in the production module does not crash collection on macOS
 
 ## Evolution
 
@@ -176,4 +224,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-06-11 after v0.4.1 milestone close*
+*Last updated: 2026-06-14 after v0.4.2 milestone archive*
