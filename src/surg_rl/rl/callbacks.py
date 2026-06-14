@@ -58,8 +58,8 @@ class TrainingProgressCallback(BaseCallback):
         # Check for episode end
         infos = locals_dict.get("infos", [])
         for info in infos:
-            if "episode" in info:
-                ep = info["episode"]
+            ep = info.get("episode")
+            if isinstance(ep, dict):
                 reward = ep.get("r", 0.0)
                 length = ep.get("l", 0)
                 self._episode_rewards.append(reward)
@@ -219,12 +219,13 @@ class CurriculumCallback(BaseCallback):
         locals_dict = self.locals
         infos = locals_dict.get("infos", [])
         for info in infos:
-            if "episode" in info:
+            ep = info.get("episode")
+            if isinstance(ep, dict):
                 self._episode_count += 1
 
                 # Report episode metrics to controller
                 metrics = {
-                    "reward": info["episode"].get("r", 0.0),
+                    "reward": ep.get("r", 0.0),
                     "success": info.get("success", False),
                 }
 
@@ -392,8 +393,8 @@ class TensorBoardCallback(BaseCallback):
         """Log metrics at each training step."""
         infos = self.locals.get("infos", [])
         for info in infos:
-            if "episode" in info:
-                ep = info["episode"]
+            ep = info.get("episode")
+            if isinstance(ep, dict):
                 reward = ep.get("r", 0.0)
                 length = ep.get("l", 0)
                 self._episode_rewards.append(reward)
@@ -499,8 +500,8 @@ class WandbCallback(BaseCallback):
         self._step += 1
         infos = self.locals.get("infos", [])
         for info in infos:
-            if "episode" in info:
-                ep = info["episode"]
+            ep = info.get("episode")
+            if isinstance(ep, dict):
                 self._episode_rewards.append(ep.get("r", 0.0))
                 self._episode_lengths.append(ep.get("l", 0))
 
@@ -614,8 +615,8 @@ class MLflowCallback(BaseCallback):
         self._step += 1
         infos = self.locals.get("infos", [])
         for info in infos:
-            if "episode" in info:
-                ep = info["episode"]
+            ep = info.get("episode")
+            if isinstance(ep, dict):
                 self._episode_rewards.append(ep.get("r", 0.0))
                 self._episode_lengths.append(ep.get("l", 0))
 

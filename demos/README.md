@@ -6,27 +6,39 @@ This directory contains demonstration scripts for the Surg-RL project.
 
 ### demo.py - Scene Visualization
 
-Interactive visualization of surgical scenes using MuJoCo or PyBullet.
+Interactive RL training + evaluation of surgical scenes. Trains a PPO agent on
+the configured scene and runs evaluation episodes.
 
 **Usage:**
 
 ```bash
-# View with MuJoCo (opens window)
-python demos/demo.py --scene scenes/simple_suturing.json
+# Quick training run (headless)
+python demos/demo.py --headless --steps 10000
 
-# View with PyBullet (opens window)
-python demos/demo.py --scene scenes/simple_suturing.json --backend pybullet
+# Full PPO training
+python demos/demo.py --scene scenes/suturing_demo.json --algo PPO --steps 100000
 
-# Headless mode (no window, for testing/CI)
-python demos/demo.py --scene scenes/minimal_scene.json --headless --steps 100
+# Training with curriculum learning
+python demos/demo.py --steps 50000 --use-curriculum
+
+# Evaluate only (requires a trained model)
+python demos/demo.py --steps 0 --eval-episodes 20
 ```
 
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `--scene, -s` | Path to scene file | `scenes/simple_suturing.json` |
-| `--backend, -b` | Simulator backend (`mujoco` or `pybullet`) | `mujoco` |
+| `--scene, -s` | Path to scene file | `scenes/suturing_demo.json` |
+| `--algo, -a` | RL algorithm (`PPO`, `SAC`, `A2C`) | `PPO` |
+| `--steps` | Total training timesteps (0 to skip training) | `50000` |
+| `--eval-episodes` | Number of evaluation episodes | `5` |
 | `--headless` | Run without GUI window | `false` |
-| `--steps` | Number of simulation steps | `1000` |
+| `--max-episode-steps` | Max steps per episode | `2000` |
+| `--seed` | Random seed | `42` |
+| `--device` | Training device (`auto`, `cpu`, `cuda`, `mps`) | `auto` |
+| `--n-envs` | Number of parallel environments | `1` |
+| `--use-curriculum` | Enable curriculum learning | `false` |
+| `--use-adaptive` | Enable adaptive difficulty | `false` |
+| `--log-dir` | Directory for logs and checkpoints | `logs/suturing_demo` |
 
 ### train_demo.py - RL Training
 
@@ -148,9 +160,15 @@ Available scenes in `scenes/`:
 
 | Scene | Description |
 |-------|-------------|
-| `simple_suturing.json` | Basic suturing scene with robot, tissue, needle |
+| `cutting.json` | Cutting task scene |
+| `dissection.json` | Dissection task scene |
+| `grasping.json` | Grasping task scene |
+| `knot_tying.json` | Knot-tying task scene |
 | `laparoscopic_dissection.yaml` | Dual-arm laparoscopic scene |
 | `minimal_scene.json` | Minimal scene for testing |
+| `needle_insertion.json` | Needle insertion task scene |
+| `simple_suturing.json` | Basic suturing scene with robot, tissue, needle |
+| `suturing_demo.json` | Multi-stage suturing demo (default for demo.py) |
 
 ## Troubleshooting
 
