@@ -22,11 +22,11 @@ Closes the partial v0.4.0 audit gap (`TASK-02` was marked `Partial` in v0.4.1 cl
 
 Closes the deferred v0.4.0 audit gap. The Phase 26 fixes (`_JsonStdout` wrapper, `indigo→indent` typo fix, `DREAMER_COLOR` constant) are verified at the code level; this requirement adds a real-subprocess smoke test.
 
-- [ ] **DMV3-E2E-01**: A pytest test (`tests/dreamer/test_dreamerv3_subprocess_e2e.py`) spawns a real `dreamerv3` subprocess via the existing process-isolated harness, runs 100 environment steps on the Phase 24 forceps+liver suturing feasibility scene, and asserts the subprocess completes without exception
-- [ ] **DMV3-E2E-02**: The test verifies that the `_JsonStdout` wrapper correctly consumes the subprocess's stdout pipe — no `BlockingIOError`, no missing lines, no truncated JSONL metrics records
-- [ ] **DMV3-E2E-03**: The test verifies that the subprocess log output contains the `DREAMER_COLOR` ANSI color (the post-Phase-26 fix — not the pre-fix `indigo` color)
-- [ ] **DMV3-E2E-04**: The test is gated by `@pytest.mark.skipif` on (a) no GPU available, (b) `dreamerv3` not installed, (c) `jax` not installed. Skip message is descriptive and includes remediation steps.
-- [ ] **DMV3-E2E-05**: On successful run, a checkpoint is written to `models/dreamerv3/{task}_{obs_type}/` (existing auto-discovery path from Phase 24), and the test asserts the checkpoint directory exists and contains a checkpoint file
+- [x] **DMV3-E2E-01**: A pytest test (`tests/dreamer/test_dreamerv3_subprocess_e2e.py`) spawns a real `dreamerv3` subprocess via the existing process-isolated harness, runs 100 environment steps on the Phase 24 forceps+liver suturing feasibility scene, and asserts the subprocess completes without exception
+- [x] **DMV3-E2E-02**: The test verifies that the `_JsonStdout` wrapper correctly consumes the subprocess's stdout pipe — no `BlockingIOError`, no missing lines, no truncated JSONL metrics records
+- [x] **DMV3-E2E-03**: The test verifies that the subprocess log output contains the `DREAMER_COLOR` ANSI color (the post-Phase-26 fix — not the pre-fix `indigo` color)
+- [x] **DMV3-E2E-04**: The test is gated by `@pytest.mark.skipif` on (a) no GPU available, (b) `dreamerv3` not installed, (c) `jax` not installed. Skip message is descriptive and includes remediation steps.
+- [x] **DMV3-E2E-05**: On successful run, a checkpoint is written to `models/dreamerv3/{task}_{obs_type}/` (existing auto-discovery path from Phase 24), and the test asserts the checkpoint directory exists and contains a checkpoint file
 
 ## v1 Requirements — Carried Forward (Already Complete)
 
@@ -81,11 +81,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TASK-02-04 | Phase 29 | Complete |
 | TASK-02-05 | Phase 29 | Complete |
 | TASK-02-06 | Phase 29 | Complete |
-| DMV3-E2E-01 | Phase 30 | Pending |
-| DMV3-E2E-02 | Phase 30 | Pending |
-| DMV3-E2E-03 | Phase 30 | Pending |
-| DMV3-E2E-04 | Phase 30 | Pending |
-| DMV3-E2E-05 | Phase 30 | Pending |
+| DMV3-E2E-01 | Phase 30 | Complete |
+| DMV3-E2E-02 | Phase 30 | Complete |
+| DMV3-E2E-03 | Phase 30 | Complete |
+| DMV3-E2E-04 | Phase 30 | Complete |
+| DMV3-E2E-05 | Phase 30 | Complete |
 
 **Coverage:**
 - v1 requirements: 11 total (6 TASK-02 + 5 DMV3-E2E)

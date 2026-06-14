@@ -26,7 +26,7 @@
 ## Phases
 
 - [x] **Phase 29: TASK-02 3-Difficulty-Levels Completion** (completed 2026-06-12) — Define easy/medium/hard presets per task type that drive the existing PARAM_BOUNDS + interpolate_params() pipeline; thread the new enum through TaskRewardRouter, TaskConfig, and CurriculumScheduler
-- [ ] **Phase 30: DreamerV3 Real-Subprocess E2E Test** — Spawn a real `dreamerv3` subprocess via the existing process-isolated harness and verify the Phase 26 fixes (`_JsonStdout` wrapper, `indent` typo, `DREAMER_COLOR`) hold end-to-end. GPU + `dreamerv3` install are hard prereqs; otherwise skip with documented reason
+- [x] **Phase 30: DreamerV3 Real-Subprocess E2E Test** — Spawn a real `dreamerv3` subprocess via the existing process-isolated harness and verify the Phase 26 fixes (`_JsonStdout` wrapper, `indent` typo, `DREAMER_COLOR`) hold end-to-end. GPU + `dreamerv3` install are hard prereqs; otherwise skip with documented reason (completed 2026-06-14)
 
 ## Phase Details
 
@@ -76,7 +76,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 30-01-PLAN.md — Create `tests/dreamer/__init__.py` + `tests/dreamer/test_dreamerv3_subprocess_e2e.py` with 4–6 test methods covering DMV3-E2E-01..05; gate the whole module with `@pytest.mark.skipif` on (GPU + `dreamerv3` + `jax`) per D-SKIP-01; verify locally that the skip message renders on macOS and the 1123-test baseline still passes; do NOT run the test on macOS (xfail-skip expected per `STATE.md` Blocker #4)
+- [x] 30-01-PLAN.md — Create `tests/dreamer/__init__.py` + `tests/dreamer/test_dreamerv3_subprocess_e2e.py` with 4–6 test methods covering DMV3-E2E-01..05; gate the whole module with `@pytest.mark.skipif` on (GPU + `dreamerv3` + `jax`) per D-SKIP-01; verify locally that the skip message renders on macOS and the 1123-test baseline still passes; do NOT run the test on macOS (xfail-skip expected per `STATE.md` Blocker #4)
 
 **Out of scope** (carried forward, explicitly excluded by user direction):
 - Running the test on macOS local (xfail-skip expected — no GPU, no `dreamerv3` install)

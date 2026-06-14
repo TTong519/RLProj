@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v0.4.2
-milestone_name: Audit Leftovers
-status: in_progress
-stopped_at: Phase 29 verified complete; ready for Phase 30
-last_updated: "2026-06-12T19:00:00.000Z"
-last_activity: 2026-06-12 -- Phase 29 complete: TASK-02 3-difficulty-levels (verifier: passed, 6/6 must-haves, 44/44 difficulty tests pass)
+milestone_name: milestone
+status: verifying
+stopped_at: Phase 30 context gathered; ready for /gsd-plan-phase 30
+last_updated: "2026-06-14T20:28:43.676Z"
+last_activity: 2026-06-14
 progress:
   total_phases: 2
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-  percent: 50
+  completed_phases: 2
+  total_plans: 3
+  completed_plans: 3
+  percent: 100
 ---
 
 # Project State
@@ -21,15 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-11)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** v0.4.2 — Audit Leftovers (PLANNING, roadmap complete)
+**Current focus:** Phase 30 — dreamerv3-real-subprocess-e2e-test
 
 ## Current Position
 
 Milestone: v0.4.2 — Audit Leftovers (IN PROGRESS)
-Phase: 30 (DreamerV3 Real-Subprocess E2E Test)
-Plan: —
-Status: Phase 29 verified complete (6/6 must-haves, all TASK-02-01..06 closed); ready for `/gsd-discuss-phase 30` → `/gsd-plan-phase 30` → `/gsd-execute-phase 30`
-Last activity: 2026-06-12 -- Phase 29 verified passed (DifficultyLevel enum + 6 reward overrides + router + TaskConfig + CurriculumStageConfig + scene fixture + 44 tests; 1123 non-integration tests pass)
+Phase: 30 (dreamerv3-real-subprocess-e2e-test) — EXECUTING
+Plan: 1 of 1
+Status: Phase complete — ready for verification
+Last activity: 2026-06-14
 
 Progress: ██████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 50%
 
@@ -52,6 +52,7 @@ Progress: ██████████░░░░░░░░░░░░░�
 | v0.4.0 | 19–24 | 21 | 1,043 |
 | v0.4.1 | 25–28 | 4 | 1,053+ |
 | v0.4.2 | 29–30 | TBD (est. 2–3) | TBD |
+| Phase 30 P01 | 5 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -110,9 +111,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-12
-Stopped at: Phase 29 complete (verifier: passed, 6/6 must-haves); awaiting Phase 30 (DreamerV3 E2E)
-Resume file: (none — proceed to /gsd-discuss-phase 30 or /gsd-plan-phase 30)
+Last session: 2026-06-13T21:29:44.896Z
+Stopped at: Phase 30 context gathered; ready for /gsd-plan-phase 30
+Resume file: .planning/phases/30-dreamerv3-real-subprocess-e2e-test/30-CONTEXT.md
 
 ---
 
