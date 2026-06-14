@@ -76,7 +76,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 30-01: Add `tests/dreamer/test_dreamerv3_subprocess_e2e.py` with the 6 success criteria as test cases; gate the whole module with `@pytest.mark.skipif` on (GPU + `dreamerv3` + `jax`); verify locally that skip message renders on macOS; do NOT run the test on macOS (xfail-skip expected per `STATE.md` Blocker #4)
+- [ ] 30-01-PLAN.md — Create `tests/dreamer/__init__.py` + `tests/dreamer/test_dreamerv3_subprocess_e2e.py` with 4–6 test methods covering DMV3-E2E-01..05; gate the whole module with `@pytest.mark.skipif` on (GPU + `dreamerv3` + `jax`) per D-SKIP-01; verify locally that the skip message renders on macOS and the 1123-test baseline still passes; do NOT run the test on macOS (xfail-skip expected per `STATE.md` Blocker #4)
 
 **Out of scope** (carried forward, explicitly excluded by user direction):
 - Running the test on macOS local (xfail-skip expected — no GPU, no `dreamerv3` install)
