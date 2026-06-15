@@ -3,6 +3,7 @@
 **Status:** P1–P3 ✅, A1 ✅, A2 ✅ (complete). Phase B deferred.
 **Owner:** Future agent / maintainer
 **Last Updated:** 2026-04-29
+**Moved:** 2026-06-14 — was `docs/SOFTBODY_PLAN.md`, now lives next to its phase.
 
 ## Completion Summary
 

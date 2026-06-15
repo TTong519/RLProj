@@ -250,15 +250,14 @@ print(f'  Robots: {len(scene.robots)}')
 
 | File | Description |
 |------|-------------|
-| `src/surg_rl/dynamics/` | Environment controllers (NEW) |
+| `src/surg_rl/dynamics/` | Environment controllers |
 | `src/surg_rl/scene_definition/` | Scene schema and loader |
 | `src/surg_rl/simulators/` | MuJoCo/PyBullet backends |
 | `src/surg_rl/scene_generation/` | LLM/VLM parsers |
 | `scenes/` | Example scene files |
-| `tests/test_dynamics.py` | Dynamics module tests (NEW) |
-| `docs/IMPLEMENTATION_PLAN.md` | Step-by-step guide |
-| `docs/STATUS.md` | Current progress |
-| `docs/DYNAMICS_API.md` | Dynamics API reference (NEW) |
+| `tests/test_dynamics.py` | Dynamics module tests |
+| `docs/DYNAMICS_API.md` | Dynamics API reference |
+| `.planning/STATE.md` | Current project status |
 
 ## Import Examples
 
@@ -298,17 +297,19 @@ from surg_rl.scene_definition.schema import (
 
 ## Continue Implementation
 
-To continue with Step 7 (RL Training Pipeline):
+All 8 implementation steps are complete. See `.planning/MILESTONES.md`
+for shipped phases. Next milestone (v0.5.0) is not yet planned; use
+`/gsd-new-milestone` to define it.
 
 ```bash
-# Read the implementation plan
-cat docs/IMPLEMENTATION_PLAN.md
+# Read the architecture
+cat docs/ARCHITECTURE.md
 
 # Check current status
-cat docs/STATUS.md
+cat .planning/STATE.md
 
-# Review the architecture
-cat docs/ARCHITECTURE.md
+# List shipped phases
+ls .planning/phases/
 ```
 
 ## Common Commands

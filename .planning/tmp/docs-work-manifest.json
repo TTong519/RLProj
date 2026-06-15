@@ -1,0 +1,22 @@
+{
+  "project_type": "cli-tool",
+  "signals": {
+    "has_cli_bin": true,
+    "has_api_routes": false,
+    "is_open_source": true,
+    "has_deploy_config": true,
+    "has_tests": true,
+    "is_monorepo": false
+  },
+  "canonical_queue": [
+    {"type": "readme", "resolved_path": "README.md", "mode": "update", "wave": 1, "gsd_marker": true, "lines": 162, "status": "pending"},
+    {"type": "architecture", "resolved_path": "docs/ARCHITECTURE.md", "mode": "update", "wave": 1, "gsd_marker": true, "lines": 270, "status": "pending"},
+    {"type": "configuration", "resolved_path": "docs/CONFIGURATION.md", "mode": "update", "wave": 1, "gsd_marker": true, "lines": 422, "status": "pending"},
+    {"type": "getting_started", "resolved_path": "docs/GETTING_STARTED.md", "mode": "update", "wave": 2, "gsd_marker": true, "lines": 188, "status": "pending"},
+    {"type": "development", "resolved_path": "docs/DEVELOPMENT.md", "mode": "update", "wave": 2, "gsd_marker": true, "lines": 348, "status": "pending"},
+    {"type": "testing", "resolved_path": "docs/TESTING.md", "mode": "update", "wave": 2, "gsd_marker": true, "lines": 371, "status": "pending"},
+    {"type": "deployment", "resolved_path": "docs/DEPLOYMENT.md", "mode": "update", "wave": 2, "gsd_marker": true, "lines": 211, "status": "pending"},
+    {"type": "contributing", "resolved_path": "CONTRIBUTING.md", "mode": "update", "wave": 2, "gsd_marker": true, "lines": 124, "status": "pending"}
+  ],
+  "created_at": "2026-05-06T13:30:00"
+}

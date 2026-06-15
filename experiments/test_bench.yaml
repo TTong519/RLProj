@@ -1,0 +1,22 @@
+algorithms: null
+backend_reporting: true
+backends:
+- mujoco
+dreamer_comparison: true
+dreamer_eval_episodes: 10
+dreamer_obs_types:
+- state
+eval_episodes: 10
+experiment_name: test_bench
+hyperparameters: {}
+max_parallel: 13
+output_dir: results/test
+render_eval: false
+render_plots: true
+save_aggregated_json: true
+save_per_seed_csv: true
+seeds:
+- 42
+statistical_tests: true
+task: suturing
+timesteps: 100000

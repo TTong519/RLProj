@@ -78,6 +78,12 @@ Progress: ███████████████████████�
 
 - None. v0.4.2 milestone archived. Next: `/gsd-new-milestone` to define v0.5.0 (questioning → research → requirements → roadmap).
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260614-1 | Clean up pre-GSD files: archived STATUS, IMPLEMENTATION_PLAN, SOFTBODY_PLAN, superpowers/, root-level misc to .planning/milestones/v0.0.0-*. Fixed broken cross-refs in docs/README.md, docs/QUICK_REFERENCE.md, .planning/codebase/STRUCTURE.md | 2026-06-14 | (this commit) | (inline) |
+
 ### Blockers/Concerns
 
 - **Phase 24 (DreamerV3):** DreamerV3's ability to model tet mesh cutting dynamics is uncertain — the feasibility spike (DMV3-01) has a kill switch to defer to v0.5.0. JAX+PyTorch GPU memory conflict requires robust process isolation.
@@ -115,8 +121,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-14 (v0.4.2 close)
-Stopped at: v0.4.2 archived; ready for /gsd-new-milestone (v0.5.0)
+Last session: 2026-06-14 (v0.4.2 close + pre-GSD archive cleanup)
+Stopped at: v0.4.2 archived; pre-GSD files archived to .planning/milestones/v0.0.0-*.md; ready for /gsd-new-milestone (v0.5.0)
 Resume file: .planning/milestones/v0.4.2-ROADMAP.md
 
 ---

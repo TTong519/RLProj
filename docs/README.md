@@ -14,19 +14,21 @@ Welcome to the Surg-RL documentation! This comprehensive guide will help you get
 
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture and design decisions
 - **[API_REFERENCE.md](API_REFERENCE.md)** - Comprehensive API documentation
-- **[DYNAMICS_API.md](DYNAMICS_API.md)** - Dynamic environment control API (NEW)
+- **[DYNAMICS_API.md](DYNAMICS_API.md)** - Dynamic environment control API
 - **[SCENE_FORMAT.md](SCENE_FORMAT.md)** - Scene definition format specification
 - **[CONFIGURATION.md](CONFIGURATION.md)** - Configuration options and best practices
 
 ### Development
 
-- **[DEVELOPMENT_GUIDE.md](DEVELOPMENT_GUIDE.md)** - Development workflow and guidelines
+- **[DEVELOPMENT.md](DEVELOPMENT.md)** - Development workflow and guidelines
 - **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Common issues and solutions
 
 ### Project Status
 
-- **[STATUS.md](STATUS.md)** - Current project status and roadmap
-- **[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)** - Detailed implementation plan
+Project status and roadmap live in `.planning/STATE.md` and
+`.planning/ROADMAP.md` (current at v0.4.2 shipped; v0.5.0 not yet planned).
+Pre-GSD historical snapshots of `STATUS.md` and `IMPLEMENTATION_PLAN.md`
+are archived in `.planning/milestones/v0.0.0-*.md`.
 
 ## 🚀 Quick Navigation
 
@@ -40,16 +42,16 @@ Welcome to the Surg-RL documentation! This comprehensive guide will help you get
 ### For Developers
 
 1. Read the [Architecture Overview](ARCHITECTURE.md) to understand the system design
-2. Follow the [Development Guide](DEVELOPMENT_GUIDE.md) for development workflow
+2. Follow the [Development Guide](DEVELOPMENT.md) for development workflow
 3. Review the [Configuration Guide](CONFIGURATION.md) for advanced configuration
 4. Check [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if you encounter issues
 
 ### For Contributors
 
 1. Read the [Contributing Guidelines](../CONTRIBUTING.md)
-2. Follow the [Development Guide](DEVELOPMENT_GUIDE.md)
+2. Follow the [Development Guide](DEVELOPMENT.md)
 3. Review the [Code of Conduct](../CODE_OF_CONDUCT.md)
-4. Check [STATUS.md](STATUS.md) for current priorities
+4. Check [`.planning/STATE.md`](../.planning/STATE.md) for current priorities
 
 ## 📖 Documentation by Topic
 
@@ -65,7 +67,7 @@ Welcome to the Surg-RL documentation! This comprehensive guide will help you get
 - [API Reference - Simulators](API_REFERENCE.md#simulators) - Simulator API
 - [Configuration - Simulation](CONFIGURATION.md#simulation-configuration) - Physics settings
 
-### Dynamic Environment Control (NEW)
+### Dynamic Environment Control
 
 - [DYNAMICS_API.md](DYNAMICS_API.md) - Complete dynamics module API
 - [Architecture - Dynamics](ARCHITECTURE.md#dynamic-environment-controller) - Controller architecture
@@ -142,7 +144,7 @@ adaptive = AdaptiveDifficultyController(
 ### Custom Components
 
 - [Configuration - Advanced Topics](CONFIGURATION.md#advanced-topics) - Custom reward functions, policies, etc.
-- [Development Guide](DEVELOPMENT_GUIDE.md) - Extending Surg-RL
+- [Development Guide](DEVELOPMENT.md) - Extending Surg-RL
 
 ### Integration
 

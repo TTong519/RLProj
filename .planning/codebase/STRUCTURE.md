@@ -95,22 +95,22 @@ Surg-RL is a `src/`-layout Python package with 7 submodules under `surg_rl/`, pl
 │   ├── rl_training.py
 │   └── rl_evaluation.py
 │
-├── docs/                      # Markdown documentation
+├── docs/                      # Markdown documentation (current only)
 │   ├── ARCHITECTURE.md
 │   ├── API_REFERENCE.md
 │   ├── CONFIGURATION.md
 │   ├── DYNAMICS_API.md
 │   ├── GETTING_STARTED.md
-│   ├── DEVELOPMENT_GUIDE.md
+│   ├── DEVELOPMENT.md
 │   ├── QUICK_REFERENCE.md
 │   ├── SCENE_FORMAT.md
-│   ├── SOFTBODY_PLAN.md
-│   ├── IMPLEMENTATION_PLAN.md
 │   ├── TESTING.md
 │   ├── TROUBLESHOOTING.md
-│   ├── STATUS.md
-│   ├── README.md
-│   └── superpowers/plans/     # Historical plan docs
+│   └── README.md
+│
+│   # Pre-GSD-era files (STATUS, IMPLEMENTATION_PLAN, SOFTBODY_PLAN, superpowers/,
+│   # DEVELOPMENT_GUIDE, BUGFIX_LOG, INSTALL, PRESENTATION, QUICKSTART, etc.)
+│   # are archived in .planning/milestones/v0.0.0-*.md.
 │
 ├── scenes/                    # Scene JSON/YAML files
 ├── configs/                   # Configuration files
@@ -125,12 +125,20 @@ Surg-RL is a `src/`-layout Python package with 7 submodules under `surg_rl/`, pl
 ├── AGENTS.md                  # Agent onboarding guide
 ├── CLAUDE.md                  # Claude-specific conventions
 ├── CHANGELOG.md
-├── KNOWN_GAPS.md
 │
 └── .planning/                 # GSD planning artifacts
-    └── codebase/
-        ├── ARCHITECTURE.md
-        └── STRUCTURE.md
+    ├── ROADMAP.md
+    ├── PROJECT.md
+    ├── STATE.md
+    ├── MILESTONES.md
+    ├── RETROSPECTIVE.md
+    ├── config.json
+    ├── codebase/              # Codebase map (pre-init /gsd-map-codebase)
+    ├── milestones/            # Per-milestone roadmaps + historical archive
+    ├── phases/                # 01-30 phase plans + summaries + reviews
+    ├── research/              # Domain research (STACK, FEATURES, etc.)
+    ├── quick/                 # Ad-hoc quick tasks
+    └── tmp/                   # Work-in-progress artifacts
 ```
 
 ## Naming Conventions

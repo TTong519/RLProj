@@ -7,11 +7,11 @@ created: 2026-04-29
 
 ## Summary
 
-The surg-rl codebase carries significant residual technical debt from a rapid alpha build: 39+ documented gaps (many since fixed but plans remain open), fragile PyBullet soft-body paths, placeholder implementations in gripper actuation and action types, platform-specific test instability, and security exposure of API keys via `.env.example`. Several critical bugs (collision-penalty sign inversion, quaternion order, joint reset, VecEnv API mismatch) are captured in unexecuted fix plans under `docs/superpowers/plans/`.
+The surg-rl codebase carries significant residual technical debt from a rapid alpha build: 39+ documented gaps (many since fixed but plans remain open), fragile PyBullet soft-body paths, placeholder implementations in gripper actuation and action types, platform-specific test instability, and security exposure of API keys via `.env.example`. Several critical bugs (collision-penalty sign inversion, quaternion order, joint reset, VecEnv API mismatch) are captured in unexecuted fix plans under `.planning/milestones/v0.0.0-superpowers-plans/` (archived from `docs/superpowers/plans/` on 2026-06-14).
 
 ## Critical Bugs with Unexecuted Fix Plans
 
-Eight critical bugs are documented in `docs/superpowers/plans/2026-04-24-critical-bug-fixes.md` but **not yet implemented**:
+Eight critical bugs are documented in `.planning/milestones/v0.0.0-superpowers-plans/2026-04-24-critical-bug-fixes.md` (archived from `docs/superpowers/plans/`) but **not yet implemented**:
 
 1. **PyBullet primitive robot quaternion order** — `src/surg_rl/simulators/pybullet_simulator.py:195-200` passes `[w, x, y, z]` to `createMultiBody`, but PyBullet expects `[x, y, z, w]`. Primitive robot fallbacks are silently mis-oriented.
 2. **PyBullet `reset()` never resets joint states** — `pybullet_simulator.py:410-424` resets base poses but leaves joint positions/velocities untouched, causing state leakage between episodes.
@@ -22,7 +22,7 @@ Eight critical bugs are documented in `docs/superpowers/plans/2026-04-24-critica
 7. **LightConfig validator direct mutation** — `src/surg_rl/scene_definition/schema.py:745-759` mutates `data` inside `model_validator(mode="before")`; while this is "before" mode (safer than "after"), the fix plan still recommends using `model_copy(update=...)` for consistency.
 8. **TrainingManager `evaluate()` VecEnv API mismatch** — `src/surg_rl/rl/training.py:445-519` assumes Gymnasium 5-tuple step API, but SB3 `VecEnv` returns 4-tuple `(obs, reward, done, info)`. Crashes when `n_envs > 1`.
 
-Additional unexecuted plans exist for simulator robustness, RL pipeline, dynamics controllers, and scene-generation CLI fixes under `docs/superpowers/plans/`.
+Additional unexecuted plans exist for simulator robustness, RL pipeline, dynamics controllers, and scene-generation CLI fixes under `.planning/milestones/v0.0.0-superpowers-plans/`.
 
 ## Platform-Specific Fragility
 
@@ -34,7 +34,7 @@ Additional unexecuted plans exist for simulator robustness, RL pipeline, dynamic
 
 ### MuJoCo Rendering Heuristic
 
-- Prior macOS `DISPLAY` check was removed (fixed per `KNOWN_GAPS.md` L1), but renderer availability is still inferred heuristically in `mujoco_simulator.py`. May break in headless macOS environments.
+- Prior macOS `DISPLAY` check was removed (fixed per `.planning/milestones/v0.0.0-KNOWN_GAPS.md` L1), but renderer availability is still inferred heuristically in `mujoco_simulator.py`. May break in headless macOS environments.
 
 ## Incomplete / Placeholder Features
 
@@ -107,7 +107,7 @@ Additional unexecuted plans exist for simulator robustness, RL pipeline, dynamic
 
 ### Simulator State Management
 
-- `PyBulletSimulator.get_state()` / `set_state()` only save qpos/qvel, not full body positions/orientations. Restoring a state after objects have moved does not reset them (fixed partially in `BUGFIX_LOG.md` but PyBullet path still stores less than MuJoCo).
+- `PyBulletSimulator.get_state()` / `set_state()` only save qpos/qvel, not full body positions/orientations. Restoring a state after objects have moved does not reset them (fixed partially in `.planning/milestones/v0.0.0-BUGFIX_LOG.md` but PyBullet path still stores less than MuJoCo).
 - `SurgicalEnv.get_state()` / `set_state()` wrappers delegate to simulator; if simulator state is incomplete, the environment is incomplete.
 
 ### Scene Builder Temp File Lifecycle
@@ -131,10 +131,10 @@ Additional unexecuted plans exist for simulator robustness, RL pipeline, dynamic
 - `src/surg_rl/simulators/scene_builder.py` — TODO for URDF-in-MuJoCo, temp-file leak risk
 - `src/surg_rl/simulators/base_simulator.py` — multiple TODO stubs (`get_camera_image`, `set_body_property`, etc.)
 - `.env.example` — API key placeholder, security exposure
-- `docs/superpowers/plans/2026-04-24-critical-bug-fixes.md` — unexecuted plan for 8 critical bugs
-- `docs/superpowers/plans/2026-04-24-simulator-robustness.md` — unexecuted simulator fixes
-- `docs/superpowers/plans/2026-04-24-rl-pipeline-fixes.md` — unexecuted RL pipeline fixes
-- `docs/superpowers/plans/2026-04-24-dynamics-controller-fixes.md` — unexecuted dynamics fixes
-- `docs/superpowers/plans/2026-04-24-scene-generation-cli-fixes.md` — unexecuted scene-gen fixes
-- `KNOWN_GAPS.md` — master audit of ~39 distinct issues
-- `BUGFIX_LOG.md` — 24 historical commits with bug descriptions
+- `.planning/milestones/v0.0.0-superpowers-plans/2026-04-24-critical-bug-fixes.md` — unexecuted plan for 8 critical bugs
+- `.planning/milestones/v0.0.0-superpowers-plans/2026-04-24-simulator-robustness.md` — unexecuted simulator fixes
+- `.planning/milestones/v0.0.0-superpowers-plans/2026-04-24-rl-pipeline-fixes.md` — unexecuted RL pipeline fixes
+- `.planning/milestones/v0.0.0-superpowers-plans/2026-04-24-dynamics-controller-fixes.md` — unexecuted dynamics fixes
+- `.planning/milestones/v0.0.0-superpowers-plans/2026-04-24-scene-generation-cli-fixes.md` — unexecuted scene-gen fixes
+- `.planning/milestones/v0.0.0-KNOWN_GAPS.md` — master audit of ~39 distinct issues
+- `.planning/milestones/v0.0.0-BUGFIX_LOG.md` — 24 historical commits with bug descriptions
