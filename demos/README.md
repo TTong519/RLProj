@@ -23,6 +23,9 @@ python demos/demo.py --steps 50000 --use-curriculum
 
 # Evaluate only (requires a trained model)
 python demos/demo.py --steps 0 --eval-episodes 20
+
+# Open a MuJoCo viewer window during training (requires a display)
+python demos/demo.py --render --steps 1000
 ```
 
 | Argument | Description | Default |
@@ -31,7 +34,8 @@ python demos/demo.py --steps 0 --eval-episodes 20
 | `--algo, -a` | RL algorithm (`PPO`, `SAC`, `A2C`) | `PPO` |
 | `--steps` | Total training timesteps (0 to skip training) | `50000` |
 | `--eval-episodes` | Number of evaluation episodes | `5` |
-| `--headless` | Run without GUI window | `false` |
+| `--headless` | Run without GUI window | `false` (default headless when no display) |
+| `--render` | Open a MuJoCo viewer window during training and the interactive demo | `false` |
 | `--max-episode-steps` | Max steps per episode | `2000` |
 | `--seed` | Random seed | `42` |
 | `--device` | Training device (`auto`, `cpu`, `cuda`, `mps`) | `auto` |
@@ -61,6 +65,9 @@ python demos/train_demo.py --adaptive
 
 # Train on specific scene
 python demos/train_demo.py --scene scenes/simple_suturing.json --algorithm PPO --timesteps 100000
+
+# Open a MuJoCo viewer window during training (requires a display)
+python demos/train_demo.py --render --timesteps 5000
 ```
 
 | Argument | Description | Default |
@@ -78,6 +85,7 @@ python demos/train_demo.py --scene scenes/simple_suturing.json --algorithm PPO -
 | `--adaptive` | Enable adaptive difficulty | `false` |
 | `--max-steps` | Max steps per episode | `500` |
 | `--save-freq` | Checkpoint save frequency | `5000` |
+| `--render` | Open a MuJoCo viewer window during training | `false` |
 
 ### eval_demo.py - Evaluation
 
@@ -104,7 +112,7 @@ python demos/eval_demo.py --model logs/training/final_model --save-results resul
 | `--model, -m` | Path to trained model (required) | — |
 | `--scene, -s` | Path to scene file | `scenes/simple_suturing.json` |
 | `--episodes, -e` | Number of evaluation episodes | `10` |
-| `--render, -r` | Render during evaluation | `false` |
+| `--render, -r` | Open a MuJoCo viewer window during evaluation | `false` |
 | `--seed` | Random seed | `42` |
 | `--save-results` | Save results to JSON file | — |
 | `--verbose, -v` | Verbosity level (0, 1, 2) | `1` |
@@ -174,7 +182,22 @@ Available scenes in `scenes/`:
 
 ### "Cannot start viewer: no display available"
 
-Run in a terminal with a display, or use `--headless` / `--simulator-only` mode.
+Run in a terminal with a display, or omit the `--render` flag (the demos
+default to headless). On macOS, the MuJoCo passive viewer requires
+`mjpython` instead of plain `python`:
+
+```bash
+# On macOS, to open a viewer window
+mjpython demos/demo.py --render --steps 1000
+mjpython demos/train_demo.py --render --timesteps 5000
+mjpython demos/eval_demo.py --model logs/training_demo/final_model --render --episodes 5
+```
+
+On Linux/Windows, plain `python` works:
+
+```bash
+python demos/demo.py --render --steps 1000
+```
 
 ### "stable-baselines3 not installed"
 

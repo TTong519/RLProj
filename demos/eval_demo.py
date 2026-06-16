@@ -45,7 +45,8 @@ def main():
     )
     parser.add_argument(
         "--render", "-r", action="store_true",
-        help="Render during evaluation",
+        help="Open a MuJoCo viewer window during evaluation (requires a display; "
+        "on macOS run with mjpython)",
     )
     parser.add_argument(
         "--seed", type=int, default=42,
@@ -69,6 +70,7 @@ def main():
     print(f"  Scene:     {args.scene}")
     print(f"  Episodes:  {args.episodes}")
     print(f"  Seed:      {args.seed}")
+    print(f"  Render:    {'human (viewer window)' if args.render else 'headless'}")
     print("=" * 60)
 
     # Check model exists

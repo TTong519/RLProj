@@ -267,6 +267,8 @@ class TrainingManager:
                 simulator_type=self.config.simulator,
                 use_curriculum=self.config.use_curriculum,
                 use_adaptive_difficulty=self.config.use_adaptive_difficulty,
+                render_mode=self.config.render_mode,
+                render_fps=self.config.render_fps,
             )
 
         from .environment import SurgicalEnv, SurgicalEnvConfig
@@ -278,6 +280,8 @@ class TrainingManager:
             seed=self.config.seed,
             use_curriculum=self.config.use_curriculum,
             use_adaptive_difficulty=self.config.use_adaptive_difficulty,
+            render_mode=self.config.render_mode,
+            render_fps=self.config.render_fps,
         )
         return SurgicalEnv(config)
 
@@ -511,7 +515,10 @@ class TrainingManager:
         Args:
             model_path: Path to saved model. Uses current model if None.
             n_episodes: Number of evaluation episodes.
-            render: Whether to render during evaluation.
+            render: If True, the eval environment is created with
+                ``render_mode="human"`` (a MuJoCo passive viewer in a
+                background thread). If False, the env uses whatever
+                ``render_mode`` is set on ``self.config`` (default: headless).
 
         Returns:
             Dictionary with evaluation results.
@@ -525,21 +532,30 @@ class TrainingManager:
         else:
             raise ValueError("No model available. Provide model_path or train first.")
 
-        # Determine if we can reuse cached eval env
-        current_key = self._build_eval_env_key()
-        if self._eval_env is not None and self._eval_env_key == current_key:
-            eval_env = self._eval_env
-            try:
-                eval_env.reset()
-            except Exception:
-                pass
-        else:
-            # Cache mismatch — dispose old and create new
-            if self._eval_env is not None:
-                self._eval_env.close()
-            eval_env = self._create_environment()
-            self._eval_env = eval_env
-            self._eval_env_key = current_key
+        # Honor the `render` flag by temporarily switching the config's
+        # render_mode to "human" for the eval env. We save and restore so
+        # subsequent train() calls are unaffected.
+        original_render_mode = self.config.render_mode
+        if render:
+            self.config.render_mode = "human"
+        try:
+            # Determine if we can reuse cached eval env
+            current_key = self._build_eval_env_key()
+            if self._eval_env is not None and self._eval_env_key == current_key:
+                eval_env = self._eval_env
+                try:
+                    eval_env.reset()
+                except Exception:
+                    pass
+            else:
+                # Cache mismatch — dispose old and create new
+                if self._eval_env is not None:
+                    self._eval_env.close()
+                eval_env = self._create_environment()
+                self._eval_env = eval_env
+                self._eval_env_key = current_key
+        finally:
+            self.config.render_mode = original_render_mode
 
         # Run evaluation
         episode_rewards = []

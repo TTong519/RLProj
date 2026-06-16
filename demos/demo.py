@@ -125,6 +125,7 @@ def run_training(args: argparse.Namespace) -> Tuple[TrainingManager, object]:
         max_episode_steps=args.max_episode_steps,
         use_curriculum=args.use_curriculum,
         use_adaptive_difficulty=args.use_adaptive,
+        render_mode="human" if args.render else None,
     )
 
     print(f"\n{'='*60}")
@@ -138,6 +139,7 @@ def run_training(args: argparse.Namespace) -> Tuple[TrainingManager, object]:
     print(f"  Curriculum:    {args.use_curriculum}")
     print(f"  Adaptive:      {args.use_adaptive}")
     print(f"  Log dir:       {args.log_dir}")
+    print(f"  Render:        {'human (viewer window)' if args.render else 'headless'}")
     print()
 
     manager = TrainingManager(training_config)
@@ -291,7 +293,13 @@ Examples:
     parser.add_argument(
         "--headless",
         action="store_true",
-        help="Run without GUI rendering",
+        help="Run without GUI rendering (default: headless)",
+    )
+    parser.add_argument(
+        "--render",
+        action="store_true",
+        help="Open a MuJoCo viewer window during training and the interactive "
+        "demo (requires a display; on macOS run with mjpython)",
     )
     parser.add_argument(
         "--max-episode-steps",
@@ -380,7 +388,7 @@ Examples:
         eval_results = run_evaluation(
             manager,
             n_episodes=args.eval_episodes,
-            headless=args.headless,
+            headless=not args.render,
         )
 
         # Interactive demo
@@ -397,6 +405,7 @@ Examples:
                     scene_path=args.scene,
                     max_episode_steps=args.max_episode_steps,
                     seed=args.seed + 100,
+                    render_mode="human" if args.render else None,
                 )
                 run_interactive(env, model=model, steps=args.max_episode_steps)
     else:

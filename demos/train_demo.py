@@ -88,6 +88,11 @@ def main():
         "--save-freq", type=int, default=5000,
         help="Checkpoint save frequency (default: 5000)",
     )
+    parser.add_argument(
+        "--render", action="store_true",
+        help="Open a MuJoCo viewer window during training (requires a display; "
+        "on macOS run with mjpython)",
+    )
     args = parser.parse_args()
 
     # Banner
@@ -103,6 +108,7 @@ def main():
         print("  Curriculum: ON")
     if args.adaptive:
         print("  Adaptive:   ON")
+    print(f"  Render:     {'human (viewer window)' if args.render else 'headless'}")
     print("=" * 60)
 
     # Try importing SB3
@@ -135,6 +141,7 @@ def main():
         use_curriculum=args.curriculum,
         use_adaptive_difficulty=args.adaptive,
         max_episode_steps=args.max_steps,
+        render_mode="human" if args.render else None,
         verbose=1,
     )
 
@@ -159,7 +166,7 @@ def main():
 
         # Quick evaluation
         print("  Running quick evaluation (5 episodes)...")
-        results = manager.evaluate(n_episodes=5)
+        results = manager.evaluate(n_episodes=5, render=args.render)
         print(f"  Mean reward:    {results['mean_reward']:.2f}")
         print(f"  Std reward:     {results['std_reward']:.2f}")
         print(f"  Success rate:   {results['success_rate']:.1%}")
