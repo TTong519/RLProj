@@ -7,6 +7,7 @@ into a standard interface for RL training with Stable-Baselines3.
 
 from __future__ import annotations
 
+import contextlib
 import multiprocessing
 import os
 import platform  # noqa: F401 — imported at module level for test patching
@@ -259,17 +260,32 @@ class SurgicalEnv(gym.Env):
                     "Human render unavailable: %s. " "Training will continue without viewer.",
                     exc,
                 )
-                self.render_mode = None
+                self._switch_to_headless()
             else:
                 if not viewer_started:
                     logger.warning(
                         "Human render requested but display unavailable. "
                         "Training will continue without viewer."
                     )
-                    self.render_mode = None  # headless fallback per D-03
+                    self._switch_to_headless()  # headless fallback per D-03
 
         # Signal handlers (D-05)
         self._setup_signal_handlers()
+
+    def _switch_to_headless(self) -> None:
+        """Drop the simulator back to headless mode after a failed viewer start.
+
+        Without this, the simulator was constructed with
+        ``render_mode="human"`` and may keep a half-initialized
+        ``_viewer`` reference even after ``start_viewer()`` failed.
+        Under mjpython + Apple Silicon + SB3 this can segfault during
+        teardown. Forcing the simulator's ``render_mode`` to ``None``
+        here keeps its state consistent with the env's.
+        """
+        self.render_mode = None
+        if self._simulator is not None and hasattr(self._simulator, "render_mode"):
+            with contextlib.suppress(AttributeError, TypeError):
+                self._simulator.render_mode = None
 
     def _load_scene(self) -> SceneDefinition:
         """Load the scene definition.

@@ -1257,8 +1257,17 @@ class MuJoCoSimulator(BaseSimulator):
     def start_viewer(self, target_fps: float = 30.0) -> bool:
         """Start MuJoCo passive viewer in a background render thread.
 
-        On macOS, raises RuntimeError if ``mjpython`` is not detected in
-        ``sys.executable`` (Cocoa GL requires fork-safe interpreter).
+        On macOS, raises RuntimeError if ``mjpython`` is not detected.
+        Detection uses two signals:
+
+        1. The ``MJPYTHON_BIN`` environment variable, which ``mjpython``
+           sets before execve'ing the real Python binary. This is the
+           authoritative signal.
+        2. The path of the running interpreter (``sys.executable``) as a
+           fallback. Note that mjpython *replaces* ``argv[0]`` with
+           ``sys.executable`` before execve, so checking the literal
+           string ``"mjpython"`` in ``sys.executable`` is unreliable
+           (it never appears there under mjpython).
 
         Args:
             target_fps: Desired refresh rate for the viewer.
@@ -1278,7 +1287,16 @@ class MuJoCoSimulator(BaseSimulator):
             return False
 
         if platform.system() == "Darwin":
-            if "mjpython" not in sys.executable:
+            # Check the env var first (set by mjpython) — this is the
+            # authoritative signal. Fall back to checking sys.executable,
+            # but note that under mjpython that's just the regular Python
+            # binary path, not the mjpython launcher.
+            running_under_mjpython = (
+                "MJPYTHON_BIN" in os.environ
+                or "mjpython" in os.path.basename(sys.executable)
+                or "mjpython" in (sys.argv[0] if sys.argv else "")
+            )
+            if not running_under_mjpython:
                 raise RuntimeError(
                     "MuJoCo passive viewer requires 'mjpython' on macOS. "
                     "Run: mjpython -m surg_rl.cli train ..."
@@ -1295,6 +1313,13 @@ class MuJoCoSimulator(BaseSimulator):
             return True
         except Exception as e:
             logger.warning("Failed to start viewer: %s", e)
+            # Make sure we don't leave a half-initialized viewer lying
+            # around — SB3 + mjpython + Apple Silicon can segfault during
+            # teardown if _viewer is set but the GL context never fully
+            # initialized. The simulator's render_mode is set to None
+            # by the caller (env) on fallback; we just drop the local
+            # reference here.
+            self._viewer = None
             return False
 
     def stop_viewer(self) -> None:

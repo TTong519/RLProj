@@ -476,3 +476,75 @@ class TestActionTypeValidation:
         obs, reward, terminated, truncated, info = env.step(action)
         assert isinstance(obs, dict)
         env.close()
+
+
+class TestHumanRenderFallback:
+    """Regression tests for human-mode render fallback.
+
+    When ``render_mode="human"`` is requested but the viewer can't
+    start (e.g. macOS without mjpython, no display, GL init failure),
+    the env must fall back to headless cleanly. Specifically, the
+    simulator's render_mode must also be reset to None — otherwise
+    the simulator retains a half-initialized state with
+    ``render_mode="human"`` that can segfault during teardown
+    under mjpython + Apple Silicon + SB3 + MPS.
+    """
+
+    def test_simulator_render_mode_reset_on_failed_viewer_start(self, monkeypatch):
+        """When start_viewer returns False, simulator.render_mode must be None.
+
+        We simulate the macOS-no-mjpython case by patching
+        ``MuJoCoSimulator.start_viewer`` to return False (mimicking
+        the rejection), then verify the env's fallback path also
+        clears the simulator's render_mode.
+        """
+        from surg_rl.simulators import mujoco_simulator as sim_mod
+
+        # Force start_viewer to return False, simulating the case
+        # where the viewer thread can't start.
+        def _fake_start_viewer(self, target_fps: float = 30.0) -> bool:
+            return False
+
+        monkeypatch.setattr(
+            sim_mod.MuJoCoSimulator, "start_viewer", _fake_start_viewer
+        )
+
+        config = SurgicalEnvConfig(
+            scene_path="scenes/minimal_scene.json",
+            render_mode="human",
+        )
+        env = SurgicalEnv(config)
+
+        # The env should have fallen back to headless.
+        assert env.render_mode is None
+        # And the simulator's render_mode must match — otherwise it
+        # keeps a half-initialized state from the original
+        # render_mode="human" construction.
+        assert env._simulator.render_mode is None
+        env.close()
+
+    def test_simulator_render_mode_reset_on_runtimeerror(self, monkeypatch):
+        """When start_viewer raises RuntimeError, simulator.render_mode must be None.
+
+        This is the actual macOS-no-mjpython path: the check raises
+        RuntimeError, the env catches it, and the simulator's state
+        must be cleared.
+        """
+        from surg_rl.simulators import mujoco_simulator as sim_mod
+
+        def _fake_start_viewer(self, target_fps: float = 30.0) -> bool:
+            raise RuntimeError("MuJoCo passive viewer requires 'mjpython' on macOS.")
+
+        monkeypatch.setattr(
+            sim_mod.MuJoCoSimulator, "start_viewer", _fake_start_viewer
+        )
+
+        config = SurgicalEnvConfig(
+            scene_path="scenes/minimal_scene.json",
+            render_mode="human",
+        )
+        env = SurgicalEnv(config)
+
+        assert env.render_mode is None
+        assert env._simulator.render_mode is None
+        env.close()

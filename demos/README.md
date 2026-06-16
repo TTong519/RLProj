@@ -199,6 +199,43 @@ On Linux/Windows, plain `python` works:
 python demos/demo.py --render --steps 1000
 ```
 
+**macOS + Apple Silicon + mjpython + SB3/MPS — known segfault risk.**
+If you see `zsh: segmentation fault mjpython demos/demo.py --render`
+during training startup, the combination of mjpython's Cocoa-GL
+trampoline + PyTorch's MPS backend + Stable-Baselines3's
+`Monitor`/`DummyVecEnv` wrap is unstable on Apple Silicon. The
+viewer-window mode is what the segfault most often points at; the
+underlying OMP duplicate-runtime issue is masked by the OMP shim.
+
+Workarounds (in order of robustness):
+
+1. **Drop `--render` and use plain `python`**. The OMP shim handles
+   the duplicate-library issue, training runs headless, and there is
+   no segfault risk:
+   ```bash
+   python demos/demo.py --headless --steps 1000
+   ```
+2. **Force CPU**. PPO with `device=cpu` avoids the MPS backend and
+   is a stable combination with mjpython:
+   ```bash
+   mjpython demos/demo.py --render --device cpu --steps 1000
+   ```
+3. **Use the CLI**, which has the same `--render-human` flag but a
+   simpler code path than the demos:
+   ```bash
+   mjpython -m surg_rl.cli train --scene scenes/suturing_demo.json --render-human
+   ```
+4. **Open the viewer post-training**, not during. Train headless
+   with `python` (option 1), then use `mjpython` only for
+   `demos/eval_demo.py --render` to render a saved model.
+
+If you are writing your own script that triggers the segfault
+reliably, wrap the `TrainingManager.train()` call in
+`try/finally` and call `manager.close()` (which calls
+`env.close()` → `simulator.stop_viewer()`) in the `finally`. This
+ensures the MuJoCo viewer thread is stopped cleanly on every exit
+path, including `KeyboardInterrupt` and `SystemExit`.
+
 ### "OMP: Error #15: libomp.dylib already initialized"
 
 On macOS, when two copies of OpenMP (one from MuJoCo's bundled
