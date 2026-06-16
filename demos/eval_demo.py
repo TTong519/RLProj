@@ -21,6 +21,7 @@ import sys as _omp_sys
 from pathlib import Path as _omp_Path
 _omp_sys.path.insert(0, str(_omp_Path(__file__).resolve().parent))
 import _omp_compat  # noqa: F401, E402
+import _platform_guard  # noqa: F401, E402
 # fmt: on
 
 import argparse
@@ -69,6 +70,11 @@ def main():
         help="Verbosity level (0, 1, 2)",
     )
     args = parser.parse_args()
+
+    # Refuse the known-unstable mjpython+AppleSilicon+--render combination.
+    if args.render and _platform_guard.is_risky_render_combination():
+        print(_platform_guard.format_risky_render_message(), file=sys.stderr)
+        sys.exit(2)
 
     # Banner
     print("=" * 60)

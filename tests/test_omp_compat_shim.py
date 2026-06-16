@@ -93,3 +93,30 @@ def test_demos_import_shim_first():
             f"{name} imports a third-party OMP-linked module "
             f"before _omp_compat; the shim must be first"
         )
+
+
+def test_render_demos_import_platform_guard():
+    """Demos with --render must also import _platform_guard before parsing args.
+
+    The platform guard detects the known-unstable mjpython+AppleSilicon+MPS
+    combination and exits with a clear error before trying to start
+    the viewer (which would segfault). Without the guard, the user sees a
+    cryptic 'zsh: segmentation fault' with no actionable message.
+    """
+    demos_dir = Path(__file__).parent.parent / "demos"
+    render_demos = {"demo.py", "train_demo.py", "eval_demo.py"}
+    for name in render_demos:
+        text = (demos_dir / name).read_text()
+        assert "_platform_guard" in text, (
+            f"{name} accepts --render but doesn't import _platform_guard"
+        )
+        # The check must be after argparse parses args, but before the
+        # env is constructed.
+        guard_check_idx = text.find("is_risky_render_combination()")
+        assert guard_check_idx != -1, (
+            f"{name} imports _platform_guard but never calls "
+            "is_risky_render_combination()"
+        )
+        assert "sys.exit(2)" in text, (
+            f"{name} has the platform guard check but doesn't exit 2 on it"
+        )

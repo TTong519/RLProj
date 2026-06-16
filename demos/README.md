@@ -207,6 +207,11 @@ trampoline + PyTorch's MPS backend + Stable-Baselines3's
 viewer-window mode is what the segfault most often points at; the
 underlying OMP duplicate-runtime issue is masked by the OMP shim.
 
+The demos now detect this combination and **refuse to launch**
+with a clear error message (exit code 2) before constructing the
+env, so you get an actionable error instead of a cryptic
+segfault. The message lists the four documented workarounds.
+
 Workarounds (in order of robustness):
 
 1. **Drop `--render` and use plain `python`**. The OMP shim handles

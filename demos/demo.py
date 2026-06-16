@@ -23,6 +23,7 @@ import sys as _omp_sys
 from pathlib import Path as _omp_Path
 _omp_sys.path.insert(0, str(_omp_Path(__file__).resolve().parent))
 import _omp_compat  # noqa: F401, E402
+import _platform_guard  # noqa: F401, E402 — used to detect risky mjpython combos
 # fmt: on
 
 import argparse
@@ -356,6 +357,15 @@ Examples:
     )
 
     args = parser.parse_args()
+
+    # Refuse the known-unstable mjpython+AppleSilicon+--render combination
+    # before we try to construct the env. The segfault happens during SB3
+    # training startup (after Monitor/DummyVecEnv wrapping) and is not
+    # recoverable from inside Python — exiting early with a clear message
+    # is the only way to give the user an actionable error.
+    if args.render and _platform_guard.is_risky_render_combination():
+        print(_platform_guard.format_risky_render_message(), file=sys.stderr)
+        sys.exit(2)
 
     # Resolve scene path
     scene_path = Path(args.scene)
