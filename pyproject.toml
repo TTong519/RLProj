@@ -176,6 +176,14 @@ target-version = "py310"
 select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
 ignore = ["E501"]
 
+# The demo scripts import the OpenMP-compat shim (`_omp_compat`) before
+# any other module. This deliberate out-of-order import triggers ruff's
+# I001 (import sorting) which can't be locally suppressed with `# noqa`.
+# The shim import must stay first; the alternative ordering produces the
+# "OMP: Error #15: libomp.dylib already initialized" crash on macOS.
+[tool.ruff.lint.per-file-ignores]
+"demos/*.py" = ["I001"]
+
 [tool.mypy]
 python_version = "3.10"
 warn_return_any = true

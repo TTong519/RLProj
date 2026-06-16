@@ -12,6 +12,19 @@ Usage:
   python demos/demo.py --scene scenes/suturing_demo.json --algo PPO
 """
 
+# IMPORTANT: import _omp_compat FIRST, before any library that may link
+# to OpenMP (mujoco, torch, numpy with MKL, etc.). This suppresses the
+# "OMP: Error #15: libomp.dylib already initialized" crash that hits
+# mjpython on macOS when two OpenMP runtimes are linked into the process.
+# The shim lives in this demos/ directory; insert it onto sys.path so
+# the import resolves regardless of where the user invokes from.
+# fmt: off
+import sys as _omp_sys
+from pathlib import Path as _omp_Path
+_omp_sys.path.insert(0, str(_omp_Path(__file__).resolve().parent))
+import _omp_compat  # noqa: F401, E402
+# fmt: on
+
 import argparse
 import sys
 import time

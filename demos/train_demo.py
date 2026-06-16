@@ -19,6 +19,16 @@ Usage:
     python demos/train_demo.py --adaptive
 """
 
+# IMPORTANT: must be the first import — see _omp_compat docstring.
+# The shim lives in this demos/ directory; insert it onto sys.path
+# so the import resolves regardless of where the user invokes from.
+# fmt: off
+import sys as _omp_sys
+from pathlib import Path as _omp_Path
+_omp_sys.path.insert(0, str(_omp_Path(__file__).resolve().parent))
+import _omp_compat  # noqa: F401, E402
+# fmt: on
+
 import argparse
 import sys
 import time

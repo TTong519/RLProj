@@ -199,6 +199,30 @@ On Linux/Windows, plain `python` works:
 python demos/demo.py --render --steps 1000
 ```
 
+### "OMP: Error #15: libomp.dylib already initialized"
+
+On macOS, when two copies of OpenMP (one from MuJoCo's bundled
+framework, one from the system or from `torch`/`numpy`/MKL) end up
+linked into the process, the program aborts with `zsh: abort`.
+
+The demos handle this automatically: every demo `import`s the
+`demos/_omp_compat.py` shim as its very first import, which sets
+`KMP_DUPLICATE_LIB_OK=TRUE` in the environment *before* `mujoco` or
+`torch` is loaded. This is the documented (unsafe but supported)
+workaround for the duplicate-runtime crash.
+
+If you write your own script that imports `surg_rl`, do the same:
+
+```python
+# First import — must be before mujoco/torch/numpy
+import sys; sys.path.insert(0, "demos")
+import _omp_compat  # noqa: F401
+
+# Then the rest
+from surg_rl.rl.environment import SurgicalEnv
+# ...
+```
+
 ### "stable-baselines3 not installed"
 
 Install with: `pip install stable-baselines3`

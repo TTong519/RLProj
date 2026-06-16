@@ -18,6 +18,14 @@ Usage:
     python demos/benchmark.py --save benchmark_results.json
 """
 
+# IMPORTANT: must be the first import — see _omp_compat docstring.
+# fmt: off
+import sys as _omp_sys
+from pathlib import Path as _omp_Path
+_omp_sys.path.insert(0, str(_omp_Path(__file__).resolve().parent))
+import _omp_compat  # noqa: F401, E402
+# fmt: on
+
 import argparse
 import json
 import sys
