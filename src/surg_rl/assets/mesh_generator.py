@@ -9,6 +9,9 @@ from collections.abc import Callable
 from typing import Any
 
 from surg_rl.assets import TRIMESH
+from surg_rl.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 _procedural_map: dict[str, Callable[..., Any]] = {}
 
@@ -160,6 +163,69 @@ def _retractor(target_face_count: int | None = None) -> Any:
     return blade
 
 
+@_register("needle")
+def _needle(target_face_count: int | None = None) -> Any:
+    """Curved surgical needle — thin torus arc.
+
+    Used as a fallback when no real needle mesh is available (e.g. for
+    ``scenes/suturing_demo.json``'s ``curved_suturing_needle`` instrument,
+    which the schema classifies as ``type="needle"`` but the mesh file
+    ``assets/instruments/suturing_needle.obj`` is missing).
+    """
+    TRIMESH
+    import trimesh
+
+    # A thin torus approximates a curved surgical needle well enough
+    # for primitive fallback. Major radius 0.008 m, minor radius 0.0006 m
+    # (1.2 mm wire — typical for a curved suturing needle).
+    needle = trimesh.creation.torus(
+        major_radius=0.008, minor_radius=0.0006, major_sections=32, minor_sections=8
+    )
+    if target_face_count:
+        needle = needle.simplify_quadratic_decimation(target_face_count)
+    return needle
+
+
+@_register("knot_tier")
+def _knot_tier(target_face_count: int | None = None) -> Any:
+    """Generic knot-tying tool — slender shaft + spherical tip.
+
+    The schema lists this type but no scene currently uses it; the
+    generator exists so that loading such a scene doesn't crash with
+    a KeyError before the user can fix the asset reference.
+    """
+    TRIMESH
+    import trimesh
+
+    shaft = trimesh.creation.cylinder(radius=0.003, height=0.13, sections=16)
+    tip = trimesh.creation.icosphere(subdivisions=2, radius=0.005)
+    tip.apply_translation([0, 0, 0.07])
+    mesh = trimesh.util.concatenate([shaft, tip])
+    if target_face_count:
+        mesh = mesh.simplify_quadratic_decimation(target_face_count)
+    return mesh
+
+
+@_register("custom")
+def _custom(target_face_count: int | None = None) -> Any:
+    """Generic fallback for any instrument type not in the registry.
+
+    Returns a simple elongated box (a "generic tool" shape) suitable as
+    a placeholder when the user picks ``type="custom"`` in a scene file
+    or when a future schema addition isn't yet mapped to a procedural
+    generator. Without this fallback, scenes using ``type="custom"``
+    (e.g. ``scenes/suturing_demo.json``'s ``curved_suturing_needle``)
+    crash at scene load with a KeyError.
+    """
+    TRIMESH
+    import trimesh
+
+    tool = trimesh.creation.box(extents=[0.006, 0.006, 0.05])
+    if target_face_count:
+        tool = tool.simplify_quadratic_decimation(target_face_count)
+    return tool
+
+
 # Organ procedural generators
 _organ_map: dict[str, Callable[..., Any]] = {}
 
@@ -240,14 +306,32 @@ def generate_procedural_instrument(
 
     Raises:
         ImportError: If trimesh is not installed (with pip install hint).
-        KeyError: If instrument_type is not in the procedural map.
+        KeyError: If instrument_type is not in the procedural map AND no
+            "custom" fallback is registered (defensive — should not happen
+            since ``@_register("custom")`` always provides a fallback).
+
+    Note:
+        Unknown / unregistered instrument types are logged and routed to
+        the ``custom`` generator instead of raising. The previous behavior
+        of raising ``KeyError`` for ``"custom"`` and other schema-allowed
+        types not yet mapped (e.g. ``"knot_tier"``, ``"needle"``) crashed
+        scene loading with no graceful recovery.
     """
     generator = _procedural_map.get(instrument_type)
     if generator is None:
-        raise KeyError(
-            f"No procedural generator for instrument type '{instrument_type}'. "
-            f"Available: {list(_procedural_map.keys())}"
+        logger.warning(
+            "No procedural generator for instrument type %r; "
+            "falling back to 'custom' generic tool shape. "
+            "Available: %s",
+            instrument_type,
+            sorted(_procedural_map.keys()),
         )
+        generator = _procedural_map.get("custom")
+        if generator is None:
+            raise KeyError(
+                f"No procedural generator for instrument type '{instrument_type}'. "
+                f"Available: {list(_procedural_map.keys())}"
+            )
     return generator(target_face_count=target_face_count)
 
 

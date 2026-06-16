@@ -247,6 +247,96 @@ class TestMeshLoading:
             pytest.skip("trimesh not installed")
 
 
+class TestProceduralInstrumentTypes:
+    """Regression tests for procedural instrument mesh generators.
+
+    Every value of ``InstrumentType`` (from
+    ``surg_rl.scene_definition.schema.InstrumentType``) must have a
+    procedural generator registered, OR the loader must gracefully
+    fall back to the generic ``custom`` generator without raising.
+    See: scenes/suturing_demo.json's
+    ``curved_suturing_needle`` instrument (``type="custom"``) used to
+    crash scene load with KeyError at
+    ``generate_procedural_instrument("custom", ...)``.
+    """
+
+    REQUIRED_INSTRUMENT_TYPES = {
+        "scalpel",
+        "forceps",
+        "needle_driver",
+        "scissors",
+        "clamp",
+        "suction",
+        "cautery",
+        "camera",
+        "retractor",
+        "needle",
+        "knot_tier",
+        "custom",
+    }
+
+    def test_all_schema_types_have_generators(self):
+        """Every InstrumentType enum value has a registered generator."""
+        try:
+            from surg_rl.assets.mesh_generator import _procedural_map
+            from surg_rl.scene_definition.schema import InstrumentType
+        except ImportError as e:
+            pytest.skip(f"Required imports missing: {e}")
+
+        registered = set(_procedural_map.keys())
+        for member in InstrumentType:
+            assert member.value in registered, (
+                f"InstrumentType.{member.name}='{member.value}' has no "
+                f"procedural generator. Available: {sorted(registered)}"
+            )
+
+    def test_each_generator_produces_a_mesh(self):
+        """Every registered generator returns a non-empty trimesh mesh."""
+        pytest.importorskip("trimesh")
+        try:
+            from surg_rl.assets.mesh_generator import (
+                _procedural_map,
+                generate_procedural_instrument,
+            )
+        except ImportError:
+            pytest.skip("trimesh not installed")
+
+        for inst_type in self.REQUIRED_INSTRUMENT_TYPES:
+            mesh = generate_procedural_instrument(inst_type)
+            assert mesh is not None, f"{inst_type} returned None"
+            assert hasattr(mesh, "vertices")
+            assert len(mesh.vertices) > 0, f"{inst_type} returned empty mesh"
+            assert hasattr(mesh, "faces")
+            assert len(mesh.faces) > 0, f"{inst_type} returned mesh with no faces"
+
+    def test_unknown_type_falls_back_to_custom(self):
+        """An unknown instrument type logs a warning and returns the 'custom' mesh."""
+        pytest.importorskip("trimesh")
+        try:
+            from surg_rl.assets.mesh_generator import generate_procedural_instrument
+        except ImportError:
+            pytest.skip("trimesh not installed")
+
+        # Should not raise — the loader routes unknown types to the
+        # "custom" generic tool shape.
+        mesh = generate_procedural_instrument("not_a_real_instrument_type")
+        assert mesh is not None
+        assert len(mesh.vertices) > 0
+
+    def test_custom_generator_is_registered(self):
+        """The 'custom' type must be in the procedural map as a fallback."""
+        try:
+            from surg_rl.assets.mesh_generator import _procedural_map
+        except ImportError:
+            pytest.skip("trimesh not installed")
+
+        assert "custom" in _procedural_map, (
+            "Without a 'custom' generator, scenes with type='custom' "
+            "(e.g. scenes/suturing_demo.json's curved_suturing_needle) "
+            "crash scene load with KeyError."
+        )
+
+
 class TestURDFTemplates:
     def test_all_instrument_types_have_templates(self):
         from surg_rl.assets.mesh_loader import URDF_TEMPLATES
