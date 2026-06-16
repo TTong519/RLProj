@@ -513,10 +513,16 @@ f 5 4 8
         compiler.set("meshdir", str(self.assets_dir or "."))
         compiler.set("autolimits", "true")
 
-        # Add simulation options
+        # Add simulation options. Forward the stability-relevant PhysicsConfig
+        # fields to the MJCF <option> element so MuJoCo doesn't fall back to
+        # its Euler + Newton defaults (which are far less stable when stiff
+        # contacts and high-gain actuators interact).
         option = ET.SubElement(mujoco, "option")
         option.set("timestep", str(scene_definition.physics.timestep))
         option.set("gravity", " ".join(map(str, scene_definition.physics.gravity)))
+        option.set("integrator", str(scene_definition.physics.integrator))
+        # MuJoCo's <option> attribute is "iterations" (not "solver_iterations").
+        option.set("iterations", str(scene_definition.physics.solver_iterations))
 
         # Add default settings
         default = ET.SubElement(mujoco, "default")
@@ -587,7 +593,17 @@ f 5 4 8
         index: int,
         asset: ET.Element,
     ) -> None:
-        """Add robot to MJCF structure."""
+        """Add robot to MJCF structure.
+
+        The primitive fallback builds a kinematic chain of nested bodies, one
+        body per joint, anchored to the world by a fixed root body. This
+        structure is well-conditioned for the MuJoCo solver — putting
+        multiple hinges on a single body (especially on the same axis) leaves
+        the system rank-deficient and produces QACC NaN on the first step
+        regardless of the integrator or control mode. The chain structure
+        avoids that by giving each joint its own body so its motion is
+        independent of the others.
+        """
 
         # Get robot mesh or create primitive
         if robot.urdf_path:
@@ -609,60 +625,101 @@ f 5 4 8
         body.set("pos", pos)
         body.set("quat", quat)
 
-        # Add simple geometry for now (box as placeholder)
-        ET.SubElement(body, "geom", name=f"{robot.name}_body", type="box", size="0.05 0.05 0.1")
+        # Root body: anchored to the world, no joints, holds a base inertial so
+        # MuJoCo's mjMINVAL check passes. The base mass (1 kg) is large enough
+        # to feel "fixed" to the world for the child chain dynamics.
+        ET.SubElement(
+            body,
+            "inertial",
+            pos="0 0 0",
+            mass="1.0",
+            diaginertia="1e-2 1e-2 1e-2",
+        )
+        # Small base geom for visual reference (primitive fallback only).
+        ET.SubElement(body, "geom", name=f"{robot.name}_base", type="box", size="0.06 0.06 0.06")
 
-        # Add joints
+        # Build the list of joints to emit. If the config defines joints use those,
+        # otherwise fall back to a single default 1-DOF revolute joint for MVP.
+        has_gripper = bool(robot.end_effectors)
         if robot.joints:
-            for joint in robot.joints:
-                joint_type = "hinge" if joint.type.value == "revolute" else "slide"
-                ET.SubElement(
-                    body,
-                    "joint",
-                    name=joint.name,
-                    type=joint_type,
-                    axis="0 1 0",
-                    range=f"{joint.limits.lower} {joint.limits.upper}",
-                    damping=str(joint.damping),
+            joint_specs: list[tuple[str, str, str, str, str]] = [
+                (
+                    j.name,
+                    "hinge" if j.type.value == "revolute" else "slide",
+                    f"{j.limits.lower} {j.limits.upper}",
+                    str(j.damping),
+                    "0 1 0",
                 )
+                for j in robot.joints
+            ]
         else:
-            # Default 1-DOF revolute joint for MVP
+            joint_specs = [
+                (
+                    f"{robot.name}_joint",
+                    "hinge",
+                    "-1.57 1.57",
+                    "0.1",
+                    "0 1 0",
+                )
+            ]
+
+        # Build a kinematic chain: root body → link_1 body → link_2 body → ...
+        # → gripper body. Each non-root body hosts exactly one joint, so the
+        # system is rank-independent of the joint count. Bodies nested as
+        # zero-offset children preserve the qpos order declared in joint_specs.
+        #
+        # We vary the joint axis per index to avoid multiple hinges on parallel
+        # axes (which would still be rank-deficient even with one body per
+        # joint, because nested zero-offset children with same-axis hinges are
+        # kinematically equivalent to a single hinge at the same point).
+        axis_cycle = ["0 0 1", "0 1 0", "1 0 0", "0 1 0", "0 0 1", "1 0 0"]
+        current_parent: ET.Element = body
+        for j_idx, (jname, jtype, jrange, jdamping, _ignored_axis) in enumerate(joint_specs):
+            # Each link body is a child of the previous one (or the root for
+            # the first link). We give it a small inertial so MuJoCo's mjMINVAL
+            # check passes; the mass and inertia are large enough (50 g,
+            # 1e-4 kg·m²) to be numerically well-behaved under proportional or
+            # torque control.
+            link_body = ET.SubElement(
+                current_parent,
+                "body",
+                name=f"{robot.name}_link{j_idx + 1}",
+            )
+            link_body.set("pos", "0 0 0")
+            link_body.set("quat", "1 0 0 0")
             ET.SubElement(
-                body,
+                link_body,
+                "inertial",
+                pos="0 0 0",
+                mass="0.05",
+                diaginertia="1e-4 1e-4 1e-4",
+            )
+            # Cycle the joint axis so adjacent hinges aren't parallel.
+            jaxis = axis_cycle[j_idx % len(axis_cycle)]
+            ET.SubElement(
+                link_body,
                 "joint",
-                name=f"{robot.name}_joint",
-                type="hinge",
-                axis="0 1 0",
-                range="-1.57 1.57",
-                damping="0.1",
+                name=jname,
+                type=jtype,
+                axis=jaxis,
+                range=jrange,
+                damping=jdamping,
             )
-
-        # Add actuators
-        actuator = mujoco.find("actuator")
-        if actuator is None:
-            actuator = ET.SubElement(mujoco, "actuator")
-
-        if robot.joints:
-            for joint in robot.joints:
-                ET.SubElement(
-                    actuator,
-                    "motor",
-                    name=f"{joint.name}_motor",
-                    joint=joint.name,
-                    gear="100",
-                )
-        else:
+            # Add a tiny visual geom on each link so the chain is visible
+            # during rendering. (Primitive fallback only.)
             ET.SubElement(
-                actuator,
-                "motor",
-                name=f"{robot.name}_motor",
-                joint=f"{robot.name}_joint",
-                gear="100",
+                link_body,
+                "geom",
+                name=f"{robot.name}_link{j_idx + 1}_geom",
+                type="box",
+                size="0.04 0.04 0.08",
             )
+            current_parent = link_body
 
-        if robot.end_effectors:
+        # Gripper goes on the last (deepest) link body.
+        if has_gripper:
             ET.SubElement(
-                body,
+                current_parent,
                 "joint",
                 name=f"{robot.name}_gripper",
                 type="slide",
@@ -670,12 +727,111 @@ f 5 4 8
                 range="0 0.05",
                 damping="0.1",
             )
+
+        # Add actuators. The actuator type depends on ``robot.control_mode``:
+        #
+        # - "position"  → <position kp=100 ctrlrange=...>: action is a joint
+        #                 position setpoint in radians (matches the env's
+        #                 JOINT_POSITIONS_SPEC action space of (-π, π)).
+        # - "velocity"  → <velocity kv=10 ctrlrange=...>: action is a joint
+        #                 velocity setpoint in rad/s (matches
+        #                 JOINT_VELOCITIES_SPEC action space of (-2, 2)).
+        # - "torque" / "effort" → <motor gear=100>: action is a generalized
+        #                 force (caller is responsible for scaling).
+        #
+        # Previously the builder always emitted <motor gear=100>, which made
+        # the env's (-π, π) action → force = 100·π ≈ 314 N·m on a small body
+        # → angular acc of 1e5+ rad/s² → QACC NaN on the very first step.
+        # (See debug session ppo-demo-mujoco-dof-limit.)
+        actuator = mujoco.find("actuator")
+        if actuator is None:
+            actuator = ET.SubElement(mujoco, "actuator")
+
+        control_mode = getattr(robot, "control_mode", "position") or "position"
+
+        if robot.joints:
+            for joint in robot.joints:
+                lo, hi = joint.limits.lower, joint.limits.upper
+                if control_mode == "position":
+                    # kp=10 gives a peak torque of ~30 N·m at the action-space
+                    # limit (target=π, kp=10, torque=π·10≈31 N·m), which is
+                    # well within the per-joint effort bound (50-100 N·m in
+                    # the scene JSON) and stable for a 50g primitive link.
+                    # (Previously kp=100 → 314 N·m peak → QACC NaN.)
+                    ET.SubElement(
+                        actuator,
+                        "position",
+                        name=f"{joint.name}_motor",
+                        joint=joint.name,
+                        kp="10",
+                        ctrlrange=f"{lo} {hi}",
+                    )
+                elif control_mode == "velocity":
+                    vmax = max(0.1, joint.limits.velocity)
+                    # kv=5 gives a peak torque of ~10 N·m at the action-space
+                    # limit (target=2 rad/s, kv=5, torque=2·5=10 N·m).
+                    ET.SubElement(
+                        actuator,
+                        "velocity",
+                        name=f"{joint.name}_motor",
+                        joint=joint.name,
+                        kv="5",
+                        ctrlrange=f"{-vmax} {vmax}",
+                    )
+                else:  # "torque" or "effort" or unknown → motor
+                    if control_mode not in ("torque", "effort"):
+                        logger.warning(
+                            "Unknown robot.control_mode=%r for %s; falling back to <motor gear=100>",
+                            control_mode,
+                            robot.name,
+                        )
+                    ET.SubElement(
+                        actuator,
+                        "motor",
+                        name=f"{joint.name}_motor",
+                        joint=joint.name,
+                        gear="100",
+                    )
+        else:
+            # Default single joint (no explicit joints list). Use a wide
+            # ctrlrange since we don't have limits.
+            if control_mode == "position":
+                ET.SubElement(
+                    actuator,
+                    "position",
+                    name=f"{robot.name}_motor",
+                    joint=f"{robot.name}_joint",
+                    kp="10",
+                    ctrlrange="-3.14 3.14",
+                )
+            elif control_mode == "velocity":
+                ET.SubElement(
+                    actuator,
+                    "velocity",
+                    name=f"{robot.name}_motor",
+                    joint=f"{robot.name}_joint",
+                    kv="5",
+                    ctrlrange="-2 2",
+                )
+            else:
+                ET.SubElement(
+                    actuator,
+                    "motor",
+                    name=f"{robot.name}_motor",
+                    joint=f"{robot.name}_joint",
+                    gear="100",
+                )
+
+        if robot.end_effectors:
+            # Gripper is a position actuator with the same reduced kp. The
+            # gripper ctrlrange is small (0..0.05 m) so the peak force stays
+            # around 0.5 N·m — appropriate for a 1 mg instrument.
             ET.SubElement(
                 actuator,
                 "position",
                 name=f"{robot.name}_gripper",
                 joint=f"{robot.name}_gripper",
-                kp="100",
+                kp="10",
             )
 
     def _add_flex_body_to_mjcf(
