@@ -77,7 +77,7 @@
       "description": "Primary surgical manipulator with needle driver end effector",
       "urdf_path": "assets/robots/surgical_arm.urdf",
       "base_pose": {
-        "position": {"x": 0.0, "y": 0.0, "z": 0.5},
+        "position": {"x": -0.2, "y": -0.2, "z": 0.5},
         "orientation": {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0}
       },
       "control_mode": "position",
