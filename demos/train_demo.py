@@ -106,7 +106,10 @@ def main():
     )
     args = parser.parse_args()
 
-    # Refuse the known-unstable mjpython+AppleSilicon+--render combination.
+    # Safety-net guard: refuse the known-unstable mjpython+AppleSilicon
+    # combination when the OMP shim's thread=1 env vars are not in effect.
+    # The shim (imported first, see top of file) should already have set
+    # those env vars; this guard fires only if the shim was bypassed.
     if args.render and _platform_guard.is_risky_render_combination(device=args.device):
         print(_platform_guard.format_risky_render_message(), file=sys.stderr)
         sys.exit(2)

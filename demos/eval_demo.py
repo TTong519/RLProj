@@ -72,12 +72,10 @@ def main():
     args = parser.parse_args()
 
     # Refuse the known-unstable mjpython+AppleSilicon+--render combination.
+    # The OMP shim (imported above) should already have set the thread=1
+    # env vars that work around the pthread_mutex_init segfault; the
+    # guard is a safety net for cases where the shim was bypassed.
     if args.render and _platform_guard.is_risky_render_combination():
-        # Note: eval_demo doesn't take a --device flag (the device is
-        # determined by the saved model's metadata). We pass device=None
-        # which makes the guard use the same auto-detection as the
-        # training demos. If you hit this guard, retrain with
-        # --device cpu to produce a CPU model.
         print(_platform_guard.format_risky_render_message(), file=sys.stderr)
         sys.exit(2)
 

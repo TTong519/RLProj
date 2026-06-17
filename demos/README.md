@@ -199,39 +199,61 @@ On Linux/Windows, plain `python` works:
 python demos/demo.py --render --steps 1000
 ```
 
-**macOS + Apple Silicon + mjpython + SB3/MPS — known segfault risk.**
+**macOS + Apple Silicon + mjpython — known segfault risk.**
 If you see `zsh: segmentation fault mjpython demos/demo.py --render`
 during training startup, the combination of mjpython's Cocoa-GL
-trampoline + PyTorch's MPS backend + Stable-Baselines3's
-`Monitor`/`DummyVecEnv` wrap is unstable on Apple Silicon. The
-viewer-window mode is what the segfault most often points at; the
-underlying OMP duplicate-runtime issue is masked by the OMP shim.
+trampoline (which runs the Python interpreter on a non-main Cocoa
+thread) + PyTorch's bundled `libomp.dylib` is unstable on Apple
+Silicon. The crash signature is:
 
-The demos now detect this combination and **refuse to launch**
-with a clear error message (exit code 2) before constructing the
-env, so you get an actionable error instead of a cryptic
-segfault. The message lists the four documented workarounds.
+```
+OMP: Error #179: Function pthread_mutex_init failed:
+OMP: System error #22: Invalid argument
+zsh: segmentation fault
+```
 
-Workarounds (in order of robustness):
+The OMP shim (`demos/_omp_compat.py`, imported first by every demo)
+works around this by setting `OMP_NUM_THREADS=1`,
+`MKL_NUM_THREADS=1`, and `OPENBLAS_NUM_THREADS=1` before any
+libomp-linked library is loaded. With the shim in effect, libomp
+never enters the problematic pthread_mutex_init path and
+`mjpython ... --render` runs to completion regardless of the SB3
+device (cpu/cuda/mps/auto). The shim is imported first in every
+demo, so the workaround is automatic.
 
-1. **Drop `--render` and use plain `python`**. The OMP shim handles
-   the duplicate-library issue, training runs headless, and there is
-   no segfault risk:
+The platform guard (`demos/_platform_guard.py`) detects the
+**remaining** case where the shim is somehow not in effect (e.g.
+the user wrote a script that imports `mujoco`/`torch` before
+importing the shim) and **refuses to launch** with a clear error
+message (exit code 2) before constructing the env, so you get an
+actionable error instead of a cryptic segfault.
+
+If you somehow still hit the segfault (the shim was bypassed or
+its env vars were unset), the workarounds are:
+
+1. **Make sure the shim is in effect.** The demos import
+   `demos._omp_compat` first; if you wrote your own script, do the
+   same:
+   ```python
+   import demos._omp_compat  # noqa: F401
+   ```
+2. **Or set the env vars manually** in your shell:
+   ```bash
+   export OMP_NUM_THREADS=1
+   export MKL_NUM_THREADS=1
+   export OPENBLAS_NUM_THREADS=1
+   export KMP_DUPLICATE_LIB_OK=TRUE
+   mjpython demos/demo.py --render --steps 1000
+   ```
+3. **Drop `--render` and use plain `python`** — plain Python on
+   Apple Silicon does not hit this issue (it doesn't use the
+   mjpython trampoline), and the OMP shim's other env var
+   (`KMP_DUPLICATE_LIB_OK`) keeps libomp happy:
    ```bash
    python demos/demo.py --headless --steps 1000
    ```
-2. **Force CPU**. PPO with `device=cpu` avoids the MPS backend and
-   is a stable combination with mjpython:
-   ```bash
-   mjpython demos/demo.py --render --device cpu --steps 1000
-   ```
-3. **Use the CLI**, which has the same `--render-human` flag but a
-   simpler code path than the demos:
-   ```bash
-   mjpython -m surg_rl.cli train --scene scenes/suturing_demo.json --render-human
-   ```
 4. **Open the viewer post-training**, not during. Train headless
-   with `python` (option 1), then use `mjpython` only for
+   with `python` (option 3), then use `mjpython` only for
    `demos/eval_demo.py --render` to render a saved model.
 
 If you are writing your own script that triggers the segfault
