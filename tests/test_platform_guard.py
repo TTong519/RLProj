@@ -93,7 +93,78 @@ def test_mjpython_apple_silicon_with_mps_flagged(monkeypatch):
     ):
         assert g.is_under_mjpython() is True
         assert g.is_apple_silicon() is True
+        # Default (None → 'auto') with MPS available: flagged.
         assert g.is_risky_render_combination() is True
+        # Explicit "auto" same as default.
+        assert g.is_risky_render_combination(device="auto") is True
+        # Explicit "mps" with MPS available: flagged.
+        assert g.is_risky_render_combination(device="mps") is True
+
+
+def test_mjpython_apple_silicon_device_cpu_not_flagged(monkeypatch):
+    """--device cpu forces SB3 off MPS, so the segfault risk goes away.
+
+    Regression test for the false-positive where the user explicitly
+    passes --device cpu to avoid the MPS path but the guard still
+    flagged the combination.
+    """
+    monkeypatch.setenv("MJPYTHON_BIN", "/Applications/mujoco.app/Contents/MacOS/mjpython")
+
+    fake_torch_mod = type(sys)("torch")
+    fake_torch_mod.backends = type("B", (), {})()
+    fake_torch_mod.backends.mps = type(
+        "Mps", (), {"is_available": staticmethod(lambda: True)}
+    )()
+    monkeypatch.setitem(sys.modules, "torch", fake_torch_mod)
+
+    g = _load_guard_fresh()
+    with patch.object(g.platform, "system", return_value="Darwin"), patch.object(
+        g.platform, "machine", return_value="arm64"
+    ):
+        assert g.is_under_mjpython() is True
+        assert g.is_apple_silicon() is True
+        # cpu: never risky even if MPS would have been auto-selected.
+        assert g.is_risky_render_combination(device="cpu") is False
+
+
+def test_mjpython_apple_silicon_device_cuda_not_flagged(monkeypatch):
+    """--device cuda also bypasses MPS — should not be flagged."""
+    monkeypatch.setenv("MJPYTHON_BIN", "/Applications/mujoco.app/Contents/MacOS/mjpython")
+
+    fake_torch_mod = type(sys)("torch")
+    fake_torch_mod.backends = type("B", (), {})()
+    fake_torch_mod.backends.mps = type(
+        "Mps", (), {"is_available": staticmethod(lambda: True)}
+    )()
+    monkeypatch.setitem(sys.modules, "torch", fake_torch_mod)
+
+    g = _load_guard_fresh()
+    with patch.object(g.platform, "system", return_value="Darwin"), patch.object(
+        g.platform, "machine", return_value="arm64"
+    ):
+        # cuda: never risky on Apple Silicon (CUDA isn't available
+        # there, but the device flag still tells SB3 not to use MPS).
+        assert g.is_risky_render_combination(device="cuda") is False
+
+
+def test_mjpython_apple_silicon_device_mps_unavailable_not_flagged(monkeypatch):
+    """device='mps' but MPS isn't actually available → not risky."""
+    monkeypatch.setenv("MJPYTHON_BIN", "/Applications/mujoco.app/Contents/MacOS/mjpython")
+
+    fake_torch_mod = type(sys)("torch")
+    fake_torch_mod.backends = type("B", (), {})()
+    fake_torch_mod.backends.mps = type(
+        "Mps", (), {"is_available": staticmethod(lambda: False)}
+    )()
+    monkeypatch.setitem(sys.modules, "torch", fake_torch_mod)
+
+    g = _load_guard_fresh()
+    with patch.object(g.platform, "system", return_value="Darwin"), patch.object(
+        g.platform, "machine", return_value="arm64"
+    ):
+        # device='mps' requested but MPS unavailable — SB3 will fall
+        # back to CPU; not risky.
+        assert g.is_risky_render_combination(device="mps") is False
 
 
 def test_mjpython_apple_silicon_no_torch_not_flagged(monkeypatch):

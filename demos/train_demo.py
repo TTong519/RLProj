@@ -107,7 +107,7 @@ def main():
     args = parser.parse_args()
 
     # Refuse the known-unstable mjpython+AppleSilicon+--render combination.
-    if args.render and _platform_guard.is_risky_render_combination():
+    if args.render and _platform_guard.is_risky_render_combination(device=args.device):
         print(_platform_guard.format_risky_render_message(), file=sys.stderr)
         sys.exit(2)
 

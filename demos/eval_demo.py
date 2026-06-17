@@ -73,6 +73,11 @@ def main():
 
     # Refuse the known-unstable mjpython+AppleSilicon+--render combination.
     if args.render and _platform_guard.is_risky_render_combination():
+        # Note: eval_demo doesn't take a --device flag (the device is
+        # determined by the saved model's metadata). We pass device=None
+        # which makes the guard use the same auto-detection as the
+        # training demos. If you hit this guard, retrain with
+        # --device cpu to produce a CPU model.
         print(_platform_guard.format_risky_render_message(), file=sys.stderr)
         sys.exit(2)
 

@@ -112,7 +112,7 @@ def test_render_demos_import_platform_guard():
         )
         # The check must be after argparse parses args, but before the
         # env is constructed.
-        guard_check_idx = text.find("is_risky_render_combination()")
+        guard_check_idx = text.find("is_risky_render_combination")
         assert guard_check_idx != -1, (
             f"{name} imports _platform_guard but never calls "
             "is_risky_render_combination()"
@@ -120,3 +120,28 @@ def test_render_demos_import_platform_guard():
         assert "sys.exit(2)" in text, (
             f"{name} has the platform guard check but doesn't exit 2 on it"
         )
+
+
+def test_training_demos_forward_device_to_guard():
+    """Demos with --device must forward it to the guard.
+
+    The guard short-circuits when device='cpu' or device='cuda' (MPS
+    is bypassed, so no segfault risk). For this to work, the demo
+    must pass args.device to is_risky_render_combination().
+    """
+    demos_dir = Path(__file__).parent.parent / "demos"
+    for name in ("demo.py", "train_demo.py"):
+        text = (demos_dir / name).read_text()
+        assert "is_risky_render_combination(device=" in text, (
+            f"{name} has --device but doesn't forward it to the guard. "
+            "Users passing --device cpu will get a false-positive refusal."
+        )
+
+    # eval_demo.py has no --device flag (the device comes from the
+    # saved model). It should call the guard without a device argument
+    # (auto-detect), which is fine — the comment in the demo explains
+    # the trade-off.
+    text = (demos_dir / "eval_demo.py").read_text()
+    assert "is_risky_render_combination()" in text, (
+        "eval_demo.py must call the guard (without a device arg)"
+    )
