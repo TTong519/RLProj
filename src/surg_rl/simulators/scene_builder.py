@@ -106,17 +106,31 @@ class SceneBuilder:
     }
 
     # Default link length for the primitive-fallback kinematic chain (m).
-    # The per-link geom box is sized 0.04 x 0.04 x 0.08 (half-extents), so
-    # the full link is 8 x 8 x 16 cm. Setting the body offset to this
-    # length makes the link's geom box sit exactly on top of the parent's
-    # joint axis — i.e. end-to-end staggering with no visual gap and no
-    # overlap between adjacent links.
-    DEFAULT_LINK_LENGTH = 0.16
+    # Each link body is offset by this amount from its parent along +z, so
+    # the chain extends visibly upward. The default was originally 0.16 m,
+    # but 0.16 m × 7 links = 1.12 m of vertical chain, which intersects a
+    # typical surgical workspace (skin patches at z≈0.4) when the robot
+    # base sits at the world origin. 0.08 m × 7 = 0.56 m keeps the chain
+    # above the workspace when the base is raised to z=0.5.
+    DEFAULT_LINK_LENGTH = 0.08
 
-    # Default size of the per-link visual geom box (half-extents).
-    # Matched to DEFAULT_LINK_LENGTH so a chain of links at the default
-    # length staggers end-to-end with no overlap.
-    DEFAULT_LINK_GEOM_SIZE = (0.04, 0.04, 0.08)
+    # Default xy half-extent for the per-link visual geom box. The geom's
+    # z half-extent is set per-joint to ``link_length / 2`` so the box
+    # spans exactly one link (from the parent joint at z=0 to the next
+    # joint at z=link_length in body-local frame). With a constant z size,
+    # shorter links would visually overlap their neighbors; making z size
+    # proportional to link_length keeps the chain end-to-end regardless of
+    # the configured link length.
+    DEFAULT_LINK_GEOM_XY = 0.04
+
+    # The robot root body hosts a small mounting-block geom
+    # (``<robot>_base``). Its z half-extent is this value (the same as the
+    # xyz size used in the builder, kept here so the first link's body
+    # offset can clear it without overlapping). Bumping this constant
+    # also bumps the visual size of the mounting block; callers wanting a
+    # different base size should set ``robot.base_pose`` higher and not
+    # touch this constant.
+    BASE_GEOM_HALF_Z = 0.06
 
     def __init__(
         self,
@@ -696,21 +710,29 @@ f 5 4 8
         # (rank-deficient), so we cycle axes to keep the system
         # full-rank.
         axis_cycle = ["0 0 1", "0 1 0", "1 0 0", "0 1 0", "0 0 1", "1 0 0"]
-        geom_hx, geom_hy, geom_hz = self.DEFAULT_LINK_GEOM_SIZE
+        geom_xy = self.DEFAULT_LINK_GEOM_XY
         current_parent: ET.Element = body
         for j_idx, (jname, jtype, jrange, jdamping, _ignored_axis, link_length) in enumerate(joint_specs):
             # Each link body is a child of the previous one (or the root for
-            # the first link). Offset it along +z by link_length so the
-            # chain extends visibly. We give it a small inertial so MuJoCo's
-            # mjMINVAL check passes; the mass and inertia are large enough
-            # (50 g, 1e-4 kg·m²) to be numerically well-behaved under
-            # proportional or torque control.
+            # the first link). Offset it along +z so the chain extends
+            # visibly. The first link's offset is BASE_GEOM_HALF_Z +
+            # link_length so it sits above the base geom; subsequent links
+            # are offset by link_length from their parent. We give each
+            # link a small inertial so MuJoCo's mjMINVAL check passes; the
+            # mass and inertia are large enough (50 g, 1e-4 kg·m²) to be
+            # numerically well-behaved under proportional or torque
+            # control.
+            body_offset_z = (
+                self.BASE_GEOM_HALF_Z + link_length
+                if j_idx == 0
+                else link_length
+            )
             link_body = ET.SubElement(
                 current_parent,
                 "body",
                 name=f"{robot.name}_link{j_idx + 1}",
             )
-            link_body.set("pos", f"0 0 {link_length}")
+            link_body.set("pos", f"0 0 {body_offset_z}")
             link_body.set("quat", "1 0 0 0")
             ET.SubElement(
                 link_body,
@@ -739,14 +761,23 @@ f 5 4 8
             # along +z by link_length/2 so it sits centered in the link
             # body, i.e. between the parent joint (at link_body's local
             # origin) and the next joint (at the next body in the chain).
-            ET.SubElement(
-                link_body,
-                "geom",
-                name=f"{robot.name}_link{j_idx + 1}_geom",
-                type="box",
-                size=f"{geom_hx} {geom_hy} {geom_hz}",
-                pos=f"0 0 {link_length / 2}",
-            )
+            # The geom's z half-extent is link_length/2 so the box spans
+            # exactly one link — adjacent links touch at the joint but
+            # don't overlap.
+            #
+            # Skip the geom when link_length is 0 (MuJoCo rejects
+            # zero-size geoms). A real zero-length joint is uncommon but
+            # legitimate (e.g. a wrist axis with coincident centers); the
+            # joint still works, just visually invisible.
+            if link_length > 0:
+                ET.SubElement(
+                    link_body,
+                    "geom",
+                    name=f"{robot.name}_link{j_idx + 1}_geom",
+                    type="box",
+                    size=f"{geom_xy} {geom_xy} {link_length / 2}",
+                    pos=f"0 0 {link_length / 2}",
+                )
             current_parent = link_body
 
         # Gripper goes on the last (deepest) link body.

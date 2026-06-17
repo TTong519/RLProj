@@ -3,6 +3,7 @@
 import tempfile
 from pathlib import Path
 
+from surg_rl.scene_definition import SceneLoader
 from surg_rl.scene_definition.schema import (
     CameraConfig,
     EndEffectorConfig,
@@ -362,7 +363,14 @@ class TestLinkStaggering:
         return JointConfig(**kwargs)
 
     def test_default_length_staggers_seven_dof_chain(self, tmp_path):
-        """All link bodies must have non-zero z offset using DEFAULT_LINK_LENGTH."""
+        """All link bodies must have non-zero z offset using DEFAULT_LINK_LENGTH.
+
+        The first link is offset by ``BASE_GEOM_HALF_Z + link_length`` so
+        it sits above the mounting-block geom (otherwise the chain would
+        intersect the base). Subsequent links are offset by ``link_length``
+        from their parent (their pos attribute is in the parent's local
+        frame, so the BASE_GEOM_HALF_Z only appears on link1).
+        """
         from surg_rl.simulators.scene_builder import SceneBuilder
 
         joints = [self._make_joint(f"joint_{i}") for i in range(1, 8)]
@@ -374,20 +382,27 @@ class TestLinkStaggering:
         import re
 
         content = mjcf.read_text()
-        # Each link body should have pos="0 0 0.16" (the default link
-        # length). Adjacent bodies must NOT share the same z position.
         expected_default = SceneBuilder.DEFAULT_LINK_LENGTH
+        base_half_z = SceneBuilder.BASE_GEOM_HALF_Z
         link_z = re.findall(
             r'<body[^>]*name="arm_link(\d+)"[^>]*pos="([^"]+)"', content
         )
         assert len(link_z) == 7, f"expected 7 link bodies, got {link_z}"
 
+        # XML pos attribute is the offset in the PARENT body frame, not
+        # world frame. Link1's offset = base_half_z + length (it sits on
+        # top of the base geom); each subsequent link's offset = length
+        # (sits on top of its parent).
         for name, pos in link_z:
+            n = int(name)
             x, y, z = (float(v) for v in pos.split())
             assert x == 0.0 and y == 0.0, f"link{name} should be on z axis, got pos={pos}"
-            assert z == expected_default, (
-                f"link{name} should have default z offset {expected_default}, "
-                f"got pos={pos}"
+            if n == 1:
+                expected_z = base_half_z + expected_default
+            else:
+                expected_z = expected_default
+            assert abs(z - expected_z) < 1e-9, (
+                f"link{name} should be at z={expected_z} (parent-frame), got pos={pos}"
             )
 
     def test_per_joint_link_length_overrides_default(self, tmp_path):
@@ -407,18 +422,25 @@ class TestLinkStaggering:
         import re
 
         content = mjcf.read_text()
+        base_half_z = SceneBuilder.BASE_GEOM_HALF_Z
         link_z = dict(re.findall(
             r'<body[^>]*name="arm_link(\d+)"[^>]*pos="([^"]+)"', content
         ))
-        assert float(link_z["1"].split()[2]) == 0.10
+        # link1 offset in parent (root) frame = base_half_z + its own length
+        assert float(link_z["1"].split()[2]) == base_half_z + 0.10
+        # link2 offset in parent (link1) frame = its own length
         assert float(link_z["2"].split()[2]) == 0.20
+        # link3 offset in parent (link2) frame = its own length (default)
         assert float(link_z["3"].split()[2]) == SceneBuilder.DEFAULT_LINK_LENGTH
 
     def test_geom_sits_between_parent_and_child_joints(self, tmp_path):
         """The visual geom box must be centered between the parent joint (at the
         link body's local origin) and the next link's joint (at link_length).
 
-        Adjacent boxes then touch at the joint but do not overlap.
+        Adjacent boxes then touch at the joint but do not overlap. The
+        geom's z half-extent is ``link_length / 2`` so the box spans
+        exactly one link — short links don't visually overlap their
+        neighbors.
         """
         from surg_rl.simulators.scene_builder import SceneBuilder
 
@@ -443,11 +465,18 @@ class TestLinkStaggering:
         assert len(geoms) == 3, f"expected 3 link geoms, got {geoms}"
 
         default_length = SceneBuilder.DEFAULT_LINK_LENGTH
-        for n, _type, _size, pos_value in geoms:
+        for n, _type, size, pos_value in geoms:
             x, y, z = (float(v) for v in pos_value.split())
             assert z == default_length / 2, (
                 f"link{n} geom should be at z={default_length / 2} (mid-link), "
                 f"got pos={pos_value}"
+            )
+            # Geom z half-extent == link_length / 2 so the box spans exactly
+            # one link (no overlap with neighbors).
+            sx, sy, sz = (float(v) for v in size.split())
+            assert sz == default_length / 2, (
+                f"link{n} geom z half-extent should be {default_length / 2}, "
+                f"got size={size}"
             )
 
     def test_chain_loads_and_joints_extend_visibly(self, tmp_path):
@@ -468,15 +497,16 @@ class TestLinkStaggering:
         data = mujoco.MjData(model)
         mujoco.mj_forward(model, data)
 
-        # Joint N (1-indexed) anchor should be at z = N * link_length in world
-        # frame. We look up each joint by name so the test is robust to
-        # MuJoCo's joint ordering.
+        # Joint N (1-indexed) anchor sits at z = BASE_GEOM_HALF_Z + N *
+        # link_length in world frame. We look up each joint by name so the
+        # test is robust to MuJoCo's joint ordering.
         expected_default = SceneBuilder.DEFAULT_LINK_LENGTH
+        base_half_z = SceneBuilder.BASE_GEOM_HALF_Z
         for n in range(1, 8):
             joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"joint_{n}")
             assert joint_id >= 0, f"joint_{n} not found in model"
             anchor_z = float(data.xanchor[joint_id][2])
-            expected_z = n * expected_default
+            expected_z = base_half_z + n * expected_default
             assert abs(anchor_z - expected_z) < 1e-6, (
                 f"joint_{n} anchor at z={anchor_z}, expected {expected_z}"
             )
@@ -506,10 +536,11 @@ class TestLinkStaggering:
     def test_qpos_stays_finite_with_staggered_chain(self, tmp_path):
         """The staggered chain must remain numerically stable.
 
-        With joints at distance 0.16m from their bodies' origins, the moment
-        of inertia is higher than the previous zero-offset structure. The
-        inertial placement at the link's center of mass (mid-box) keeps the
-        rotational inertia finite and well-conditioned.
+        Each link's body is offset by ``link_length`` from its parent (plus
+        the base-geom half-extent for the first link), and the link's
+        center of mass is at the link's midpoint. With the inertia placed
+        at the center of mass, the rotational inertia is finite and
+        well-conditioned under zero control.
         """
         import numpy as np
 
@@ -528,6 +559,104 @@ class TestLinkStaggering:
             mujoco.mj_step(model, data)
             assert np.all(np.isfinite(data.qpos)), f"qpos went non-finite: {data.qpos}"
             assert np.all(np.isfinite(data.qvel)), f"qvel went non-finite: {data.qvel}"
+
+    def test_chain_does_not_intersect_base_geom(self, tmp_path):
+        """The first link's geom must not penetrate the robot's base/mount geom.
+
+        Without the BASE_GEOM_HALF_Z clearance, the first link's geom (whose
+        bottom is at z=0 in body-local frame) would overlap the base geom
+        (whose top is at z=BASE_GEOM_HALF_Z in root-local frame). The
+        staggered first-link offset puts the link just above the base.
+        """
+        from surg_rl.simulators.scene_builder import SceneBuilder
+
+        joints = [self._make_joint(f"joint_{i}") for i in range(1, 4)]
+        robot = RobotConfig(name="arm", joints=joints)
+        scene = SceneDefinition(metadata=Metadata(name="base_clear"), robots=[robot])
+        builder = SceneBuilder(assets_dir=str(tmp_path))
+        mjcf = builder.create_mjcf(scene, output_path=tmp_path / "scene.xml")
+
+        import re
+
+        content = mjcf.read_text()
+        # Base geom size (z half-extent)
+        base_size_re = re.search(
+            r'<geom\s+name="arm_base"[^>]*size="([^"]+)"', content
+        )
+        assert base_size_re, "base geom not found"
+        base_z_half = float(base_size_re.group(1).split()[2])
+        assert base_z_half == SceneBuilder.BASE_GEOM_HALF_Z
+
+        # First link body offset (parent-frame z)
+        link1_re = re.search(
+            r'<body\s+name="arm_link1"[^>]*pos="([^"]+)"', content
+        )
+        assert link1_re, "link1 body not found"
+        link1_z = float(link1_re.group(1).split()[2])
+        default_length = SceneBuilder.DEFAULT_LINK_LENGTH
+
+        # The link1 body is at z = base_half_z + link_length. Its geom
+        # (centered at z=link_length/2 in body-local frame with z half-extent
+        # = link_length/2) has its bottom at z=0 in body-local frame, which
+        # is z=link1_z in root frame. The base geom top is at z=base_z_half
+        # in root frame. link1_z - link_length/2 (geom bottom in body local
+        # frame) ... wait — geom at z=link_length/2, half-extent link_length/2,
+        # so geom bottom in body local frame = 0, in root frame = link1_z.
+        # Base top in root frame = base_z_half. For no intersection:
+        # link1_z > base_z_half, i.e. base_z_half + link_length > base_z_half.
+        assert link1_z == base_z_half + default_length
+        assert link1_z > base_z_half, (
+            f"link1 at z={link1_z} should be above base top at z={base_z_half}"
+        )
+
+    def test_suturing_demo_arm_does_not_intersect_workspace(self, tmp_path):
+        """End-to-end: the actual suturing_demo scene must have zero
+        arm/workspace contacts at reset and after gravity settles.
+
+        Regression test for the bug where the chain at z=0.4 directly
+        intersected the skin patches (also at z=0.4) on the first frame.
+        """
+        from surg_rl.simulators.scene_builder import SceneBuilder
+
+        scene = SceneLoader().load("scenes/suturing_demo.json")
+        builder = SceneBuilder(assets_dir=str(tmp_path))
+        mjcf = builder.create_mjcf(scene, output_path=tmp_path / "scene.xml")
+        import mujoco
+
+        model = mujoco.MjModel.from_xml_path(str(mjcf))
+        data = mujoco.MjData(model)
+        mujoco.mj_forward(model, data)
+
+        def _count_arm_workspace_contacts() -> int:
+            """Count active contacts between any arm link geom and the
+            skin/needle workspace geoms."""
+            count = 0
+            for c in range(data.ncon):
+                g1, g2 = data.contact[c].geom1, data.contact[c].geom2
+                n1 = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, g1) or ""
+                n2 = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, g2) or ""
+                arm_side = (
+                    ("link" in n1 and ("skin" in n2 or "curved" in n2))
+                    or ("link" in n2 and ("skin" in n1 or "curved" in n1))
+                )
+                if arm_side:
+                    count += 1
+            return count
+
+        # Frame 0: no contacts
+        assert _count_arm_workspace_contacts() == 0, (
+            "arm intersects workspace at frame 0; check base_pose and "
+            "link_length in scenes/suturing_demo.json"
+        )
+
+        # After gravity settles, still no contacts (chain shouldn't
+        # swing into the workspace).
+        for _ in range(50):
+            mujoco.mj_step(model, data)
+        assert _count_arm_workspace_contacts() == 0, (
+            "arm intersects workspace after 50 gravity steps; chain "
+            "swing is too large"
+        )
 
 
 class TestControlModeActuators:
