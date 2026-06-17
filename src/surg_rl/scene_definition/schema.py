@@ -569,6 +569,18 @@ class JointConfig(BaseModel):
     initial_position: float = Field(default=0.0, description="Initial joint position")
     damping: float = Field(default=0.1, ge=0.0, description="Joint damping")
     friction: float = Field(default=0.0, ge=0.0, description="Joint friction")
+    link_length: float | None = Field(
+        default=None,
+        ge=0.0,
+        description=(
+            "Visual/kinematic length of the rigid link attached to this joint "
+            "(meters). Used by the primitive-fallback MJCF builder to stagger "
+            "chain bodies end-to-end instead of stacking them at the same point. "
+            "If unset, the builder uses a uniform default (see "
+            "SceneBuilder.DEFAULT_LINK_LENGTH) so a 7-DOF arm shows as a "
+            "physically-extended chain rather than 7 overlapping boxes."
+        ),
+    )
 
 
 class EndEffectorConfig(BaseModel):

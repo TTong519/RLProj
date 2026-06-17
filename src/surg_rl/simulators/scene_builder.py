@@ -105,6 +105,19 @@ class SceneBuilder:
         "ground": (0.3, 0.3, 0.3, 1.0),  # Dark gray
     }
 
+    # Default link length for the primitive-fallback kinematic chain (m).
+    # The per-link geom box is sized 0.04 x 0.04 x 0.08 (half-extents), so
+    # the full link is 8 x 8 x 16 cm. Setting the body offset to this
+    # length makes the link's geom box sit exactly on top of the parent's
+    # joint axis — i.e. end-to-end staggering with no visual gap and no
+    # overlap between adjacent links.
+    DEFAULT_LINK_LENGTH = 0.16
+
+    # Default size of the per-link visual geom box (half-extents).
+    # Matched to DEFAULT_LINK_LENGTH so a chain of links at the default
+    # length staggers end-to-end with no overlap.
+    DEFAULT_LINK_GEOM_SIZE = (0.04, 0.04, 0.08)
+
     def __init__(
         self,
         assets_dir: str | Path | None = None,
@@ -642,13 +655,14 @@ f 5 4 8
         # otherwise fall back to a single default 1-DOF revolute joint for MVP.
         has_gripper = bool(robot.end_effectors)
         if robot.joints:
-            joint_specs: list[tuple[str, str, str, str, str]] = [
+            joint_specs: list[tuple[str, str, str, str, str, float]] = [
                 (
                     j.name,
                     "hinge" if j.type.value == "revolute" else "slide",
                     f"{j.limits.lower} {j.limits.upper}",
                     str(j.damping),
                     "0 1 0",
+                    j.link_length if j.link_length is not None else self.DEFAULT_LINK_LENGTH,
                 )
                 for j in robot.joints
             ]
@@ -660,37 +674,52 @@ f 5 4 8
                     "-1.57 1.57",
                     "0.1",
                     "0 1 0",
+                    self.DEFAULT_LINK_LENGTH,
                 )
             ]
 
         # Build a kinematic chain: root body → link_1 body → link_2 body → ...
         # → gripper body. Each non-root body hosts exactly one joint, so the
-        # system is rank-independent of the joint count. Bodies nested as
-        # zero-offset children preserve the qpos order declared in joint_specs.
+        # system is rank-independent of the joint count.
         #
-        # We vary the joint axis per index to avoid multiple hinges on parallel
-        # axes (which would still be rank-deficient even with one body per
-        # joint, because nested zero-offset children with same-axis hinges are
-        # kinematically equivalent to a single hinge at the same point).
+        # Each link body is staggered end-to-end along the world +z axis
+        # (pos="0 0 <link_length>"), so the chain extends visibly upward
+        # instead of being stacked at the same point. The per-joint
+        # ``link_length`` (or DEFAULT_LINK_LENGTH = 0.16 m if unset) makes
+        # the visual geom (a 0.04 x 0.04 x 0.08 half-extent box) sit
+        # exactly on top of the parent's joint axis, so adjacent links
+        # touch but do not overlap.
+        #
+        # We also vary the joint axis per index to avoid multiple hinges
+        # on parallel axes. With one body per joint, parallel hinges at
+        # the same point are kinematically equivalent to a single hinge
+        # (rank-deficient), so we cycle axes to keep the system
+        # full-rank.
         axis_cycle = ["0 0 1", "0 1 0", "1 0 0", "0 1 0", "0 0 1", "1 0 0"]
+        geom_hx, geom_hy, geom_hz = self.DEFAULT_LINK_GEOM_SIZE
         current_parent: ET.Element = body
-        for j_idx, (jname, jtype, jrange, jdamping, _ignored_axis) in enumerate(joint_specs):
+        for j_idx, (jname, jtype, jrange, jdamping, _ignored_axis, link_length) in enumerate(joint_specs):
             # Each link body is a child of the previous one (or the root for
-            # the first link). We give it a small inertial so MuJoCo's mjMINVAL
-            # check passes; the mass and inertia are large enough (50 g,
-            # 1e-4 kg·m²) to be numerically well-behaved under proportional or
-            # torque control.
+            # the first link). Offset it along +z by link_length so the
+            # chain extends visibly. We give it a small inertial so MuJoCo's
+            # mjMINVAL check passes; the mass and inertia are large enough
+            # (50 g, 1e-4 kg·m²) to be numerically well-behaved under
+            # proportional or torque control.
             link_body = ET.SubElement(
                 current_parent,
                 "body",
                 name=f"{robot.name}_link{j_idx + 1}",
             )
-            link_body.set("pos", "0 0 0")
+            link_body.set("pos", f"0 0 {link_length}")
             link_body.set("quat", "1 0 0 0")
             ET.SubElement(
                 link_body,
                 "inertial",
-                pos="0 0 0",
+                # Inertial at the link's center of mass (mid-box). Putting
+                # the mass at the body origin (= the joint axis location)
+                # would skew the rotational inertia and cause subtle
+                # drift on the first step.
+                pos=f"0 0 {link_length / 2}",
                 mass="0.05",
                 diaginertia="1e-4 1e-4 1e-4",
             )
@@ -705,14 +734,18 @@ f 5 4 8
                 range=jrange,
                 damping=jdamping,
             )
-            # Add a tiny visual geom on each link so the chain is visible
-            # during rendering. (Primitive fallback only.)
+            # Visual geom on each link so the chain is visible during
+            # rendering. (Primitive fallback only.) The geom is offset
+            # along +z by link_length/2 so it sits centered in the link
+            # body, i.e. between the parent joint (at link_body's local
+            # origin) and the next joint (at the next body in the chain).
             ET.SubElement(
                 link_body,
                 "geom",
                 name=f"{robot.name}_link{j_idx + 1}_geom",
                 type="box",
-                size="0.04 0.04 0.08",
+                size=f"{geom_hx} {geom_hy} {geom_hz}",
+                pos=f"0 0 {link_length / 2}",
             )
             current_parent = link_body
 

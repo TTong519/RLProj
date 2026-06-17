@@ -339,6 +339,197 @@ class TestRobotDofSplitting:
         assert model.njnt == 4  # 3 hinges + 1 gripper slide
 
 
+class TestLinkStaggering:
+    """Regression tests for end-to-end staggering of the kinematic chain.
+
+    The primitive-fallback MJCF builder must stagger each link body along
+    +z by the per-joint ``link_length`` (or DEFAULT_LINK_LENGTH when unset),
+    so the visual boxes form an extended chain rather than collapsing to
+    a single point at the robot base. The previous zero-offset structure
+    produced 7 overlapping boxes at the same location — visually a single
+    blob and physically indistinguishable from a fixed body.
+    """
+
+    def _make_joint(self, name: str, link_length: float | None = None) -> JointConfig:
+        kwargs = dict(
+            name=name,
+            type=JointType.REVOLUTE,
+            limits=JointLimits(lower=-1.0, upper=1.0, effort=10.0, velocity=1.0),
+            damping=0.1,
+        )
+        if link_length is not None:
+            kwargs["link_length"] = link_length
+        return JointConfig(**kwargs)
+
+    def test_default_length_staggers_seven_dof_chain(self, tmp_path):
+        """All link bodies must have non-zero z offset using DEFAULT_LINK_LENGTH."""
+        from surg_rl.simulators.scene_builder import SceneBuilder
+
+        joints = [self._make_joint(f"joint_{i}") for i in range(1, 8)]
+        robot = RobotConfig(name="arm", joints=joints)
+        scene = SceneDefinition(metadata=Metadata(name="stagger"), robots=[robot])
+        builder = SceneBuilder(assets_dir=str(tmp_path))
+        mjcf = builder.create_mjcf(scene, output_path=tmp_path / "scene.xml")
+
+        import re
+
+        content = mjcf.read_text()
+        # Each link body should have pos="0 0 0.16" (the default link
+        # length). Adjacent bodies must NOT share the same z position.
+        expected_default = SceneBuilder.DEFAULT_LINK_LENGTH
+        link_z = re.findall(
+            r'<body[^>]*name="arm_link(\d+)"[^>]*pos="([^"]+)"', content
+        )
+        assert len(link_z) == 7, f"expected 7 link bodies, got {link_z}"
+
+        for name, pos in link_z:
+            x, y, z = (float(v) for v in pos.split())
+            assert x == 0.0 and y == 0.0, f"link{name} should be on z axis, got pos={pos}"
+            assert z == expected_default, (
+                f"link{name} should have default z offset {expected_default}, "
+                f"got pos={pos}"
+            )
+
+    def test_per_joint_link_length_overrides_default(self, tmp_path):
+        """When JointConfig.link_length is set, that value (not the default) is used."""
+        from surg_rl.simulators.scene_builder import SceneBuilder
+
+        joints = [
+            self._make_joint("joint_1", link_length=0.10),
+            self._make_joint("joint_2", link_length=0.20),
+            self._make_joint("joint_3"),  # uses default
+        ]
+        robot = RobotConfig(name="arm", joints=joints)
+        scene = SceneDefinition(metadata=Metadata(name="per_joint"), robots=[robot])
+        builder = SceneBuilder(assets_dir=str(tmp_path))
+        mjcf = builder.create_mjcf(scene, output_path=tmp_path / "scene.xml")
+
+        import re
+
+        content = mjcf.read_text()
+        link_z = dict(re.findall(
+            r'<body[^>]*name="arm_link(\d+)"[^>]*pos="([^"]+)"', content
+        ))
+        assert float(link_z["1"].split()[2]) == 0.10
+        assert float(link_z["2"].split()[2]) == 0.20
+        assert float(link_z["3"].split()[2]) == SceneBuilder.DEFAULT_LINK_LENGTH
+
+    def test_geom_sits_between_parent_and_child_joints(self, tmp_path):
+        """The visual geom box must be centered between the parent joint (at the
+        link body's local origin) and the next link's joint (at link_length).
+
+        Adjacent boxes then touch at the joint but do not overlap.
+        """
+        from surg_rl.simulators.scene_builder import SceneBuilder
+
+        joints = [self._make_joint(f"joint_{i}") for i in range(1, 4)]
+        robot = RobotConfig(name="arm", joints=joints)
+        scene = SceneDefinition(metadata=Metadata(name="geom_center"), robots=[robot])
+        builder = SceneBuilder(assets_dir=str(tmp_path))
+        mjcf = builder.create_mjcf(scene, output_path=tmp_path / "scene.xml")
+
+        import re
+
+        content = mjcf.read_text()
+        # The geom element emits attributes in insertion order: name, type,
+        # size, pos (the order they're set in the builder).
+        geom_re = re.compile(
+            r'<geom\s+name="arm_link(\d+)_geom"\s+'
+            r'type="(?P<tp>[^"]*)"\s+'
+            r'size="(?P<sz>[^"]*)"\s+'
+            r'pos="(?P<pos>[^"]*)"',
+        )
+        geoms = geom_re.findall(content)
+        assert len(geoms) == 3, f"expected 3 link geoms, got {geoms}"
+
+        default_length = SceneBuilder.DEFAULT_LINK_LENGTH
+        for n, _type, _size, pos_value in geoms:
+            x, y, z = (float(v) for v in pos_value.split())
+            assert z == default_length / 2, (
+                f"link{n} geom should be at z={default_length / 2} (mid-link), "
+                f"got pos={pos_value}"
+            )
+
+    def test_chain_loads_and_joints_extend_visibly(self, tmp_path):
+        """End-to-end: with the chain staggered, MuJoCo must report joint anchors
+        at distinct world-frame z positions. If the chain were collapsed, every
+        joint anchor would be at z=0.
+        """
+        import mujoco
+
+        from surg_rl.simulators.scene_builder import SceneBuilder
+
+        joints = [self._make_joint(f"joint_{i}") for i in range(1, 8)]
+        robot = RobotConfig(name="arm", joints=joints)
+        scene = SceneDefinition(metadata=Metadata(name="anchor"), robots=[robot])
+        builder = SceneBuilder(assets_dir=str(tmp_path))
+        mjcf = builder.create_mjcf(scene, output_path=tmp_path / "scene.xml")
+        model = mujoco.MjModel.from_xml_path(str(mjcf))
+        data = mujoco.MjData(model)
+        mujoco.mj_forward(model, data)
+
+        # Joint N (1-indexed) anchor should be at z = N * link_length in world
+        # frame. We look up each joint by name so the test is robust to
+        # MuJoCo's joint ordering.
+        expected_default = SceneBuilder.DEFAULT_LINK_LENGTH
+        for n in range(1, 8):
+            joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"joint_{n}")
+            assert joint_id >= 0, f"joint_{n} not found in model"
+            anchor_z = float(data.xanchor[joint_id][2])
+            expected_z = n * expected_default
+            assert abs(anchor_z - expected_z) < 1e-6, (
+                f"joint_{n} anchor at z={anchor_z}, expected {expected_z}"
+            )
+
+    def test_zero_link_length_keeps_chain_but_no_visual_extent(self, tmp_path):
+        """An explicit link_length=0 is permitted (a real zero-length joint)
+        and produces a valid MJCF; the chain is just visually collapsed at
+        that joint. This guards against the case where someone sets
+        link_length=0.0 to express 'no extension' without breaking.
+        """
+        from surg_rl.simulators.scene_builder import SceneBuilder
+
+        joints = [
+            self._make_joint("joint_1", link_length=0.0),
+            self._make_joint("joint_2", link_length=0.0),
+        ]
+        robot = RobotConfig(name="arm", joints=joints)
+        scene = SceneDefinition(metadata=Metadata(name="zero_len"), robots=[robot])
+        builder = SceneBuilder(assets_dir=str(tmp_path))
+        mjcf = builder.create_mjcf(scene, output_path=tmp_path / "scene.xml")
+        import mujoco
+
+        model = mujoco.MjModel.from_xml_path(str(mjcf))
+        # MJCF is valid and the chain is still 1 body per joint.
+        assert model.njnt == 2
+
+    def test_qpos_stays_finite_with_staggered_chain(self, tmp_path):
+        """The staggered chain must remain numerically stable.
+
+        With joints at distance 0.16m from their bodies' origins, the moment
+        of inertia is higher than the previous zero-offset structure. The
+        inertial placement at the link's center of mass (mid-box) keeps the
+        rotational inertia finite and well-conditioned.
+        """
+        import numpy as np
+
+        from surg_rl.simulators.scene_builder import SceneBuilder
+
+        joints = [self._make_joint(f"joint_{i}") for i in range(1, 8)]
+        robot = RobotConfig(name="arm", joints=joints)
+        scene = SceneDefinition(metadata=Metadata(name="stagger_stable"), robots=[robot])
+        builder = SceneBuilder(assets_dir=str(tmp_path))
+        mjcf = builder.create_mjcf(scene, output_path=tmp_path / "scene.xml")
+        import mujoco
+
+        model = mujoco.MjModel.from_xml_path(str(mjcf))
+        data = mujoco.MjData(model)
+        for _ in range(20):
+            mujoco.mj_step(model, data)
+            assert np.all(np.isfinite(data.qpos)), f"qpos went non-finite: {data.qpos}"
+            assert np.all(np.isfinite(data.qvel)), f"qvel went non-finite: {data.qvel}"
+
+
 class TestControlModeActuators:
     """Regression tests for control_mode-aware actuator generation.
 
