@@ -29,7 +29,7 @@ Milestone: v0.4.2 — Audit Leftovers (SHIPPED 2026-06-14, ARCHIVED)
 Phase: All complete
 Plan: All complete
 Status: Milestone archived to `.planning/milestones/v0.4.2-{ROADMAP,REQUIREMENTS}.md`
-Last activity: 2026-06-14
+Last activity: 2026-06-17 — Completed quick task 20260617-demo-rework: realistic suturing demo with soft tissue, small needle, visible gripper jaws.
 
 Progress: ████████████████████████████████████████ 100%
 
@@ -83,6 +83,7 @@ Progress: ███████████████████████�
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260614-1 | Clean up pre-GSD files: archived STATUS, IMPLEMENTATION_PLAN, SOFTBODY_PLAN, superpowers/, root-level misc to .planning/milestones/v0.0.0-*. Fixed broken cross-refs in docs/README.md, docs/QUICK_REFERENCE.md, .planning/codebase/STRUCTURE.md | 2026-06-14 | (this commit) | (inline) |
+| 20260617-demo-rework | Reworked scenes/suturing_demo.json + scene_builder: soft FEM tissue (flexcomp), realistic needle (procedural thin-torus), visible gripper jaws. Updated demo banner. Added 3 regression tests. 1168/1168 tests pass. | 2026-06-17 | 9e11c3f | [20260617-demo-rework](./quick/20260617-demo-rework/) |
 
 ### Blockers/Concerns
 
