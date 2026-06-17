@@ -383,10 +383,13 @@ Examples:
     print(f"{'='*60}")
     print()
     print("  Task stages:")
-    print("    1. Approach the surgical needle")
-    print("    2. Grasp and pick up the needle")
-    print("    3. Drive the needle through both skin patches")
+    print("    1. Approach the curved surgical needle (thin-torus mesh)")
+    print("    2. Grasp and pick up the needle with the visible gripper jaws")
+    print("    3. Drive the needle through the soft skin patches (FEM flexcomp)")
     print("    4. Complete the suture connecting both patches")
+    print()
+    print("  Scene: soft tissue via flexcomp, needle via procedural generator,")
+    print("         gripper has visible jaw geoms.")
     print()
 
     # Load and display scene info

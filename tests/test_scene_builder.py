@@ -253,9 +253,7 @@ class TestRobotDofSplitting:
         robot = RobotConfig(
             name="surgical_arm_1",
             joints=joints,
-            end_effectors=[
-                EndEffectorConfig(name="needle_driver", type="needle_driver")
-            ],
+            end_effectors=[EndEffectorConfig(name="needle_driver", type="needle_driver")],
         )
         return SceneDefinition(metadata=Metadata(name="dof_split"), robots=[robot])
 
@@ -300,6 +298,7 @@ class TestRobotDofSplitting:
         tree. The chain structure (one body per joint) is well-conditioned.
         """
         import numpy as np
+
         builder = SceneBuilder(assets_dir=str(tmp_path))
         scene = self._seven_dof_scene()
         mjcf = builder.create_mjcf(scene, output_path=tmp_path / "scene.xml")
@@ -352,12 +351,12 @@ class TestLinkStaggering:
     """
 
     def _make_joint(self, name: str, link_length: float | None = None) -> JointConfig:
-        kwargs = dict(
-            name=name,
-            type=JointType.REVOLUTE,
-            limits=JointLimits(lower=-1.0, upper=1.0, effort=10.0, velocity=1.0),
-            damping=0.1,
-        )
+        kwargs: dict = {
+            "name": name,
+            "type": JointType.REVOLUTE,
+            "limits": JointLimits(lower=-1.0, upper=1.0, effort=10.0, velocity=1.0),
+            "damping": 0.1,
+        }
         if link_length is not None:
             kwargs["link_length"] = link_length
         return JointConfig(**kwargs)
@@ -384,9 +383,7 @@ class TestLinkStaggering:
         content = mjcf.read_text()
         expected_default = SceneBuilder.DEFAULT_LINK_LENGTH
         base_half_z = SceneBuilder.BASE_GEOM_HALF_Z
-        link_z = re.findall(
-            r'<body[^>]*name="arm_link(\d+)"[^>]*pos="([^"]+)"', content
-        )
+        link_z = re.findall(r'<body[^>]*name="arm_link(\d+)"[^>]*pos="([^"]+)"', content)
         assert len(link_z) == 7, f"expected 7 link bodies, got {link_z}"
 
         # XML pos attribute is the offset in the PARENT body frame, not
@@ -397,13 +394,10 @@ class TestLinkStaggering:
             n = int(name)
             x, y, z = (float(v) for v in pos.split())
             assert x == 0.0 and y == 0.0, f"link{name} should be on z axis, got pos={pos}"
-            if n == 1:
-                expected_z = base_half_z + expected_default
-            else:
-                expected_z = expected_default
-            assert abs(z - expected_z) < 1e-9, (
-                f"link{name} should be at z={expected_z} (parent-frame), got pos={pos}"
-            )
+            expected_z = base_half_z + expected_default if n == 1 else expected_default
+            assert (
+                abs(z - expected_z) < 1e-9
+            ), f"link{name} should be at z={expected_z} (parent-frame), got pos={pos}"
 
     def test_per_joint_link_length_overrides_default(self, tmp_path):
         """When JointConfig.link_length is set, that value (not the default) is used."""
@@ -423,9 +417,7 @@ class TestLinkStaggering:
 
         content = mjcf.read_text()
         base_half_z = SceneBuilder.BASE_GEOM_HALF_Z
-        link_z = dict(re.findall(
-            r'<body[^>]*name="arm_link(\d+)"[^>]*pos="([^"]+)"', content
-        ))
+        link_z = dict(re.findall(r'<body[^>]*name="arm_link(\d+)"[^>]*pos="([^"]+)"', content))
         # link1 offset in parent (root) frame = base_half_z + its own length
         assert float(link_z["1"].split()[2]) == base_half_z + 0.10
         # link2 offset in parent (link1) frame = its own length
@@ -475,8 +467,7 @@ class TestLinkStaggering:
             # one link (no overlap with neighbors).
             sx, sy, sz = (float(v) for v in size.split())
             assert sz == default_length / 2, (
-                f"link{n} geom z half-extent should be {default_length / 2}, "
-                f"got size={size}"
+                f"link{n} geom z half-extent should be {default_length / 2}, " f"got size={size}"
             )
 
     def test_chain_loads_and_joints_extend_visibly(self, tmp_path):
@@ -507,9 +498,9 @@ class TestLinkStaggering:
             assert joint_id >= 0, f"joint_{n} not found in model"
             anchor_z = float(data.xanchor[joint_id][2])
             expected_z = base_half_z + n * expected_default
-            assert abs(anchor_z - expected_z) < 1e-6, (
-                f"joint_{n} anchor at z={anchor_z}, expected {expected_z}"
-            )
+            assert (
+                abs(anchor_z - expected_z) < 1e-6
+            ), f"joint_{n} anchor at z={anchor_z}, expected {expected_z}"
 
     def test_zero_link_length_keeps_chain_but_no_visual_extent(self, tmp_path):
         """An explicit link_length=0 is permitted (a real zero-length joint)
@@ -580,17 +571,13 @@ class TestLinkStaggering:
 
         content = mjcf.read_text()
         # Base geom size (z half-extent)
-        base_size_re = re.search(
-            r'<geom\s+name="arm_base"[^>]*size="([^"]+)"', content
-        )
+        base_size_re = re.search(r'<geom\s+name="arm_base"[^>]*size="([^"]+)"', content)
         assert base_size_re, "base geom not found"
         base_z_half = float(base_size_re.group(1).split()[2])
         assert base_z_half == SceneBuilder.BASE_GEOM_HALF_Z
 
         # First link body offset (parent-frame z)
-        link1_re = re.search(
-            r'<body\s+name="arm_link1"[^>]*pos="([^"]+)"', content
-        )
+        link1_re = re.search(r'<body\s+name="arm_link1"[^>]*pos="([^"]+)"', content)
         assert link1_re, "link1 body not found"
         link1_z = float(link1_re.group(1).split()[2])
         default_length = SceneBuilder.DEFAULT_LINK_LENGTH
@@ -605,9 +592,9 @@ class TestLinkStaggering:
         # Base top in root frame = base_z_half. For no intersection:
         # link1_z > base_z_half, i.e. base_z_half + link_length > base_z_half.
         assert link1_z == base_z_half + default_length
-        assert link1_z > base_z_half, (
-            f"link1 at z={link1_z} should be above base top at z={base_z_half}"
-        )
+        assert (
+            link1_z > base_z_half
+        ), f"link1 at z={link1_z} should be above base top at z={base_z_half}"
 
     def test_suturing_demo_arm_does_not_intersect_workspace(self, tmp_path):
         """End-to-end: the actual suturing_demo scene must have zero
@@ -635,9 +622,8 @@ class TestLinkStaggering:
                 g1, g2 = data.contact[c].geom1, data.contact[c].geom2
                 n1 = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, g1) or ""
                 n2 = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, g2) or ""
-                arm_side = (
-                    ("link" in n1 and ("skin" in n2 or "curved" in n2))
-                    or ("link" in n2 and ("skin" in n1 or "curved" in n1))
+                arm_side = ("link" in n1 and ("skin" in n2 or "curved" in n2)) or (
+                    "link" in n2 and ("skin" in n1 or "curved" in n1)
                 )
                 if arm_side:
                     count += 1
@@ -654,8 +640,7 @@ class TestLinkStaggering:
         for _ in range(50):
             mujoco.mj_step(model, data)
         assert _count_arm_workspace_contacts() == 0, (
-            "arm intersects workspace after 50 gravity steps; chain "
-            "swing is too large"
+            "arm intersects workspace after 50 gravity steps; chain " "swing is too large"
         )
 
 
@@ -690,9 +675,9 @@ class TestControlModeActuators:
         content = mjcf.read_text()
         # Each joint should have a <position kp="..."> actuator.
         for j in ("joint_1", "joint_2", "joint_3"):
-            assert f'<position name="{j}_motor"' in content, (
-                f"missing position actuator for {j} in:\n{content}"
-            )
+            assert (
+                f'<position name="{j}_motor"' in content
+            ), f"missing position actuator for {j} in:\n{content}"
         # And the gripper too.
         assert '<position name="arm_gripper"' in content
         # No <motor> actuators for arm joints.
@@ -711,9 +696,7 @@ class TestControlModeActuators:
         mjcf = builder.create_mjcf(scene, output_path=tmp_path / "scene.xml")
         content = mjcf.read_text()
         for j in ("joint_1", "joint_2"):
-            assert f'<motor name="{j}_motor"' in content, (
-                f"missing motor actuator for {j}"
-            )
+            assert f'<motor name="{j}_motor"' in content, f"missing motor actuator for {j}"
 
     def test_velocity_mode_emits_velocity_actuators(self, tmp_path):
         """control_mode="velocity" must emit <velocity> actuators."""
@@ -728,9 +711,7 @@ class TestControlModeActuators:
         mjcf = builder.create_mjcf(scene, output_path=tmp_path / "scene.xml")
         content = mjcf.read_text()
         for j in ("joint_1", "joint_2"):
-            assert f'<velocity name="{j}_motor"' in content, (
-                f"missing velocity actuator for {j}"
-            )
+            assert f'<velocity name="{j}_motor"' in content, f"missing velocity actuator for {j}"
 
     def test_option_forwards_integrator_and_iterations(self, tmp_path):
         """PhysicsConfig.integrator and solver_iterations must reach <option>."""
@@ -759,3 +740,116 @@ def pytest_mujoco():
     import mujoco  # type: ignore[import-untyped]
 
     return mujoco
+
+
+class TestSuturingDemoSceneRealism:
+    """Regression tests for the realistic suturing demo scene.
+
+    The scene (`scenes/suturing_demo.json`) was reworked to be a
+    plausible surgical suturing setup: soft deformable skin patches
+    (FEM flexcomp), a small curved needle (procedural thin-torus
+    generator), and a visible needle-driver gripper on the arm.
+    These tests guard the three realism properties so a future
+    scene edit can't silently revert to rigid boxes and box-needle.
+    """
+
+    def test_suturing_demo_scene_soft_body_enabled(self):
+        """Both skin patches must have soft_body=True so the FEM path
+        triggers, and the instrument must be type='needle' so the
+        procedural thin-torus generator runs (not the 2x2x10cm box)."""
+        scene = SceneLoader().load("scenes/suturing_demo.json")
+        assert len(scene.tissues) == 2, f"expected 2 skin patches, got {len(scene.tissues)}"
+        for i, t in enumerate(scene.tissues):
+            assert t.soft_body is True, (
+                f"tissue {i} ({t.name}) is not soft_body=True; "
+                f"skin patches must use the FEM flexcomp path"
+            )
+        assert len(scene.instruments) == 1
+        assert scene.instruments[0].type.value == "needle", (
+            f"instrument type is {scene.instruments[0].type.value}, "
+            f"expected 'needle' (uses the procedural thin-torus "
+            f"generator with ~16mm arc and ~1.2mm wire)"
+        )
+
+    def test_suturing_demo_scene_mjcf_has_flexcomp(self, tmp_path):
+        """Building the suturing scene MJCF must produce a flexcomp
+        grid for each soft-body tissue and a body for the needle."""
+        scene = SceneLoader().load("scenes/suturing_demo.json")
+        builder = SceneBuilder(assets_dir=str(tmp_path))
+        mjcf = builder.create_mjcf(scene, output_path=tmp_path / "scene.xml")
+        content = mjcf.read_text()
+        # Two flexcomp blocks (one per skin patch) in the deformable
+        # body section. The soft_body=True setting on each tissue
+        # routes through _add_tissue_to_mjcf's flexcomp branch.
+        flexcomp_count = content.count("<flexcomp")
+        assert flexcomp_count == 2, (
+            f"expected 2 flexcomp blocks (one per soft-body tissue), "
+            f"got {flexcomp_count}. Check that both tissues have "
+            f"soft_body=True in scenes/suturing_demo.json."
+        )
+        # The needle body must be present (procedural generator
+        # produced a real mesh, not a 2x2x10cm box).
+        assert "curved_suturing_needle" in content, "needle body missing from generated MJCF"
+
+    def test_gripper_has_two_jaw_geoms(self, tmp_path):
+        """A robot with end_effectors must have two cylindrical jaw
+        geoms (left + right) attached to the last link body, both
+        with contype=0 conaffinity=0 (visual only — they must NOT
+        participate in MuJoCo contact dynamics)."""
+        from surg_rl.scene_definition import (
+            EndEffectorConfig,
+            JointConfig,
+            JointLimits,
+            JointType,
+            RobotConfig,
+        )
+        from surg_rl.simulators.scene_builder import SceneBuilder
+
+        joints = [
+            JointConfig(
+                name=f"j{i}",
+                type=JointType.REVOLUTE,
+                limits=JointLimits(lower=-1, upper=1, effort=10, velocity=1),
+                link_length=0.08,
+            )
+            for i in range(1, 4)
+        ]
+        robot = RobotConfig(
+            name="arm",
+            joints=joints,
+            end_effectors=[
+                EndEffectorConfig(
+                    name="gripper",
+                    type="gripper",
+                    max_aperture=0.05,
+                    force_limit=10,
+                )
+            ],
+        )
+        scene = SceneDefinition(metadata=Metadata(name="gripper"), robots=[robot])
+        builder = SceneBuilder(assets_dir=str(tmp_path))
+        mjcf = builder.create_mjcf(scene, output_path=tmp_path / "scene.xml")
+        content = mjcf.read_text()
+
+        import re
+
+        jaw_names = re.findall(r'name="(arm_gripper_jaw_[lr])"', content)
+        assert jaw_names == ["arm_gripper_jaw_l", "arm_gripper_jaw_r"], (
+            f"expected jaw geoms arm_gripper_jaw_l and arm_gripper_jaw_r "
+            f"in that order, got {jaw_names}"
+        )
+        # Both jaws must be visual-only (no contact participation).
+        # We look at the <geom> blocks for each jaw and check the
+        # contype/conaffinity attributes.
+        for side in ("l", "r"):
+            jaw_re = re.compile(
+                rf'<geom\s+name="arm_gripper_jaw_{side}"[^>]*contype="(\d+)"[^>]*conaffinity="(\d+)"',
+            )
+            match = jaw_re.search(content)
+            assert match is not None, f"jaw_{side} geom missing contype/conaffinity attributes"
+            contype, conaffinity = match.groups()
+            assert contype == "0" and conaffinity == "0", (
+                f"jaw_{side} has contype={contype} conaffinity={conaffinity}; "
+                f"jaws must be visual-only (contype=0 conaffinity=0) so they "
+                f"don't fight the gripper slide joint via contact dynamics"
+            )

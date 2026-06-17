@@ -1,11 +1,11 @@
 {
   "metadata": {
     "name": "Suturing Training Demo",
-    "description": "Multi-stage suturing task: pick up needle, suture two skin patches together",
+    "description": "Realistic suturing task: soft skin patches (FEM flexcomp), small curved needle (procedural thin-torus mesh), visible needle driver gripper jaws",
     "version": "1.0.0",
     "author": "SurgRL Team",
     "created": "2026-04-12",
-    "tags": ["suturing", "needle-pickup", "tissue-connection", "training"]
+    "tags": ["suturing", "needle-pickup", "tissue-connection", "training", "soft-body"]
   },
   "physics": {
     "gravity": [0.0, 0.0, -9.81],
@@ -108,6 +108,7 @@
       "name": "skin_patch_left",
       "type": "skin",
       "description": "Left skin patch to be sutured",
+      "soft_body": true,
       "geometry": {
         "primitive": "box",
         "dimensions": [0.08, 0.06, 0.008]
@@ -142,6 +143,7 @@
       "name": "skin_patch_right",
       "type": "skin",
       "description": "Right skin patch to be sutured",
+      "soft_body": true,
       "geometry": {
         "primitive": "box",
         "dimensions": [0.08, 0.06, 0.008]
@@ -176,21 +178,20 @@
   "instruments": [
     {
       "name": "curved_suturing_needle",
-      "type": "custom",
-      "description": "Curved suturing needle placed between tissue patches",
+      "type": "needle",
+      "description": "Curved suturing needle placed between tissue patches (procedural thin-torus fallback when assets/instruments/suturing_needle.obj is missing)",
       "mesh": {
         "path": "assets/instruments/suturing_needle.obj",
         "scale": [1.0, 1.0, 1.0]
       },
-      "dimensions": [0.012, 0.006, 0.002],
       "physics": {
         "mass": 0.001,
         "friction": 0.2,
         "damping": 0.01
       },
       "pose": {
-        "position": {"x": 0.0, "y": 0.05, "z": 0.41},
-        "orientation": {"w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0}
+        "position": {"x": 0.02, "y": 0.03, "z": 0.405},
+        "orientation": {"w": 0.707, "x": 0.0, "y": 0.707, "z": 0.0}
       },
       "sterile": true
     }

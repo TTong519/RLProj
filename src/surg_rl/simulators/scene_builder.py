@@ -712,7 +712,9 @@ f 5 4 8
         axis_cycle = ["0 0 1", "0 1 0", "1 0 0", "0 1 0", "0 0 1", "1 0 0"]
         geom_xy = self.DEFAULT_LINK_GEOM_XY
         current_parent: ET.Element = body
-        for j_idx, (jname, jtype, jrange, jdamping, _ignored_axis, link_length) in enumerate(joint_specs):
+        for j_idx, (jname, jtype, jrange, jdamping, _ignored_axis, link_length) in enumerate(
+            joint_specs
+        ):
             # Each link body is a child of the previous one (or the root for
             # the first link). Offset it along +z so the chain extends
             # visibly. The first link's offset is BASE_GEOM_HALF_Z +
@@ -722,11 +724,7 @@ f 5 4 8
             # mass and inertia are large enough (50 g, 1e-4 kg·m²) to be
             # numerically well-behaved under proportional or torque
             # control.
-            body_offset_z = (
-                self.BASE_GEOM_HALF_Z + link_length
-                if j_idx == 0
-                else link_length
-            )
+            body_offset_z = self.BASE_GEOM_HALF_Z + link_length if j_idx == 0 else link_length
             link_body = ET.SubElement(
                 current_parent,
                 "body",
@@ -780,7 +778,11 @@ f 5 4 8
                 )
             current_parent = link_body
 
-        # Gripper goes on the last (deepest) link body.
+        # Gripper goes on the last (deepest) link body. The slide joint
+        # alone provides a virtual jaw spacing (the controller moves
+        # the slide position to open / close); we add the visual jaw
+        # geoms in the next block so the viewer sees a real grasper
+        # at the end of the arm.
         if has_gripper:
             ET.SubElement(
                 current_parent,
@@ -791,6 +793,33 @@ f 5 4 8
                 range="0 0.05",
                 damping="0.1",
             )
+            # Two cylindrical "jaws" attached to the last link body, offset
+            # symmetrically in y so they form a V-shaped grasper. Sized
+            # for a small surgical needle driver: 3 mm radius, 15 mm
+            # half-height cylinders, gray (matches DEFAULT_COLORS
+            # ["instrument_forceps"]).
+            #
+            # The jaws are visual-only: ``contype="0" conaffinity="0"``
+            # excludes them from MuJoCo contact dynamics. The gripper
+            # slide joint already provides a virtual jaw spacing — if
+            # we gave the jaws their own collision geoms, the simplified
+            # contact model would let them push each other apart and
+            # fight the slide actuator. The visual aperture still
+            # changes with the slide position because the jaws are
+            # children of the parent body (which moves with the slide).
+            for side, y_offset in (("l", 0.005), ("r", -0.005)):
+                ET.SubElement(
+                    current_parent,
+                    "geom",
+                    name=f"{robot.name}_gripper_jaw_{side}",
+                    type="cylinder",
+                    size="0.003 0.0075 0",
+                    pos=f"0 {y_offset} 0.005",
+                    euler="0 0 0",
+                    rgba="0.5 0.5 0.5 1.0",
+                    contype="0",
+                    conaffinity="0",
+                )
 
         # Add actuators. The actuator type depends on ``robot.control_mode``:
         #
