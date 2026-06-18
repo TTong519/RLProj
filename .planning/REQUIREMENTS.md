@@ -105,20 +105,46 @@ Carried forward from v0.4.2 archive plus v0.5.0-specific exclusions:
 
 ## Traceability
 
-Empty initially — populated by gsd-roadmapper after roadmap approval.
+Populated by gsd-roadmapper 2026-06-18 — v0.5.0 roadmap drafted (Phases 31–35).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| _GUI-01..10_ | _Phase 33 (TBD)_ | _Pending_ |
-| _DEMO-01..05_ | _Phase 32 (TBD)_ | _Pending_ |
-| _DOC-01..05_ | _Phase 34 (TBD)_ | _Pending_ |
-| _DEBT-01..05_ | _Phase 31 (TBD)_ | _Pending_ |
-| _DEBT-06_ | _Phase 35 (TBD)_ | _Pending_ |
+| GUI-01 | Phase 33 | Pending |
+| GUI-02 | Phase 33 | Pending |
+| GUI-03 | Phase 33 | Pending |
+| GUI-04 | Phase 33 | Pending |
+| GUI-05 | Phase 33 | Pending |
+| GUI-06 | Phase 33 | Pending |
+| GUI-07 | Phase 33 | Pending |
+| GUI-08 | Phase 33 | Pending |
+| GUI-09 | Phase 33 | Pending |
+| GUI-10 | Phase 33 | Pending |
+| DEMO-01 | Phase 32 | Pending |
+| DEMO-02 | Phase 32 | Pending |
+| DEMO-03 | Phase 32 | Pending |
+| DEMO-04 | Phase 32 | Pending |
+| DEMO-05 | Phase 32 | Pending |
+| DOC-01 | Phase 34 | Pending |
+| DOC-02 | Phase 34 | Pending |
+| DOC-03 | Phase 34 | Pending |
+| DOC-04 | Phase 34 | Pending |
+| DOC-05 | Phase 34 | Pending |
+| DEBT-01 | Phase 31 | Pending |
+| DEBT-02 | Phase 31 | Pending |
+| DEBT-03 | Phase 31 | Pending |
+| DEBT-04 | Phase 31 | Pending |
+| DEBT-05 | Phase 31 | Pending |
+| DEBT-06 | Phase 35 | Pending |
 
 **Coverage:**
 - v1 requirements: 26 total (10 GUI + 5 DEMO + 5 DOC + 6 DEBT)
-- Mapped to phases: _TBD by gsd-roadmapper_
-- Unmapped: _TBD_
+- Mapped to phases: 26/26 ✓
+  - Phase 31 (Tech Debt Foundation): DEBT-01..05
+  - Phase 32 (Demo Suite Polish): DEMO-01..05
+  - Phase 33 (PySide6 Scene Editor): GUI-01..10
+  - Phase 34 (User-Facing Docs Refresh): DOC-01..05
+  - Phase 35 (Advanced Tech Debt): DEBT-06
+- Unmapped: 0
 
 ---
 

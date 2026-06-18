@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: Scene Editor & UX Polish
 status: planning
-stopped_at: Milestone v0.5.0 started via /gsd-new-milestone; defining requirements
+stopped_at: v0.5.0 roadmap drafted (Phases 31–35); ready for /gsd-plan-phase 31
 last_updated: "2026-06-18T00:00:00.000Z"
 last_activity: 2026-06-18
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,15 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-18 v0.5.0 milestone started)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** Defining v0.5.0 requirements and roadmap
+**Current focus:** Phase 31 (Tech Debt Foundation) — first of 5 phases in v0.5.0
 
 ## Current Position
 
 Milestone: v0.5.0 — Scene Editor & UX Polish (PLANNING 2026-06-18)
-Phase: Not started (defining requirements)
+Phase: 31 of 35 (Tech Debt Foundation) — ready to plan
 Plan: —
-Status: Defining requirements
-Last activity: 2026-06-18 — Started v0.5.0 milestone via /gsd-new-milestone; PySide6 scene editor (GUI), 3 demo suite polish, user-facing docs refresh, interleaved tech debt cleanup.
+Status: Roadmap drafted, awaiting /gsd-plan-phase 31
+Last activity: 2026-06-18 — Drafted v0.5.0 roadmap (5 phases: 31 Tech Debt Foundation → 32 Demo Suite Polish → 33 PySide6 Scene Editor [marquée] → 34 Docs Refresh → 35 Advanced Tech Debt); 26/26 v1 requirements mapped (10 GUI → 33, 5 DEMO → 32, 5 DOC → 34, 5 DEBT → 31, 1 DEBT → 35).
 
 Progress: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0%
 
@@ -52,7 +52,7 @@ Progress: ░░░░░░░░░░░░░░░░░░░░░░░�
 | v0.4.0 | 19–24 | 21 | 1,043 |
 | v0.4.1 | 25–28 | 4 | 1,053 |
 | v0.4.2 | 29–30 | 3 | 1,134 |
-| v0.5.0 | TBD | TBD | TBD |
+| v0.5.0 | 31–35 | TBD | TBD |
 
 ## Accumulated Context
 
@@ -73,10 +73,11 @@ Progress: ░░░░░░░░░░░░░░░░░░░░░░░�
 - [v0.4.2 Phase 29]: DifficultyLevel uses `_FloatMixin(float, Enum)` to make `DifficultyLevel.EASY == 0.0` True (no stdlib FloatEnum). Pydantic v2 cycle resolution pattern established: `from __future__ import annotations` + string forward-ref + late import + `Model.model_rebuild()`; plus lazy local import of `SceneLoader` inside `_load_scene()` to break the second cycle. Code review identified 3 MEDIUM future-hardening items: CurriculumScheduler.current_difficulty type lie, missing end-to-end env-construction test, and CurriculumStageConfig union not normalized at env. These are explicitly deferred per CONTEXT.md scope.
 - [v0.4.2 Phase 30]: DreamerV3 E2E test uses module-level `pytest.mark.skipif` evaluated at collection time; heavy imports live inside test methods to avoid macOS collection crash. Tests assert the EXPECTED `RuntimeError("Agent not configured")` from the Phase 24 `_build_agent` stub state — sentinel that will START FAILING when real dreamerv3 is integrated. macOS local: 3 SKIP, exit 0. CI GPU host: will run and document the stub state. No production code modified (smoke-test gap-closure only).
 - [v0.4.2 close]: Both phase verifications passed (6/6 + 10/10 must-haves). 11/11 v1 requirements satisfied. 0 partial, 0 deferred. 421 ruff issues in `src/surg_rl/dreamer/` and other tech debt items remain deferred to v0.5.0+ per user direction.
+- [v0.5.0 roadmap]: 5 phases (31–35) derived from 26 v1 requirements (10 GUI + 5 DEMO + 5 DOC + 6 DEBT). Marquée = PySide6 Scene Editor (Phase 33). Phase 31 = 5 quick-win DEBT items + `[gui]` extra + `surg-rl-gui` console script + mjpython helper so Phase 33 starts on a clean baseline. Phase 32 = `_common.py` refactor + 2 new demos + 3 regression tests + `NARRATION_TEMPLATE.md`. Phase 34 = README + CONTRIBUTING + CHANGELOG + 3 demo GIFs + 3 GUI screenshots (sequential after 32 + 33). Phase 35 = DEBT-06 (HARD-fixture integration test) + CurriculumStageConfig normalization + K8s PVC scaffolding + organ mesh licensing research spike (can run in parallel with 32–34 via worktrees).
 
 ### Pending Todos
 
-- None. v0.4.2 milestone archived. Next: `/gsd-new-milestone` to define v0.5.0 (questioning → research → requirements → roadmap).
+- None. v0.5.0 roadmap drafted; next: `/gsd-plan-phase 31` to begin Phase 31 (Tech Debt Foundation).
 
 ### Quick Tasks Completed
 
@@ -122,10 +123,10 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-14 (v0.4.2 close + pre-GSD archive cleanup)
-Stopped at: v0.4.2 archived; pre-GSD files archived to .planning/milestones/v0.0.0-*.md; ready for /gsd-new-milestone (v0.5.0)
-Resume file: .planning/milestones/v0.4.2-ROADMAP.md
+Last session: 2026-06-18 (v0.5.0 roadmap draft)
+Stopped at: v0.5.0 roadmap drafted (5 phases, 26/26 v1 requirements mapped); ready for /gsd-plan-phase 31
+Resume file: .planning/ROADMAP.md (v0.5.0 section)
 
 ---
 
-*Updated: 2026-06-14 — v0.4.2 milestone archived (8 milestones shipped total: 30 phases, 87 plans, 1,134 non-integration tests, 23/23 v1 requirements satisfied, 0 partial, 0 deferred)*
+*Updated: 2026-06-18 — v0.5.0 roadmap drafted (8 milestones shipped: 30 phases, 87 plans, 1,134 non-integration tests, 23/23 v0.4.0+ v1 requirements satisfied; v0.5.0 roadmap adds 5 phases / 26 new v1 requirements)*
