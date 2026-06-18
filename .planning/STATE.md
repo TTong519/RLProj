@@ -1,37 +1,37 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.4.2
-milestone_name: milestone
-status: archived
-stopped_at: Milestone v0.4.2 archived; ready for /gsd-new-milestone (v0.5.0)
-last_updated: "2026-06-14T21:00:00.000Z"
-last_activity: 2026-06-14
+milestone: v0.5.0
+milestone_name: Scene Editor & UX Polish
+status: planning
+stopped_at: Milestone v0.5.0 started via /gsd-new-milestone; defining requirements
+last_updated: "2026-06-18T00:00:00.000Z"
+last_activity: 2026-06-18
 progress:
-  total_phases: 2
-  completed_phases: 2
-  total_plans: 3
-  completed_plans: 3
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-14 post-v0.4.2 close)
+See: .planning/PROJECT.md (updated 2026-06-18 v0.5.0 milestone started)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** Planning next milestone — run `/gsd-new-milestone` to define v0.5.0
+**Current focus:** Defining v0.5.0 requirements and roadmap
 
 ## Current Position
 
-Milestone: v0.4.2 — Audit Leftovers (SHIPPED 2026-06-14, ARCHIVED)
-Phase: All complete
-Plan: All complete
-Status: Milestone archived to `.planning/milestones/v0.4.2-{ROADMAP,REQUIREMENTS}.md`
-Last activity: 2026-06-17 — Completed quick task 20260617-demo-rework: realistic suturing demo with soft tissue, small needle, visible gripper jaws.
+Milestone: v0.5.0 — Scene Editor & UX Polish (PLANNING 2026-06-18)
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-06-18 — Started v0.5.0 milestone via /gsd-new-milestone; PySide6 scene editor (GUI), 3 demo suite polish, user-facing docs refresh, interleaved tech debt cleanup.
 
-Progress: ████████████████████████████████████████ 100%
+Progress: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0%
 
 ## Performance Metrics
 

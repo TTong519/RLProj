@@ -12,7 +12,28 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 
 **Shipped v0.4.2** (2026-06-14) — Audit Leftovers. All v0.1.0 through v0.4.2 milestones shipped (8 milestones, 30 phases, 87 plans, 23/23 v1 requirements satisfied, 0 partial, 0 deferred). v0.4.2 closed the 2 residual v0.4.0 audit gaps (TASK-02 3-difficulty-levels + DreamerV3 real-subprocess E2E) with 2 surgical phases (3 plans).
 
-## Current Milestone: v0.4.2 Audit Leftovers (SHIPPED 2026-06-14)
+**Active v0.5.0** (2026-06-18) — Scene Editor & UX Polish (PLANNING). Phase 31+ roadmap being defined via `/gsd-new-milestone`. Marquée: PySide6 GUI scene editor (3D viewport + tree/form editor + LLM-prompt-to-JSON). Supporting: 3 polished task demos (suturing + knot-tying + needle-passing), user-facing docs refresh (README + CONTRIBUTING + CHANGELOG), interleaved tech debt cleanup (421 ruff, HARD fixture test, fluid step hook, cut cooldown, Dockerfile.ros2 amd64, PhiFlow union workaround).
+
+## Current Milestone: v0.5.0 Scene Editor & UX Polish (PLANNING 2026-06-18)
+
+**Goal:** Ship a full PySide6 scene editor (3D viewport + tree/form editor + LLM-prompt-to-JSON), polish 3 surgical task demos (suturing, knot-tying, needle-passing) with consistent narration and walkthroughs, refresh user-facing docs (README, CONTRIBUTING, CHANGELOG), and interleave tech debt cleanup (421 ruff issues, HARD fixture test, fluid step hook, cut cooldown test, Dockerfile.ros2 amd64, PhiFlow multi-obstacle union() workaround). Marquée feature is the GUI editor; demos and docs support adoption.
+
+**Target features:**
+- **PySide6 Scene Editor** — full GUI with 3D viewport (MuJoCo/PyBullet OpenGL context), tree+form property editor, LLM-prompt-to-JSON via existing `scene_generation/text_parser.py`, save/load `.planning/scenes/*.json`, optional dependency group `[gui]`
+- **Demo suite polish (3 demos)** — suturing (already 1168-test clean from quick 20260617-demo-rework), knot-tying (new), needle-passing (new); consistent narration, demo banner, README walkthrough, regression test per demo
+- **User-facing docs refresh** — README rewrite with screenshots/GIFs of GUI and demos, CONTRIBUTING.md overhaul, CHANGELOG entry, demo transcripts; no deep API tutorials (deferred to v0.6.0)
+- **Tech debt cleanup (interleaved with features)** — 421 ruff in `src/surg_rl/dreamer/` (F841/B904/E402), HARD-fixture env-construction integration test, fluid step hook in `base_simulator.py`, cut cooldown unit test, Dockerfile.ros2 amd64 hardcode fix, PhiFlow multi-obstacle union() workaround; deferred items: K8s PVC e2e, organ mesh licensing research, 3D fluid flag, per-tet generation counter
+
+**Phase ordering (planned):**
+1. **Tech debt foundation** — ruff cleanup, Dockerfile.ros2 amd64 fix, fluid step hook, cut cooldown test, PhiFlow union workaround; one phase to retire quick-win debt so feature work starts clean
+2. **Demo suite polish** — 3 demos (suturing + knot-tying + needle-passing), consistent narration, README walkthrough sections
+3. **PySide6 Scene Editor** — full GUI (3D viewport + tree/form editor + LLM-prompt-to-JSON); marquee phase
+4. **User-facing docs refresh** — README, CONTRIBUTING, CHANGELOG; screenshot capture during Phase 3; transcript from Phase 2 demos
+5. **Advanced tech debt** — HARD-fixture integration test, K8s PVC e2e scaffolding, organ mesh licensing research spike
+
+**Key context:** Phase 30 stub-state sentinel flips when real dreamerv3 is integrated (carries forward, NOT in v0.5.0 scope). Existing DifficultyLevel enum (EASY/MEDIUM/HARD), 6 task types, PettingZoo MultiAgentSurgicalEnv, ExperimentRunner benchmarking, and DreamerV3 stub from v0.4.0–v0.4.2 all carry forward unchanged. Optional dependency group `[gui]` keeps PySide6 install optional; CLI remains the primary entry point for headless servers.
+
+### Previous Milestone: v0.4.2 Audit Leftovers (SHIPPED 2026-06-14)
 
 **Goal:** Close the 2 remaining items deferred from the v0.4.0 audit gap closure milestone: TASK-02 3-difficulty-levels (easy/medium/hard presets) and DreamerV3 real-subprocess E2E test. Pure gap-closure — no new features, only the missing presets + a real subprocess smoke test for the Phase 26 DreamerV3 fixes.
 
@@ -126,7 +147,7 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 
 ### Active (v0.5.0+)
 
-_None yet — use `/gsd-new-milestone` to define v0.5.0 requirements._
+_(being defined — see `.planning/REQUIREMENTS.md` after this milestone initialization completes)_
 
 ### Out of Scope
 
@@ -157,7 +178,7 @@ _None yet — use `/gsd-new-milestone` to define v0.5.0 requirements._
 | v0.4.0 | 19–24 | 21 | Complete |
 | v0.4.1 | 25–28 | 4 | Complete |
 | v0.4.2 | 29–30 | 3 | Complete |
-| v0.5.0 | TBD | TBD | Planning |
+| v0.5.0 | TBD | TBD | Planning (Scene Editor & UX Polish) |
 
 ## Context
 
@@ -224,4 +245,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-06-14 after v0.4.2 milestone archive*
+*Last updated: 2026-06-18 — v0.5.0 milestone initiated (Scene Editor & UX Polish, PLANNING)*
