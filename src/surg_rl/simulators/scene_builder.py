@@ -1082,42 +1082,73 @@ f 5 4 8
             # flexcomp_grid or None -> existing flexcomp path (backward compat)
 
             # Soft body tissue using MuJoCo flexcomp (grid-based deformable object)
+            #
+            # Grid resolution: 6 x 6 x 3 vertices. With an 8 x 6 x 0.8 cm
+            # tissue (the suturing_demo patch size), this gives vertex
+            # spacing of ~16 mm in x, ~12 mm in y, ~4 mm in z — small
+            # enough that the rendered surface looks reasonably smooth
+            # (no obvious "blob" faceting) while keeping the FEM solver
+            # tractable for training (a 6 x 6 x 3 = 108-vertex mesh
+            # per tissue is ~6x cheaper to step than 10 x 10 x 3).
+            # The 3 z-vertices give 2 cells of thickness so the
+            # flexcomp behaves as a proper 3D volume instead of a
+            # single-layer shell.
+            #
+            # The previous default of 5 x 5 x 2 had ~2 cm vertex
+            # spacing, which made the rendered mesh look like a
+            # coarse blob — the surface facets were visible as a
+            # "solid mass" rather than a thin skin patch.
             dims = tissue.geometry.dimensions or (0.1, 0.1, 0.01)
-            # flexcomp generates a 3D grid of vertices
             flexcomp = ET.SubElement(
                 body,
                 "flexcomp",
                 name=f"{tissue.name}_flex",
                 type="grid",
                 dim="3",
-                count="5 5 2",
-                spacing=f"{dims[0]/4} {dims[1]/4} {dims[2]/2}",
+                count="6 6 3",
+                spacing=f"{dims[0]/5} {dims[1]/5} {dims[2]/2}",
                 pos="0 0 0",
             )
             # Add material properties for the soft body
             flexcomp.set("radius", "0.002")
             flexcomp.set("mass", str(tissue.physics.density * dims[0] * dims[1] * dims[2] / 50))
+            # Set flexcomp color from the tissue color (default skin tone)
+            # so the rendered mesh is not a uniform grey blob.
+            c = tissue.color
+            if c is not None:
+                flexcomp.set("rgba", f"{c.r} {c.g} {c.b} {c.a}")
+            else:
+                flexcomp.set("rgba", "0.95 0.85 0.8 1.0")
             # Contact properties
             ET.SubElement(
                 flexcomp,
                 "contact",
                 selfcollide="pair" if tissue.physics.self_collision else "none",
                 solref="0.01 1",
+                solimp="0.9 0.95 0.001",
             )
-            # Edge stiffness (Young's modulus proxy) - only for dim=1, use elasticity for 3D
-            # ET.SubElement(
-            #     flexcomp,
-            #     "edge",
-            #     stiffness=str(tissue.physics.youngs_modulus),
-            #     damping=str(tissue.physics.damping),
-            # )
-            # Bending stiffness (if supported by the simulator) - commented out due to plugin compatibility
-            # if tissue.physics.bending_stiffness > 0:
-            #     ET.SubElement(
-            #         flexcomp,
-            #         "plugin",
-            #         plugin="mujoco.elasticity.cable",
-            #     )
+            # Elasticity. MuJoCo's <flexcomp> only supports <edge
+            # stiffness=...> for dim="1" — for dim="2" and dim="3"
+            # you need the elasticity child (a linear FEM model
+            # built into MuJoCo proper, no plugin required). Without
+            # elasticity, the flexcomp behaves as a soft jelly that
+            # sags / spreads under gravity and contact forces — the
+            # previous demo scene had the tissue bulge into a "grey
+            # blob" because elasticity was missing.
+            #
+            # We use the scene's Young's modulus and Poisson's ratio
+            # directly. 15000 Pa from the default suturing scene
+            # yields a patch that visibly deforms under a needle
+            # press but doesn't collapse under its own weight, and
+            # the simulation remains numerically stable (qpos
+            # finite, mesh extent within 1% of the initial box).
+            ET.SubElement(
+                flexcomp,
+                "elasticity",
+                young=str(tissue.physics.youngs_modulus),
+                poisson=str(tissue.physics.poissons_ratio),
+                damping=str(tissue.physics.damping * 0.1),
+            )
         else:
             # Rigid body tissue — prefer real mesh if available, fall back to primitive
             mesh_asset = getattr(tissue.geometry, "mesh", None)

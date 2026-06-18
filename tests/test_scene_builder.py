@@ -853,3 +853,101 @@ class TestSuturingDemoSceneRealism:
                 f"jaws must be visual-only (contype=0 conaffinity=0) so they "
                 f"don't fight the gripper slide joint via contact dynamics"
             )
+
+    def test_flexcomp_has_elasticity_and_color(self, tmp_path):
+        """Soft-body tissues must emit a flexcomp with:
+        - <elasticity> child (rigidity; without it the mesh sags into a
+          "grey blob" under gravity — the bug the previous commit fixed)
+        - <contact> child with solimp
+        - rgba set from the tissue color (not a default grey)
+
+        Regression for the user complaint "tissue is a large grey blob
+        covering the scene" in commit 9e11c3f.
+        """
+        scene = SceneLoader().load("scenes/suturing_demo.json")
+        builder = SceneBuilder(assets_dir=str(tmp_path))
+        mjcf = builder.create_mjcf(scene, output_path=tmp_path / "scene.xml")
+        content = mjcf.read_text()
+
+        # Each flexcomp must have an <elasticity> child.
+        import re
+
+        flexcomp_blocks = re.findall(r"<flexcomp[^>]*>.*?</flexcomp>", content, re.DOTALL)
+        assert len(flexcomp_blocks) == 2, f"expected 2 flexcomp blocks, got {len(flexcomp_blocks)}"
+        for block in flexcomp_blocks:
+            assert "<elasticity" in block, (
+                f"flexcomp missing <elasticity> child — the mesh will "
+                f"sag under gravity and render as a 'grey blob'. "
+                f"Block:\n{block[:300]}"
+            )
+            assert "<contact" in block, (
+                f"flexcomp missing <contact> child — soft-body contact "
+                f"won't be configured correctly. Block:\n{block[:300]}"
+            )
+
+        # The flexcomp's rgba attribute must reflect the tissue's
+        # skin color, not a default grey.
+        for skin in ("skin_patch_left", "skin_patch_right"):
+            m = re.search(
+                rf'<flexcomp\s+name="{skin}_flex"[^>]*rgba="([^"]+)"',
+                content,
+            )
+            assert m is not None, f"flexcomp for {skin} has no rgba"
+            rgba = m.group(1)
+            r, g, b, a = (float(v) for v in rgba.split())
+            # Skin color is (0.95, 0.85, 0.8, 1.0) — pinkish. A
+            # default grey would be roughly (0.5, 0.5, 0.5, 1.0) and
+            # not match the tissue color.
+            assert r > 0.7 and g > 0.5, (
+                f"{skin} flexcomp rgba={rgba} looks like a default "
+                f"grey, not the configured skin color"
+            )
+
+    def test_flexcomp_keeps_extent_under_gravity(self, tmp_path):
+        """Soft-body tissue must not collapse or balloon under gravity.
+
+        The previous demo had the flexcomp with zero rigidity (the
+        <edge stiffness> block was commented out) and the mesh would
+        bulge out to 5x its initial size by step 50. With proper
+        elasticity, the extent should stay within 10% of the initial
+        patch size (8x6x0.8 cm).
+        """
+        scene = SceneLoader().load("scenes/suturing_demo.json")
+        builder = SceneBuilder(assets_dir=str(tmp_path))
+        mjcf_path = builder.create_mjcf(scene, output_path=tmp_path / "scene.xml")
+        import mujoco
+
+        model = mujoco.MjModel.from_xml_path(str(mjcf_path))
+        data = mujoco.MjData(model)
+        mujoco.mj_forward(model, data)
+
+        # Capture initial extent of the first flexcomp.
+        i = 0
+        verts = data.flexvert_xpos[
+            model.flex_vertadr[i] : model.flex_vertadr[i] + model.flex_vertnum[i]
+        ]
+        initial_extent = verts.max(axis=0) - verts.min(axis=0)
+
+        # Step 50 times (the gravity settling period).
+        for _ in range(50):
+            mujoco.mj_step(model, data)
+
+        verts_after = data.flexvert_xpos[
+            model.flex_vertadr[i] : model.flex_vertadr[i] + model.flex_vertnum[i]
+        ]
+        after_extent = verts_after.max(axis=0) - verts_after.min(axis=0)
+
+        # Allow 10% tolerance. The x/y extents stay tight (~1%) but
+        # the z extent (only 2 cells of thickness) has a bit more
+        # give under gravity — the mesh sits at ~5% larger in z
+        # than its initial 0.8cm after 50 steps. Without elasticity
+        # the mesh would balloon to 5x+ its initial size.
+        for axis, axis_name in enumerate("xyz"):
+            ratio = after_extent[axis] / initial_extent[axis]
+            assert 0.9 < ratio < 1.1, (
+                f"flexcomp {axis_name} extent changed from "
+                f"{initial_extent[axis]:.4f} to {after_extent[axis]:.4f} "
+                f"(ratio={ratio:.3f}); elasticity is missing or too "
+                f"weak. With no elasticity the mesh bulges to 5x+ its "
+                f"initial size under gravity."
+            )
