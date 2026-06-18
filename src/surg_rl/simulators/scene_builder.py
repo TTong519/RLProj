@@ -1098,6 +1098,13 @@ f 5 4 8
             # spacing, which made the rendered mesh look like a
             # coarse blob — the surface facets were visible as a
             # "solid mass" rather than a thin skin patch.
+            #
+            # The contact radius is set to 0.1 mm (well below the
+            # default 2 mm) because the contact spheres are rendered
+            # in the default dark-brown contact color, not the
+            # flexcomp's own rgba. A larger contact radius would
+            # dominate the visual and make the tissue look like a
+            # brown vertical pillar instead of a thin skin patch.
             dims = tissue.geometry.dimensions or (0.1, 0.1, 0.01)
             flexcomp = ET.SubElement(
                 body,
@@ -1109,8 +1116,19 @@ f 5 4 8
                 spacing=f"{dims[0]/5} {dims[1]/5} {dims[2]/2}",
                 pos="0 0 0",
             )
-            # Add material properties for the soft body
-            flexcomp.set("radius", "0.002")
+                        # Add material properties for the soft body
+            #
+            # Radius: a tiny 0.1 mm value (0.0001 m) instead of the
+            # 2 mm (0.002 m) default. The radius attribute in MuJoCo's
+            # <flexcomp> doubles as the contact-sphere radius — with
+            # 6 x 6 x 3 = 108 vertices, a 2 mm contact shell makes the
+            # mesh look 4x its surface area in the rendered scene, and
+            # the contact spheres are drawn in the default contact
+            # color (dark brown), not the skin color. A 0.1 mm radius
+            # keeps the contact physics intact (vertices can still
+            # detect intersections) while making the visualization
+            # show the smooth surface in the configured flex_rgba.
+            flexcomp.set("radius", "0.0001")
             flexcomp.set("mass", str(tissue.physics.density * dims[0] * dims[1] * dims[2] / 50))
             # Set flexcomp color from the tissue color (default skin tone)
             # so the rendered mesh is not a uniform grey blob.
