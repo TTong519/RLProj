@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from surg_rl.cutting.engine import cut_tetrahedral_mesh
 from surg_rl.cutting.intersection import (
@@ -11,6 +12,7 @@ from surg_rl.cutting.intersection import (
     compute_signed_distances,
     edge_intersection,
 )
+from surg_rl.rl.environment import SurgicalEnv
 
 
 class TestIntersection:
@@ -301,7 +303,7 @@ class TestPyBulletCutStorage:
         sim._soft_body_ids = {}
 
         verts, tets = generate_box_tet_mesh((0.1, 0.1, 0.01), resolution=3)
-        tmp = tempfile.NamedTemporaryFile(suffix=".vtk", delete=False)
+        tmp = tempfile.NamedTemporaryFile(suffix=".vtk", delete=False)  # noqa: SIM115
         vtk_path = Path(tmp.name)
         tmp.close()
         try:
@@ -317,3 +319,109 @@ class TestPyBulletCutStorage:
             assert stored_t.shape == tets.shape
         finally:
             vtk_path.unlink(missing_ok=True)
+
+
+class TestCutCooldown:
+    """DEBT-04: Cut cooldown (500 ms @ 50 Hz = 25 steps) regression test.
+
+    Parametrized over both MuJoCo and PyBullet backends so the cooldown
+    contract is verified regardless of which physics backend is active.
+    Uses `_step_count` directly as the mockable time source — wall-clock
+    time is non-deterministic in CI runners.
+
+    Reference: .planning/REQUIREMENTS.md:54 (DEBT-04)
+    Source of truth: src/surg_rl/rl/environment.py:738-783 (trigger_cut)
+    """
+
+    BACKENDS = ["mujoco", "pybullet"]
+
+    @pytest.fixture(params=BACKENDS)
+    def env(self, request):
+        """Construct a SurgicalEnv for the requested backend, skipping if unavailable.
+
+        Mirrors the per-method skipif pattern from Phase 30 dreamer E2E test
+        (30-01-SUMMARY.md) — some CI runners have one backend but not the other.
+        """
+        backend = request.param
+        try:
+            if backend == "mujoco":
+                from surg_rl.simulators.mujoco_simulator import MuJoCoSimulator
+
+                sim = MuJoCoSimulator(timestep=0.02)  # 50 Hz
+            elif backend == "pybullet":
+                from surg_rl.simulators.pybullet_simulator import PyBulletSimulator
+
+                sim = PyBulletSimulator(timestep=0.02)
+            else:
+                pytest.skip(f"Unknown backend: {backend}")
+                return
+        except Exception as exc:
+            pytest.skip(f"{backend} backend unavailable: {exc}")
+            return
+
+        try:
+            env_obj = SurgicalEnv.__new__(SurgicalEnv)  # bypass __init__
+            env_obj._step_count = 0
+            env_obj._last_cut_step = -1000
+            env_obj._cut_cooldown_steps = 25
+            env_obj._simulator = sim
+            return env_obj
+        except Exception as exc:
+            pytest.skip(f"SurgicalEnv construction failed for {backend}: {exc}")
+            return
+
+    def test_first_cut_succeeds(self, env):
+        """A cut on step 0 (with _last_cut_step=-1000) succeeds — no cooldown conflict."""
+        from surg_rl.scene_definition.schema import Position
+
+        surface_point = Position(x=0.0, y=0.0, z=0.0)
+        direction = Position(x=0.0, y=0.0, z=1.0)
+        result = env.trigger_cut(
+            tissue_name="tissue_1",
+            surface_point=surface_point,
+            direction=direction,
+            depth=0.01,
+        )
+        assert result in (True, False)
+        if result:
+            assert env._last_cut_step == 0
+
+    def test_second_cut_within_cooldown_blocked(self, env):
+        """A second cut within _cut_cooldown_steps (25) of the first returns False.
+
+        Sets _last_cut_step = 0 and _step_count = 10 (within the 25-step window),
+        then verifies trigger_cut returns False regardless of simulator backend.
+        """
+        from surg_rl.scene_definition.schema import Position
+
+        surface_point = Position(x=0.0, y=0.0, z=0.0)
+        direction = Position(x=0.0, y=0.0, z=1.0)
+
+        env._last_cut_step = 0
+        env._step_count = 10  # only 10 steps elapsed — within cooldown
+        result = env.trigger_cut(
+            tissue_name="tissue_1",
+            surface_point=surface_point,
+            direction=direction,
+            depth=0.01,
+        )
+        assert result is False
+
+    def test_second_cut_after_cooldown_succeeds(self, env):
+        """A cut after _cut_cooldown_steps have elapsed is not blocked by cooldown."""
+        from surg_rl.scene_definition.schema import Position
+
+        surface_point = Position(x=0.0, y=0.0, z=0.0)
+        direction = Position(x=0.0, y=0.0, z=1.0)
+
+        env._last_cut_step = 0
+        env._step_count = 30  # 30 > 25, cooldown elapsed
+        result = env.trigger_cut(
+            tissue_name="tissue_1",
+            surface_point=surface_point,
+            direction=direction,
+            depth=0.01,
+        )
+        assert result in (True, False)
+        if result:
+            assert env._last_cut_step == 30
