@@ -1250,6 +1250,22 @@ class MuJoCoSimulator(BaseSimulator):
         except (ValueError, KeyError):
             return False
 
+    def fluid_step(self, dt: float | None = None) -> None:
+        """Per-step fluid simulation hook (MuJoCo override).
+
+        MuJoCo has no native Eulerian fluid solver, so this is an explicit
+        no-op override. Fluid simulation is delegated to
+        ``surg_rl.fluids.FluidSimulator`` (PhiFlow) and driven by
+        ``SurgicalEnv.step()`` directly via ``env._fluid_simulator.step()``.
+
+        Args:
+            dt: Ignored. MuJoCo has no fluid state to advance.
+
+        Returns:
+            None.
+        """
+        return None
+
     # ------------------------------------------------------------------ #
     #  Viewer methods (non-blocking passive viewer + background thread)
     # ------------------------------------------------------------------ #

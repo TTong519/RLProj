@@ -333,6 +333,29 @@ class BaseSimulator(ABC):
         """
         pass
 
+    def fluid_step(self, dt: float | None = None) -> None:
+        """Per-step fluid simulation hook. Default: no-op.
+
+        Subclasses with native fluid support (e.g., a future MuJoCoMPM-fluid
+        backend) should override this to advance their internal fluid state
+        by ``dt`` seconds. The default implementation is a no-op because
+        MuJoCo and PyBullet have no built-in Eulerian fluid solver; fluid
+        simulation in surg-rl today is delegated to ``FluidSimulator``
+        (PhiFlow) and driven by ``SurgicalEnv.step()`` directly via
+        ``env._fluid_simulator.step()``.
+
+        Args:
+            dt: Simulation timestep in seconds. ``None`` means "use the
+                simulator's default timestep" — interpretation is backend-
+                specific. MuJoCo and PyBullet ignore this argument.
+
+        Returns:
+            None. Subclasses with native fluid support should compute the
+            per-step fluid update as a side effect and may return forces or
+            velocity fields via separate APIs (not via this method's return).
+        """
+        return None
+
     # Optional methods with default implementations
 
     def get_robot_state(self, robot_name: str) -> np.ndarray | None:

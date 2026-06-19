@@ -724,6 +724,13 @@ class SurgicalEnv(gym.Env):
             if self._step_count % fluid_interval == 0:
                 self._fluid_simulator.step()
 
+        # Invoke per-simulator fluid hook (DEBT-03 — currently no-op for MuJoCo/PyBullet)
+        # Subclasses with native fluid support override fluid_step() in their backend.
+        if self._simulator is not None:
+            self._simulator.fluid_step(
+                self._scene.physics.timestep if self._scene and self._scene.physics else 0.002
+            )
+
         # Publish joint state via ROS2 bridge (D-19: every step)
         if self._bridge is not None:
             sim_state = self._simulator.get_state()
