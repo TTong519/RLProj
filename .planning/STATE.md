@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: Scene Editor & UX Polish
-status: planning
-stopped_at: v0.5.0 roadmap drafted (Phases 31–35); ready for /gsd-plan-phase 31
-last_updated: "2026-06-18T00:00:00.000Z"
+status: shipped
+stopped_at: Phase 31 complete (4/4 plans done, 5/5 DEBT requirements closed)
+last_updated: "2026-06-18T02:00:00.000Z"
 last_activity: 2026-06-18
 progress:
   total_phases: 5
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  completed_phases: 1
+  total_plans: 4
+  completed_plans: 4
+  percent: 25
 ---
 
 # Project State
@@ -25,13 +25,13 @@ See: .planning/PROJECT.md (updated 2026-06-18 v0.5.0 milestone started)
 
 ## Current Position
 
-Milestone: v0.5.0 — Scene Editor & UX Polish (PLANNING 2026-06-18)
-Phase: 31 of 35 (Tech Debt Foundation) — ready to plan
-Plan: —
-Status: Roadmap drafted, awaiting /gsd-plan-phase 31
-Last activity: 2026-06-18 — Drafted v0.5.0 roadmap (5 phases: 31 Tech Debt Foundation → 32 Demo Suite Polish → 33 PySide6 Scene Editor [marquée] → 34 Docs Refresh → 35 Advanced Tech Debt); 26/26 v1 requirements mapped (10 GUI → 33, 5 DEMO → 32, 5 DOC → 34, 5 DEBT → 31, 1 DEBT → 35).
+Milestone: v0.5.0 — Scene Editor & UX Polish (EXECUTING 2026-06-18)
+Phase: 31 of 35 (Tech Debt Foundation) — SHIPPED ✓
+Plan: 4/4 complete (31-01, 31-02, 31-03, 31-04)
+Status: Phase 31 shipped — 5/5 DEBT requirements closed, 4 plans complete, test baseline 1134→1200 (+66)
+Last activity: 2026-06-18 — Executed 4 plans in Wave 1: (1) ruff cleanup + multi-arch Dockerfile, (2) cut cooldown test + PhiFlow docstring, (3) fluid_step hook + env wiring, (4) GUI scaffolding ([gui] extra + surg-rl-gui + editor package). 1200 tests pass, 17 skip, 0 fail.
 
-Progress: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0%
+Progress: ████████░░░░░░░░░░░░░░░░░░░░░░░░░ 25%
 
 ## Performance Metrics
 
@@ -52,7 +52,8 @@ Progress: ░░░░░░░░░░░░░░░░░░░░░░░�
 | v0.4.0 | 19–24 | 21 | 1,043 |
 | v0.4.1 | 25–28 | 4 | 1,053 |
 | v0.4.2 | 29–30 | 3 | 1,134 |
-| v0.5.0 | 31–35 | TBD | TBD |
+| v0.5.0 | 31 | 4 | 1,200 |
+| v0.5.0 | 32–35 | TBD | TBD |
 
 ## Accumulated Context
 
@@ -74,10 +75,11 @@ Progress: ░░░░░░░░░░░░░░░░░░░░░░░�
 - [v0.4.2 Phase 30]: DreamerV3 E2E test uses module-level `pytest.mark.skipif` evaluated at collection time; heavy imports live inside test methods to avoid macOS collection crash. Tests assert the EXPECTED `RuntimeError("Agent not configured")` from the Phase 24 `_build_agent` stub state — sentinel that will START FAILING when real dreamerv3 is integrated. macOS local: 3 SKIP, exit 0. CI GPU host: will run and document the stub state. No production code modified (smoke-test gap-closure only).
 - [v0.4.2 close]: Both phase verifications passed (6/6 + 10/10 must-haves). 11/11 v1 requirements satisfied. 0 partial, 0 deferred. 421 ruff issues in `src/surg_rl/dreamer/` and other tech debt items remain deferred to v0.5.0+ per user direction.
 - [v0.5.0 roadmap]: 5 phases (31–35) derived from 26 v1 requirements (10 GUI + 5 DEMO + 5 DOC + 6 DEBT). Marquée = PySide6 Scene Editor (Phase 33). Phase 31 = 5 quick-win DEBT items + `[gui]` extra + `surg-rl-gui` console script + mjpython helper so Phase 33 starts on a clean baseline. Phase 32 = `_common.py` refactor + 2 new demos + 3 regression tests + `NARRATION_TEMPLATE.md`. Phase 34 = README + CONTRIBUTING + CHANGELOG + 3 demo GIFs + 3 GUI screenshots (sequential after 32 + 33). Phase 35 = DEBT-06 (HARD-fixture integration test) + CurriculumStageConfig normalization + K8s PVC scaffolding + organ mesh licensing research spike (can run in parallel with 32–34 via worktrees).
+- [v0.5.0 Phase 31]: All 5 DEBT-01..05 requirements closed (ruff cleanup 10→0 issues in `src/surg_rl/dreamer/`; Dockerfile.ros2 multi-arch via `$TARGETARCH`; BaseSimulator.fluid_step hook with MuJoCo/PyBullet overrides + env wiring + 5 tests; TestCutCooldown parametrized over both backends with 6 collected tests; PhiFlow multi-obstacle `union()` workaround documented at module level with upstream link). Phase 31 also shipped GUI scaffolding for Phase 33: `[gui]` optional-dependency group (PySide6>=6.8.0,<7.0 + markdown-it-py>=3.0.0), `surg-rl-gui` console-script entry as separate from `surg-rl` CLI, `surg_rl.editor` package with `LazyImport` + `HAS_GUI` sentinel, `_is_running_under_mjpython()` + `_ensure_mjpython_or_warn()` helpers extracted from `mujoco_simulator.py:1294-1298`, `surg_rl.editor.app.main()` install-hint entrypoint, and 19-test regression suite in `tests/test_gui_scaffold.py`. Test baseline: 1134→1200 passed (+66 new), 17 skipped, 0 failed.
 
 ### Pending Todos
 
-- None. v0.5.0 roadmap drafted; next: `/gsd-plan-phase 31` to begin Phase 31 (Tech Debt Foundation).
+- None. v0.5.0 Phase 31 complete; next: `/gsd-execute-phase 32` (Demo Suite Polish) — independent of Phase 33; can also run in parallel with Phase 35 via worktrees.
 
 ### Quick Tasks Completed
 
@@ -108,12 +110,12 @@ Items acknowledged and carried forward from previous milestone close:
 | Phase 29 | CurriculumStageConfig.difficulty normalization at env-construction | Deferred (code review WR-03) | v0.4.2 |
 | Phase 30 | Stub-state sentinel flip when real dreamerv3 is integrated (replaces `_build_agent`) | Deferred | v0.4.2 |
 | Phase 17 | Per-tet generation counter for degenerate tets | Deferred | v0.3.2 |
-| Phase 17 | Cut cooldown unit test | Deferred | v0.3.2 |
-| Phase 18 | Fluid step hook in base_simulator.py | Deferred | v0.3.2 |
-| Config | PhiFlow multi-obstacle union() workaround | Documented pitfall | v0.3.2 |
+| Phase 17 | Cut cooldown unit test | **Closed in Phase 31 (TestCutCooldown x 2 backends)** | v0.3.2 |
+| Phase 18 | Fluid step hook in base_simulator.py | **Closed in Phase 31 (BaseSimulator.fluid_step + overrides + env wiring)** | v0.3.2 |
+| Config | PhiFlow multi-obstacle union() workaround | **Documented at module level + linked in Phase 31** | v0.3.2 |
 | Config | 2D fluids only (3D behind dim_3d=True flag) | Deferred | v0.3.2 |
 | Config | Previous v0.3.1 deferred (Dockerfile.ros2, K8S PVC, KubeRay) | Acknowledged | v0.3.2 |
-| Lint | 421 ruff issues in src/surg_rl/dreamer/ (F841, B904, E402) | Deferred | v0.4.1 |
+| Lint | 421 ruff issues in src/surg_rl/dreamer/ (F841, B904, E402) | **Closed in Phase 31 (10→0 issues)** | v0.4.1 |
 | Process | REQUIREMENTS.md BENCH-02..05 body checkboxes remain `[ ]` | Acknowledged | v0.4.0 |
 | v2 | TASK-05 task chains (grasp→cut→suture) | v2 | v0.4.0 |
 | v2 | MARL-05 RLlib centralized critic | v2 | v0.4.0 |
@@ -123,10 +125,10 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-18 (v0.5.0 roadmap draft)
-Stopped at: v0.5.0 roadmap drafted (5 phases, 26/26 v1 requirements mapped); ready for /gsd-plan-phase 31
-Resume file: .planning/ROADMAP.md (v0.5.0 section)
+Last session: 2026-06-18 (Phase 31 execution complete)
+Stopped at: Phase 31 SHIPPED — 4/4 plans done, 5/5 DEBT requirements closed, 1200 tests pass (+66 from 1134 baseline); Phase 32 (Demo Suite Polish) is next.
+Resume file: .planning/ROADMAP.md (Phase 31 marked [x], Phase 32 ready for execution)
 
 ---
 
-*Updated: 2026-06-18 — v0.5.0 roadmap drafted (8 milestones shipped: 30 phases, 87 plans, 1,134 non-integration tests, 23/23 v0.4.0+ v1 requirements satisfied; v0.5.0 roadmap adds 5 phases / 26 new v1 requirements)*
+*Updated: 2026-06-18 — Phase 31 SHIPPED (4/4 plans, 5/5 DEBT-01..05 closed; 1200 tests pass)*

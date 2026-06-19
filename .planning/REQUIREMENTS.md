@@ -48,11 +48,11 @@ User-facing docs only (no deep API tutorials — deferred to v0.6.0). Screenshot
 
 Six inherited tech-debt items, each closed in its own plan per phase. Phase 31 = foundation (5 items); Phase 35 = advanced (1 item: HARD-fixture integration test, plus optional organ mesh licensing research spike). All items were explicitly deferred from prior milestones and the user has approved sweeping them in v0.5.0.
 
-- [ ] **DEBT-01**: The 421 ruff issues in `src/surg_rl/dreamer/` are reduced to 0 (F841, B904, E402 and others; auto-fixable where possible, manual fixes where not); verified by `ruff check src/surg_rl/dreamer/` exit 0
-- [ ] **DEBT-02**: `Dockerfile.ros2` no longer hardcodes `amd64`; uses `$TARGETARCH` build arg so multi-arch builds (arm64 / amd64) work; verified by `docker buildx build --platform linux/amd64,linux/arm64` exit 0
-- [ ] **DEBT-03**: A `fluid_step()` hook is added to `BaseSimulator` ABC (no-op default); MuJoCo and PyBullet simulators override with their existing fluid step (delegating to env-level hook today); deprecates env-level direct fluid step; verified by existing fluid tests still passing
-- [ ] **DEBT-04**: A unit test for the cut cooldown logic exists in `tests/test_cutting.py` (currently absent — cooldown is simple arithmetic but unverified); cooldown = 500ms verified via mockable time source; parametrized over both backends
-- [ ] **DEBT-05**: PhiFlow multi-obstacle `union()` workaround is documented in `src/surg_rl/dynamics/fluids.py` (currently a buried comment); the workaround uses merged SDF construction; documented pitfall moved to docstring with example + upstream issue link; verified by existing fluid obstacle test passing
+- [x] **DEBT-01**: The 421 ruff issues in `src/surg_rl/dreamer/` are reduced to 0 (F841, B904, E402 and others; auto-fixable where possible, manual fixes where not); verified by `ruff check src/surg_rl/dreamer/` exit 0
+- [x] **DEBT-02**: `Dockerfile.ros2` no longer hardcodes `amd64`; uses `$TARGETARCH` build arg so multi-arch builds (arm64 / amd64) work; verified by `docker buildx build --platform linux/amd64,linux/arm64` exit 0
+- [x] **DEBT-03**: A `fluid_step()` hook is added to `BaseSimulator` ABC (no-op default); MuJoCo and PyBullet simulators override with their existing fluid step (delegating to env-level hook today); deprecates env-level direct fluid step; verified by existing fluid tests still passing
+- [x] **DEBT-04**: A unit test for the cut cooldown logic exists in `tests/test_cutting.py` (currently absent — cooldown is simple arithmetic but unverified); cooldown = 500ms verified via mockable time source; parametrized over both backends
+- [x] **DEBT-05**: PhiFlow multi-obstacle `union()` workaround is documented in `src/surg_rl/dynamics/fluids.py` (currently a buried comment); the workaround uses merged SDF construction; documented pitfall moved to docstring with example + upstream issue link; verified by existing fluid obstacle test passing
 - [ ] **DEBT-06**: An end-to-end `SurgicalEnv`-construction integration test exists for the HARD-fixture suturing scene (`tests/fixtures/scenes/suturing_difficulty_hard.json` from v0.4.2); asserts env constructs, reset() works, step() works without exception; closes Phase 29 code review WR-02
 
 ## v2 Requirements (Deferred to v0.6.0+)
@@ -129,11 +129,11 @@ Populated by gsd-roadmapper 2026-06-18 — v0.5.0 roadmap drafted (Phases 31–3
 | DOC-03 | Phase 34 | Pending |
 | DOC-04 | Phase 34 | Pending |
 | DOC-05 | Phase 34 | Pending |
-| DEBT-01 | Phase 31 | Pending |
-| DEBT-02 | Phase 31 | Pending |
-| DEBT-03 | Phase 31 | Pending |
-| DEBT-04 | Phase 31 | Pending |
-| DEBT-05 | Phase 31 | Pending |
+| DEBT-01 | Phase 31 | Complete |
+| DEBT-02 | Phase 31 | Complete |
+| DEBT-03 | Phase 31 | Complete |
+| DEBT-04 | Phase 31 | Complete |
+| DEBT-05 | Phase 31 | Complete |
 | DEBT-06 | Phase 35 | Pending |
 
 **Coverage:**
