@@ -122,7 +122,10 @@ def test_demos_import_shim_first():
     crash on macOS will recur.
     """
     demos_dir = Path(__file__).parent.parent / "demos"
-    expected = {"demo.py", "train_demo.py", "eval_demo.py", "benchmark.py"}
+    # Phase 32: demo.py was renamed to suturing_demo.py; the regression
+    # contract still requires every demo to import _omp_compat first, but
+    # the file name changed.
+    expected = {"suturing_demo.py", "train_demo.py", "eval_demo.py", "benchmark.py"}
     for name in expected:
         text = (demos_dir / name).read_text()
         shim_idx = text.find("import _omp_compat")
@@ -149,7 +152,7 @@ def test_render_demos_import_platform_guard():
     no actionable message.
     """
     demos_dir = Path(__file__).parent.parent / "demos"
-    render_demos = {"demo.py", "train_demo.py", "eval_demo.py"}
+    render_demos = {"suturing_demo.py", "train_demo.py", "eval_demo.py"}
     for name in render_demos:
         text = (demos_dir / name).read_text()
         assert "_platform_guard" in text, (

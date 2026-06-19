@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Suturing RL training demo for Surg-RL.
+"""Suturing RL training demo for Surg-RL (refactored in Phase 32 — Demo Suite Polish).
 
 Trains a PPO agent to perform a multi-stage suturing task:
   1. Approach and pick up a surgical needle
@@ -7,9 +7,12 @@ Trains a PPO agent to perform a multi-stage suturing task:
   3. Drive the needle through both skin patches
   4. Complete the suture connecting both patches
 
+The narration follows the 5-stage template in demos/NARRATION_TEMPLATE.md.
+
 Usage:
-  python demos/demo.py --headless --steps 10000
-  python demos/demo.py --scene scenes/suturing_demo.json --algo PPO
+  python demos/suturing_demo.py --headless --steps 10000
+  python demos/suturing_demo.py --scene scenes/suturing_demo.json --algo PPO
+  python demos/suturing_demo.py --headless --steps 0     # banner + scene info only
 """
 
 # IMPORTANT: import _omp_compat FIRST, before any library that may link
@@ -34,6 +37,21 @@ from typing import Optional, Tuple
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+# Add the repo root to sys.path so `from demos._common import ...` resolves
+# when invoked from a directory that doesn't have the demos package on
+# PYTHONPATH (e.g., `python demos/suturing_demo.py` from a worktree root).
+# The repo root is the parent of the demos/ directory.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# Shared demo helpers (Phase 32 — refactored to use demos/_common.py)
+# Import from the demos package so the module works regardless of CWD.
+from demos._common import (  # noqa: E402
+    DEFAULT_TRAINING_CONFIG,
+    format_narration_step,
+    print_banner,
+    print_scene_info,
+    resolve_scene,
+)
 
 import numpy as np
 
@@ -112,16 +130,18 @@ def run_training(args: argparse.Namespace) -> Tuple[TrainingManager, object]:
     Returns:
         Tuple of (TrainingManager, trained model).
     """
+    # Use the shared default training config as the base; allow CLI to override `algo` and `steps`.
+    algo_kwargs = {**DEFAULT_TRAINING_CONFIG, "name": args.algo}
     algo_config = AlgorithmConfig(
-        name=args.algo,
-        learning_rate=3e-4,
-        n_steps=2048,
-        batch_size=64,
-        n_epochs=10,
-        gamma=0.99,
-        gae_lambda=0.95,
-        clip_range=0.2,
-        ent_coef=0.01,
+        name=algo_kwargs["name"],
+        learning_rate=algo_kwargs["learning_rate"],
+        n_steps=algo_kwargs["n_steps"],
+        batch_size=algo_kwargs["batch_size"],
+        n_epochs=algo_kwargs["n_epochs"],
+        gamma=algo_kwargs["gamma"],
+        gae_lambda=algo_kwargs["gae_lambda"],
+        clip_range=algo_kwargs["clip_range"],
+        ent_coef=algo_kwargs["ent_coef"],
     )
 
     training_config = TrainingConfig(
@@ -367,42 +387,51 @@ Examples:
         print(_platform_guard.format_risky_render_message(), file=sys.stderr)
         sys.exit(2)
 
-    # Resolve scene path
-    scene_path = Path(args.scene)
-    if not scene_path.exists():
-        project_root = Path(__file__).parent.parent
-        scene_path = project_root / args.scene
-        if not scene_path.exists():
-            print(f"Error: Scene file not found: {args.scene}")
-            sys.exit(1)
-    args.scene = str(scene_path)
+    # Resolve scene path via _common (rejects .. traversal above repo root)
+    try:
+        args.scene = str(resolve_scene(args.scene))
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
-    # Print banner
-    print(f"\n{'='*60}")
-    print("  Suturing RL Training Demo")
-    print(f"{'='*60}")
-    print()
-    print("  Task stages:")
-    print("    1. Approach the curved surgical needle (thin-torus mesh)")
-    print("    2. Grasp and pick up the needle with the visible gripper jaws")
-    print("    3. Drive the needle through the soft skin patches (FEM flexcomp)")
-    print("    4. Complete the suture connecting both patches")
-    print()
-    print("  Scene: soft tissue via flexcomp, needle via procedural generator,")
-    print("         gripper has visible jaw geoms.")
-    print()
+    # Print banner + scene info via _common (Phase 32 refactor)
+    print_banner("Suturing RL Training Demo", subtitle="Phase 32 — Demo Suite Polish")
+
+    # Print the 4 task stages as narration lines following the 5-stage template
+    narration_lines = [
+        format_narration_step(
+            "Setup",
+            "The agent operates the surgical_arm_1 gripper inside a suturing "
+            "scene with two skin_patch tissues and one curved_suturing_needle.",
+        ),
+        format_narration_step(
+            "Action",
+            "The policy approaches the curved_suturing_needle from above, "
+            "closes the gripper jaws on the needle's shaft, and lifts it.",
+        ),
+        format_narration_step(
+            "Critical Moment",
+            "The needle's arc must clear both skin_patch edges simultaneously; "
+            "off-axis entry tears the FEM mesh. The policy holds a 15 degree entry angle.",
+        ),
+        format_narration_step(
+            "Outcome",
+            "The needle passes through skin_patch_left and skin_patch_right in "
+            "a single arc. The gripper releases; the suture is complete.",
+        ),
+        format_narration_step(
+            "Takeaway",
+            "Suturing rewards dense distance shaping plus a sparse success "
+            "bonus, training in roughly 50k PPO timesteps on a single CPU.",
+        ),
+    ]
+    for line in narration_lines:
+        print(line)
 
     # Load and display scene info
     try:
         scene = load_scene(args.scene)
-        print(f"  Scene:  {scene.metadata.name}")
-        print(f"  Robots: {len(scene.robots)}")
-        print(f"  Tissues: {len(scene.tissues)}")
-        print(f"  Instruments: {len(scene.instruments)}")
-        if scene.task:
-            print(f"  Task: {scene.task.name}")
-            for obj in scene.task.objectives:
-                print(f"    - {obj.name} (weight={obj.weight})")
+        print_scene_info(scene)
     except Exception as e:
         print(f"  Warning: Could not load scene for info display: {e}")
 
