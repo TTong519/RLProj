@@ -2,6 +2,50 @@
 
 Operates on a 2D vertical slice (xz-plane) suitable for surgical bleeding/irrigation.
 Provides two-way coupling forces on obstacles via pressure gradient integration.
+
+## PhiFlow multi-obstacle workaround (DEBT-05)
+
+PhiFlow's ``fluid.make_incompressible()`` expects a single SDF per call. Passing
+multiple ``Obstacle`` instances with separate geometries produces overlapping
+zero-velocity regions that crash the linear solver (ill-conditioned pressure
+Poisson system; ``Solve`` exceeds ``max_iterations`` with no convergence).
+
+The workaround is to merge all obstacle geometries into ONE SDF via ``union(*geoms)``
+before wrapping in a single ``Obstacle`` — see line ~74 in ``step()``. This produces
+a single coherent boundary condition that the pressure solver can handle.
+
+Example (the existing implementation in ``step()``):
+
+.. code-block:: python
+
+    obstacles_arg: list[Any] = []
+    if self._obstacles:
+        geoms = [o.geometry for o in self._obstacles]
+        merged = union(*geoms)            # <-- THE WORKAROUND
+        obstacles_arg = [Obstacle(merged)]
+
+    self._velocity, self._pressure = fluid.make_incompressible(
+        self._velocity, obstacles_arg,
+        solve=Solve(rel_tol=1e-4, abs_tol=1e-4, max_iterations=500),
+    )
+
+Upstream context: https://github.com/tum-pbs/PhiFlow/issues — search for
+"make_incompressible multiple obstacles" or "overlapping SDF pressure solve"
+to find related issues. The workaround predates v0.3.2; if PhiFlow ships a
+native multi-obstacle API in a future release, this can be revisited.
+
+Rationale for the merged-SDF approach:
+1. The pressure solve is a Poisson problem with the obstacle boundary
+   imposing zero velocity. Two separate SDFs would require two boundary
+   conditions on the same grid, which PhiFlow's solver does not natively support.
+2. ``union(*geoms)`` produces a single SDF that is positive outside all
+   obstacles and negative inside any — equivalent to a single coherent obstacle
+   for the solver's purposes.
+3. The merged-SDF approach loses per-obstacle force attribution precision
+   (we compute obstacle forces via ``compute_obstacle_forces`` in
+   ``force_computation.py``, which uses pressure-gradient integration around
+   each original obstacle's bounding box, so per-obstacle forces are still
+   recoverable downstream).
 """
 
 from __future__ import annotations
