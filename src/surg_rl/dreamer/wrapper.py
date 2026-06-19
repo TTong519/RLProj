@@ -1,5 +1,6 @@
 """GymToEmbodiedWrapper - translates SurgicalEnv to embodied.Env protocol."""
 
+import contextlib
 from typing import Any, Literal
 
 import numpy as np
@@ -159,10 +160,8 @@ class GymToEmbodiedWrapper:
         # Get rendered image
         image = None
         if self._simulator is not None:
-            try:
+            with contextlib.suppress(Exception):
                 image = self._simulator.render(mode="rgb_array")
-            except Exception:
-                pass
 
         if image is None:
             # Fallback: create dummy image

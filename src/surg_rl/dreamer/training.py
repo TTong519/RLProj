@@ -6,7 +6,6 @@ from typing import Any, Literal
 
 from surg_rl.dreamer.spike import check_spike_status
 from surg_rl.dreamer.subprocess import DreamerSubprocess
-from surg_rl.dreamer.wrapper import GymToEmbodiedWrapper
 from surg_rl.rl.environment import SurgicalEnv, SurgicalEnvConfig
 from surg_rl.scene_definition.loader import load_scene
 from surg_rl.scene_definition.schema import DreamerConfig, SceneDefinition
@@ -241,9 +240,6 @@ def run_dreamer_training(
     scene = _create_scene_for_task(task, obs_type, pixel_resolution)
     env = _create_env(scene)
 
-    # Create wrapper
-    wrapper = GymToEmbodiedWrapper(env, obs_type=obs_type, pixel_resolution=pixel_resolution)
-
     # Create subprocess
     dreamer_config = {
         "process_isolation": True,
@@ -385,7 +381,6 @@ def evaluate_checkpoint(
     # Create scene and environment
     scene = _create_scene_for_task(task, obs_type, pixel_resolution)
     env = _create_env(scene)
-    wrapper = GymToEmbodiedWrapper(env, obs_type=obs_type, pixel_resolution=pixel_resolution)
 
     # Create subprocess
     dreamer_config = {

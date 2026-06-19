@@ -4,6 +4,7 @@ Spawns a separate Python process for JAX/dreamerv3 to avoid GPU memory
 conflicts with PyTorch. Communicates via stdin/stdout JSON protocol.
 """
 
+import contextlib
 import json
 import multiprocessing
 import os
@@ -64,7 +65,6 @@ def _run_subprocess_loop(stdin_pipe) -> None:
     # Process config
     config = None
     agent = None
-    env = None
 
     while True:
         try:
@@ -118,10 +118,8 @@ def _run_subprocess_loop(stdin_pipe) -> None:
 
     # Cleanup
     if agent:
-        try:
+        with contextlib.suppress(Exception):
             agent.close()
-        except Exception:
-            pass
 
 
 def _build_agent(config: dict[str, Any]) -> Any:
@@ -198,8 +196,8 @@ class DreamerSubprocess:
             ready_msg = self._read_message()
             if ready_msg.get("type") != "READY":
                 raise RuntimeError(f"Subprocess failed to start: {ready_msg}")
-        except EOFError:
-            raise RuntimeError("Subprocess died before sending READY")
+        except EOFError as exc:
+            raise RuntimeError("Subprocess died before sending READY") from exc
 
         self._spawned = True
 
