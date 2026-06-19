@@ -131,6 +131,15 @@ dreamer = [
     "dreamerv3~=1.5.0",
 ]
 
+# GUI scene editor — PySide6 6.8 LTS line + markdown rendering
+# PySide6 is LGPL-3-or-GPL; we pin >=6.8,<7.0 for Qt6.8 LTS (Oct 2026) + Qt6.11 current
+# markdown-it-py was already a transitive dep; promoted to explicit
+# Phase 33 builds the QMainWindow on top of this scaffolding (Phase 31 plan 04).
+gui = [
+    "PySide6>=6.8.0,<7.0",
+    "markdown-it-py>=3.0.0",
+]
+
 # ros2: apt deps required (rclpy, sensor-msgs, geometry-msgs, std-msgs)
 # Install: sudo apt install ros-humble-rclpy ros-humble-sensor-msgs ros-humble-geometry-msgs ros-humble-std-msgs
 # Then: source /opt/ros/humble/setup.bash
@@ -150,6 +159,12 @@ docs = [
 surg-rl = "surg_rl.cli:app"
 bridge_node = "surg_rl.ros2.bridge_node:main"
 replay_node = "surg_rl.ros2.replay_node:main"
+
+# GUI scene editor — separate entry point to preserve the 14-subcommand
+# surg-rl CLI's lazy-import contract (Pitfall P10: GUI is NOT a Typer
+# subcommand). Phase 31 plan 04 ships this entry; Phase 33 wires the
+# actual QApplication + MainWindow.
+surg-rl-gui = "surg_rl.editor.app:main"
 
 [project.urls]
 Homepage = "https://github.com/surg-rl/surg-rl"
