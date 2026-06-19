@@ -1,9 +1,11 @@
 # syntax=docker/dockerfile:1
+# requires Docker BuildKit (for $TARGETARCH and multi-arch builds)
 # ROS2-enabled surg-rl bridge image for K8s sidecar deployment.
-# Build: docker buildx build --platform linux/amd64 -f Dockerfile.ros2 -t surg-rl:ros2 .
+# Build: docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.ros2 -t surg-rl:ros2 .
 # ROS2 Humble must be installed via apt (not available on PyPI for rclpy).
 
-FROM --platform=linux/amd64 ros:humble-ros-base
+ARG TARGETARCH=amd64
+FROM --platform=linux/${TARGETARCH} ros:humble-ros-base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
