@@ -1,17 +1,20 @@
 ---
 gsd_state_version: 1.0
 milestone: v0.5.0
-milestone_name: Scene Editor & UX Polish
-status: shipped
-stopped_at: Phase 31 complete (4/4 plans done, 5/5 DEBT requirements closed)
-last_updated: "2026-06-18T02:00:00.000Z"
-last_activity: 2026-06-18
+milestone_name: Overview
+current_phase: 33
+current_phase_name: pyside6-scene-editor
+status: executing
+stopped_at: Phase 33 context gathered
+last_updated: "2026-06-20T21:35:54.396Z"
+last_activity: 2026-06-20
+last_activity_desc: Phase 33 execution started
 progress:
   total_phases: 5
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
-  percent: 25
+  completed_phases: 2
+  total_plans: 14
+  completed_plans: 12
+  percent: 40
 ---
 
 # Project State
@@ -21,15 +24,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-18 v0.5.0 milestone started)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** Phase 31 (Tech Debt Foundation) — first of 5 phases in v0.5.0
+**Current focus:** Phase 33 — pyside6-scene-editor
 
 ## Current Position
 
 Milestone: v0.5.0 — Scene Editor & UX Polish (EXECUTING 2026-06-18)
-Phase: 31 of 35 (Tech Debt Foundation) — SHIPPED ✓
-Plan: 4/4 complete (31-01, 31-02, 31-03, 31-04)
-Status: Phase 31 shipped — 5/5 DEBT requirements closed, 4 plans complete, test baseline 1134→1200 (+66)
-Last activity: 2026-06-18 — Executed 4 plans in Wave 1: (1) ruff cleanup + multi-arch Dockerfile, (2) cut cooldown test + PhiFlow docstring, (3) fluid_step hook + env wiring, (4) GUI scaffolding ([gui] extra + surg-rl-gui + editor package). 1200 tests pass, 17 skip, 0 fail.
+Phase: 33 (pyside6-scene-editor) — EXECUTING
+Plan: 1 of 7
+Status: Executing Phase 33
+Last activity: 2026-06-20 — Phase 33 execution started
 
 Progress: ████████░░░░░░░░░░░░░░░░░░░░░░░░░ 25%
 
@@ -37,7 +40,7 @@ Progress: ████████░░░░░░░░░░░░░░░�
 
 **Velocity:**
 
-- Total plans completed: 85 across v0.1.0–v0.4.1 (12 + 19 + 18 + 1 + 9 + 21 + 4)
+- Total plans completed: 88 across v0.1.0–v0.4.1 (12 + 19 + 18 + 1 + 9 + 21 + 4)
 - Total execution time: tracked per phase in milestone archives
 
 **By Milestone:**
@@ -125,9 +128,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-18 (Phase 31 execution complete)
-Stopped at: Phase 31 SHIPPED — 4/4 plans done, 5/5 DEBT requirements closed, 1200 tests pass (+66 from 1134 baseline); Phase 32 (Demo Suite Polish) is next.
-Resume file: .planning/ROADMAP.md (Phase 31 marked [x], Phase 32 ready for execution)
+Last session: 2026-06-19T19:26:16.130Z
+Stopped at: Phase 33 context gathered
+Resume file: .planning/phases/33-pyside6-scene-editor/33-CONTEXT.md
 
 ---
 
