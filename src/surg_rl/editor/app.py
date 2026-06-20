@@ -110,21 +110,61 @@ def main() -> None:
         )
         sys.exit(1)
 
-    # Gate 2: macOS mjpython re-exec (replaces warn-and-exit).
-    # On macOS without mjpython, transparently re-exec the editor under mjpython
-    # so MuJoCo's GL context can initialize. On macOS-with-mjpython and on
-    # non-macOS this is a no-op.
+    # Gate 2: macOS mjpython re-exec (hardened against crash + infinite loop).
+    # On macOS, MuJoCo's GL context requires running under `mjpython` (the
+    # MuJoCo-bundled Python interpreter). If the current process is NOT
+    # already under mjpython, we re-exec under it. Two guards prevent the
+    # two failure modes identified in UAT Gap 2:
+    #
+    #   1. `shutil.which("mjpython")` check before `os.execvp` — prevents
+    #      FileNotFoundError crash when mjpython is not installed on macOS
+    #      (the user gets a warning and the editor continues without the 3D
+    #      viewport rather than crashing).
+    #   2. `_SURG_RL_GUI_REEXECED=1` env var loop guard — set before
+    #      execvp, checked at the top of Gate 2. If the re-exec'd process
+    #      fails to detect mjpython (e.g. _is_running_under_mjpython()
+    #      returns False after re-exec), the env var prevents an infinite
+    #      re-exec loop by skipping the re-exec and falling through with a
+    #      warning.
+    #
+    # On non-macOS platforms, Gate 2 is a no-op (the `platform.system() ==
+    # "Darwin"` check short-circuits).
+    import os
     import platform
+    import shutil
 
     from surg_rl.editor._platform_guard import _is_running_under_mjpython
+
     if platform.system() == "Darwin" and not _is_running_under_mjpython():
-        import os
-        print(
-            "surg-rl-gui: not running under mjpython; re-execing under mjpython for "
-            "MuJoCo GL context...",
-            file=sys.stderr,
-        )
-        os.execvp("mjpython", ["mjpython", "-m", "surg_rl.editor.app"] + sys.argv[1:])
+        # Loop guard: if we already re-execed, don't try again (prevents
+        # infinite re-exec loop if _is_running_under_mjpython() fails to
+        # detect mjpython after re-exec).
+        already_reexeced = os.environ.get("_SURG_RL_GUI_REEXECED") == "1"
+
+        if not already_reexeced and shutil.which("mjpython") is not None:
+            # mjpython is installed — re-exec under it for MuJoCo GL context.
+            print(
+                "surg-rl-gui: not running under mjpython; re-execing under "
+                "mjpython for MuJoCo GL context...",
+                file=sys.stderr,
+            )
+            os.environ["_SURG_RL_GUI_REEXECED"] = "1"
+            os.execvp("mjpython", ["mjpython", "-m", "surg_rl.editor.app"] + sys.argv[1:])
+        else:
+            # mjpython not installed OR already re-execed — continue with a
+            # warning. The viewport will catch GL-context errors gracefully
+            # (Plan 33-07 hardens the viewport against render failures).
+            reason = (
+                "mjpython not found on PATH"
+                if shutil.which("mjpython") is None
+                else "re-exec did not detect mjpython"
+            )
+            print(
+                f"surg-rl-gui: warning — {reason}. MuJoCo 3D viewport may not "
+                "initialize. Install mjpython (bundled with `pip install "
+                "mujoco`) for full 3D support. Continuing without re-exec...",
+                file=sys.stderr,
+            )
 
     # Gate 3: Phase 33 wires MainWindow here.
     from pathlib import Path
