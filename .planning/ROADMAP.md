@@ -36,7 +36,7 @@ For the historical record of shipped milestones, see `.planning/milestones/v0.X.
 ## Phases
 
 - [x] **Phase 31: Tech Debt Foundation** - Sweep 5 quick-win debt items (421 ruff in `src/surg_rl/dreamer/`, Dockerfile.ros2 `$TARGETARCH`, fluid step hook, cut cooldown test, PhiFlow union doc); set up `[gui]` extra + `surg-rl-gui` console script + mjpython re-exec helper so Phase 33 has scaffolding
-- [ ] **Phase 32: Demo Suite Polish** - Refactor suturing demo + create knot-tying + needle-passing demos with shared `demos/_common.py` (banner, scene resolver) + `NARRATION_TEMPLATE.md` + 3 per-demo regression tests
+- [x] **Phase 32: Demo Suite Polish** - Refactor suturing demo + create knot-tying + needle-passing demos with shared `demos/_common.py` (banner, scene resolver) + `NARRATION_TEMPLATE.md` + 3 per-demo regression tests (completed 2026-06-19)
 - [ ] **Phase 33: PySide6 Scene Editor** - Marquée phase: render bridge + schema walker + tree/form + viewport + undo/redo + LLM panel + shell + smoke tests (all 10 GUI requirements)
 - [ ] **Phase 34: User-Facing Docs Refresh** - Rewrite README + overhaul CONTRIBUTING + CHANGELOG v0.5.0 entry + embed 3 demo GIFs (from Phase 32) + 3 GUI screenshots (from Phase 33)
 - [ ] **Phase 35: Advanced Tech Debt** - HARD-fixture `SurgicalEnv`-construction integration test + `CurriculumStageConfig.difficulty` normalization + organ mesh licensing research spike
@@ -65,7 +65,12 @@ For the historical record of shipped milestones, see `.planning/milestones/v0.X.
   3. User can run `python demos/needle_passing_demo.py --headless --steps 0` and see the same consistent shell; the demo loads the needle-passing scene fixture and narrates 3–4 steps (needle pick-up, target approach, pass-through, withdrawal) using a dual-arm `MultiAgentConfig`
   4. `tests/test_demos.py` contains 3 regression tests (one per demo); each spawns the demo as a subprocess with `--headless --steps 0`, asserts exit 0 and an expected banner substring; all 3 tests pass on Linux and macOS CI
   5. `demos/NARRATION_TEMPLATE.md` documents the shared 5-stage narration structure (Setup / Action / Critical Moment / Outcome / Takeaway) with vocabulary constraints, and is committed BEFORE any new demo is refactored
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [x] 32-01-PLAN.md — NARRATION_TEMPLATE.md (DEMO-05) + demos/_common.py (shared banner/scene/narration helpers) + refactor demos/demo.py → demos/suturing_demo.py (DEMO-01)
+- [x] 32-02-PLAN.md — tests/fixtures/scenes/knot_tying.json (byte-identical fixture copy) + demos/knot_tying_demo.py (DEMO-02)
+- [x] 32-03-PLAN.md — scenes/needle_passing.json (dual-arm MultiAgentConfig) + demos/needle_passing_demo.py (DEMO-03) + tests/test_demos.py (6 regression tests for demos + template + fixtures, DEMO-04)
 
 ### Phase 33: PySide6 Scene Editor
 **Goal**: A full PySide6 scene editor (the marquee feature) launches via `surg-rl-gui [scene.json]` and provides: 3D viewport (orbit/pan/zoom, 20 Hz throttle) backed by `sim.render_to_numpy()`; tree view of scene elements with right-click context menu (add/remove/duplicate), drag-reorder, validation icons; schema-driven property form via `SchemaWalker` + `FieldRenderer` registry (no if/elif rot); LLM-prompt-to-JSON panel via background QThread; undo/redo (Cmd+Z / Cmd+Shift+Z) scoped per scene; standard workspace shell with File menu + drag-drop; all API keys and error messages passed through a `safe_error_message()` regex redactor before reaching logs/UI.
@@ -77,8 +82,17 @@ For the historical record of shipped milestones, see `.planning/milestones/v0.X.
   3. User sees a 3D viewport rendering the loaded scene at ≥15 FPS, with mouse orbit/pan/zoom and a camera-reset keybinding
   4. User can right-click a tree node to add/remove/duplicate, drag-reorder within parents, and see red/green validation icons; the LLM panel accepts a text prompt, runs `TextParser.parse_sync()` on a background QThread, and shows a JSON preview the user can accept (writes to draft scene) or reject
   5. User can undo/redo any property change (Cmd+Z / Cmd+Shift+Z) within the session, and the 14-subcommand `surg-rl` CLI still works without importing PySide6 even when `[gui]` is installed
-**Plans**: TBD
+**Plans**: 7 plans (5 original + 2 gap closure)
 **UI hint**: yes
+
+Plans:
+- [ ] 33-01-PLAN.md — EditorWindow (QMainWindow) + 4-pane QDockWidget layout + safe_error_message redactor + EditorSettings QSettings wrapper + drag-drop + status bar
+- [ ] 33-02-PLAN.md — SchemaWalker (recursive over 62 classes) + FieldRenderer widget-factory registry (vec3-spinbox, enum-combobox, file-picker, color-picker, range-slider)
+- [ ] 33-03-PLAN.md — ViewportPanel (20 Hz frame loop, mouse orbit/pan/zoom, R-key camera reset) + mujoco_simulator.py refactor to use shared _is_running_under_mjpython helper
+- [ ] 33-04-PLAN.md — SceneTreeView (right-click context menu Add/Remove/Duplicate, drag-reorder, validation icons) + PropertyForm (QFormLayout with FieldRenderer widgets, 150 ms debounced validation)
+- [ ] 33-05-PLAN.md — LLMPanel (QThread TextParserWorker calling TextParser.parse_sync) + SceneUndoStack (deep-copy snapshots, 100-level cap) + file operations (New/Open/Save/Save As) + tests/gui/ smoke test capturing 3 screenshots
+- [ ] 33-06-PLAN.md — [GAP CLOSURE] Fix --headless demo scene listing (4-level path) + guard mjpython re-exec against crash/loop (shutil.which + _SURG_RL_GUI_REEXECED env var)
+- [ ] 33-07-PLAN.md — [GAP CLOSURE] Harden viewport render loop (_running flag + __del__ guard + simulator.close try/except) + wire closeEvent to stop viewport + launch smoke test
 
 ### Phase 34: User-Facing Docs Refresh
 **Goal**: README, CONTRIBUTING, and CHANGELOG are rewritten to reflect v0.5.0 features (GUI editor, 2 new demos, docs refresh, 6 tech debt items fixed); 3 demo GIFs (suturing + knot-tying + needle-passing, ~30s each) captured during Phase 32 are embedded in the README walkthrough sections; 3 GUI screenshots (viewport + tree/form + LLM panel) captured during Phase 33 are embedded in the README.
@@ -109,8 +123,8 @@ For the historical record of shipped milestones, see `.planning/milestones/v0.X.
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 31. Tech Debt Foundation | 4/4 | Complete | 2026-06-18 |
-| 32. Demo Suite Polish | 0/TBD | Not started | - |
-| 33. PySide6 Scene Editor | 0/TBD | Not started | - |
+| 32. Demo Suite Polish | 3/3 | Complete    | 2026-06-19 |
+| 33. PySide6 Scene Editor | 0/5 | Not started | - |
 | 34. User-Facing Docs Refresh | 0/TBD | Not started | - |
 | 35. Advanced Tech Debt | 0/TBD | Not started | - |
 
