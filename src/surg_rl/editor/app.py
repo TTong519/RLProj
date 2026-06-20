@@ -75,30 +75,30 @@ def main() -> None:
 
     if "--headless" in sys.argv:
         # Phase 33 lists scenes from tests/fixtures/scenes/ + scenes/.
+        # Both directories live at repo root, NOT under src/. app.py lives at
+        # src/surg_rl/editor/app.py, so 4 parent levels reach the repo root:
+        #   __file__  -> src/surg_rl/editor/app.py
+        #   parent    -> src/surg_rl/editor/
+        #   parent^2  -> src/surg_rl/
+        #   parent^3  -> src/                  (WRONG — no scenes/ here)
+        #   parent^4  -> <repo root>           (CORRECT — scenes/ lives here)
         from pathlib import Path as _Path
-        try:
-            from importlib import resources as _resources
-            fixtures_pkg = _resources.files("tests.fixtures.scenes")
-        except (ModuleNotFoundError, AttributeError):
-            fixtures_pkg = None
-        repo_scenes = _Path(__file__).parent.parent.parent / "scenes"
+
+        fixtures_dir = (
+            _Path(__file__).parent.parent.parent.parent / "tests" / "fixtures" / "scenes"
+        )
+        repo_scenes = _Path(__file__).parent.parent.parent.parent / "scenes"
         candidate_dirs = []
-        if fixtures_pkg is not None and fixtures_pkg.is_dir():
-            candidate_dirs.append(fixtures_pkg)
+        if fixtures_dir.is_dir():
+            candidate_dirs.append(fixtures_dir)
         if repo_scenes.is_dir():
             candidate_dirs.append(repo_scenes)
         print("Available demo scenes:")
         found = False
         for d in candidate_dirs:
-            try:
-                for f in sorted(d.glob("*.json")):
-                    print(f"  {f}")
-                    found = True
-            except (AttributeError, OSError):
-                for child in d.iterdir():
-                    if str(child).endswith(".json"):
-                        print(f"  {child}")
-                        found = True
+            for f in sorted(d.glob("*.json")):
+                print(f"  {f}")
+                found = True
         if not found:
             print("  (no demo scenes found)")
         sys.exit(0)
