@@ -205,7 +205,7 @@ class TestAppMain:
         assert "surg-rl[gui]" in result.stderr
 
     def test_headless_flag_exits_zero_with_placeholder(self) -> None:
-        """`python -m surg_rl.editor.app --headless` exits 0 with Phase 33 placeholder."""
+        """`python -m surg_rl.editor.app --headless` exits 0 with Phase 33 listing."""
         result = subprocess.run(
             [sys.executable, "-m", "surg_rl.editor.app", "--headless"],
             capture_output=True,
@@ -215,7 +215,8 @@ class TestAppMain:
         assert (
             result.returncode == 0
         ), f"--headless must exit 0; got {result.returncode}. stderr={result.stderr!r}"
-        assert "Phase 33" in result.stdout
+        # Phase 33 replaced the placeholder with a real list of demo scenes.
+        assert "Available demo scenes" in result.stdout or "(no demo scenes found)" in result.stdout
 
 
 class TestSurgRlCliIndependence:
