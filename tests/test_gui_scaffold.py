@@ -204,8 +204,14 @@ class TestAppMain:
         assert "pip install" in result.stderr
         assert "surg-rl[gui]" in result.stderr
 
-    def test_headless_flag_exits_zero_with_placeholder(self) -> None:
-        """`python -m surg_rl.editor.app --headless` exits 0 with Phase 33 listing."""
+    def test_headless_flag_lists_demo_scenes(self) -> None:
+        """`python -m surg_rl.editor.app --headless` exits 0 with a non-empty scene list.
+
+        Gap 3 closure (UAT Test 6): the --headless branch MUST resolve both
+        `scenes/` (at repo root) and `tests/fixtures/scenes/` directories via
+        4-level path traversal (`parent.parent.parent.parent`), and MUST NOT
+        print "(no demo scenes found)" when scene files exist.
+        """
         result = subprocess.run(
             [sys.executable, "-m", "surg_rl.editor.app", "--headless"],
             capture_output=True,
@@ -215,8 +221,68 @@ class TestAppMain:
         assert (
             result.returncode == 0
         ), f"--headless must exit 0; got {result.returncode}. stderr={result.stderr!r}"
-        # Phase 33 replaced the placeholder with a real list of demo scenes.
-        assert "Available demo scenes" in result.stdout or "(no demo scenes found)" in result.stdout
+        # Must report the "Available demo scenes" header.
+        assert "Available demo scenes" in result.stdout, (
+            f"--headless stdout must contain 'Available demo scenes' header; "
+            f"got stdout={result.stdout!r}"
+        )
+        # Must NOT print the empty-list sentinel (the bug being fixed).
+        assert "(no demo scenes found)" not in result.stdout, (
+            f"--headless must list scenes, not print '(no demo scenes found)'; "
+            f"got stdout={result.stdout!r}"
+        )
+        # Must include at least one .json filename line (scenes are listed).
+        assert any(".json" in line for line in result.stdout.splitlines()), (
+            f"--headless stdout must include at least one .json filename line; "
+            f"got stdout={result.stdout!r}"
+        )
+
+    def test_headless_finds_repo_scenes_dir(self) -> None:
+        """`--headless` lists at least one scene from `scenes/` at repo root.
+
+        Gap 3 closure (UAT Test 6): `repo_scenes = Path(__file__).parent.parent.parent.parent / "scenes"`
+        must reach the repo-root scenes/ directory (4 levels up from app.py,
+        NOT 3 levels which lands on src/ with no scenes/ subdir).
+        """
+        result = subprocess.run(
+            [sys.executable, "-m", "surg_rl.editor.app", "--headless"],
+            capture_output=True,
+            text=True,
+            env={**os.environ, "PYTHONPATH": str(SRC_DIR)},
+        )
+        assert result.returncode == 0, f"--headless must exit 0; stderr={result.stderr!r}"
+        # suturing_demo.json and simple_suturing.json both exist ONLY in scenes/
+        # (not in tests/fixtures/scenes/), so they prove the repo-root scenes/
+        # dir is being scanned — NOT just the fixtures dir.
+        repo_only_filenames = ["suturing_demo.json", "simple_suturing.json", "needle_passing.json"]
+        assert any(name in result.stdout for name in repo_only_filenames), (
+            f"--headless must list at least one scene unique to scenes/ at repo "
+            f"root (proves 4-level path fix, not just fixtures dir); expected one "
+            f"of {repo_only_filenames}; got stdout={result.stdout!r}"
+        )
+
+    def test_headless_finds_fixtures_scenes_dir(self) -> None:
+        """`--headless` lists at least one scene from `tests/fixtures/scenes/`.
+
+        Gap 3 closure (UAT Test 6): the fixtures lookup must use a filesystem
+        path (`Path(__file__).parent.parent.parent.parent / "tests" / "fixtures" / "scenes"`),
+        NOT `importlib.resources.files("tests.fixtures.scenes")` which fails
+        because `tests/` is at repo root, not an importable package under src/.
+        """
+        result = subprocess.run(
+            [sys.executable, "-m", "surg_rl.editor.app", "--headless"],
+            capture_output=True,
+            text=True,
+            env={**os.environ, "PYTHONPATH": str(SRC_DIR)},
+        )
+        assert result.returncode == 0, f"--headless must exit 0; stderr={result.stderr!r}"
+        # knot_tying.json exists in tests/fixtures/scenes/ (and also in scenes/).
+        # suturing_difficulty_hard.json is unique to tests/fixtures/scenes/.
+        # Assert the fixtures-specific one to prove the fixtures dir is scanned.
+        assert "suturing_difficulty_hard.json" in result.stdout, (
+            f"--headless must list suturing_difficulty_hard.json from "
+            f"tests/fixtures/scenes/; got stdout={result.stdout!r}"
+        )
 
 
 class TestSurgRlCliIndependence:
