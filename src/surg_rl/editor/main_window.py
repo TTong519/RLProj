@@ -21,13 +21,13 @@ if TYPE_CHECKING:
 _PLACEHOLDER_TEXT = "(populated by Phase 33 plan {plan})"
 
 
-def _empty_scene_stub() -> "SceneDefinition":
+def _empty_scene_stub() -> SceneDefinition:
     """Create a minimal valid SceneDefinition for when the editor opens with no scene."""
     from surg_rl.scene_definition import SceneDefinition, SimulatorType
     return SceneDefinition(simulator=SimulatorType.MUJOCO)
 
 
-def _find_instance(scene: "SceneDefinition | None", cls: type):
+def _find_instance(scene: SceneDefinition | None, cls: type):
     """Recursively find the first instance of `cls` in the scene tree."""
     if scene is None:
         return None
@@ -52,7 +52,7 @@ class EditorWindow(QtWidgets.QMainWindow):
         self.setWindowTitle("Surg-RL Scene Editor")
         self._settings = EditorSettings()
         self._current_path: Path | None = None
-        self._scene: "SceneDefinition | None" = None
+        self._scene: SceneDefinition | None = None
 
         # Phase 33-05: undo/redo stack (per-scene, capped, cleared on save)
         from surg_rl.editor.undo_stack import SceneUndoStack
@@ -86,9 +86,9 @@ class EditorWindow(QtWidgets.QMainWindow):
 
     def _build_dock_widgets(self) -> None:
         # Plan 33-04 wires the tree and property form into the docks.
-        from surg_rl.editor.tree_view import SceneTreeView
-        from surg_rl.editor.property_form import PropertyForm
         from surg_rl.editor.llm_panel import LLMPanel
+        from surg_rl.editor.property_form import PropertyForm
+        from surg_rl.editor.tree_view import SceneTreeView
         self._tree_view = SceneTreeView(self._scene or _empty_scene_stub())
         self._property_form = PropertyForm()
         self._llm_panel = LLMPanel()
@@ -259,6 +259,7 @@ class EditorWindow(QtWidgets.QMainWindow):
 
     def _save_scene_to(self, path: Path) -> None:
         from pydantic import ValidationError
+
         from surg_rl.scene_definition import SceneDefinition, save_scene
         if self._scene is None:
             return
@@ -307,9 +308,8 @@ class EditorWindow(QtWidgets.QMainWindow):
         self._undo_action.setEnabled(self._undo_stack.canUndo())
         self._redo_action.setEnabled(self._undo_stack.canRedo())
 
-    def _on_llm_scene_accepted(self, scene: "SceneDefinition") -> None:
+    def _on_llm_scene_accepted(self, scene: SceneDefinition) -> None:
         from surg_rl.scene_definition import SceneDefinition
-        from surg_rl.editor.undo_stack import SceneUndoStack
         before = self._scene.model_copy(deep=True) if self._scene is not None else SceneDefinition()
         self._undo_stack.push_snapshot(before, scene)
         self._scene = scene

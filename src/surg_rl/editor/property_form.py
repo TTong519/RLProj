@@ -7,14 +7,14 @@ Per GUI-05 + CONTEXT.md D-06..D-08:
 """
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ValidationError
 
-from surg_rl.editor import QtCore, QtGui, QtWidgets
+from surg_rl.editor import QtCore, QtWidgets
+from surg_rl.editor._safe_error import safe_error_message
 from surg_rl.editor.field_renderer import FieldRenderer
 from surg_rl.editor.schema_walker import FieldSpec
-from surg_rl.editor._safe_error import safe_error_message
 
 if TYPE_CHECKING:
     pass

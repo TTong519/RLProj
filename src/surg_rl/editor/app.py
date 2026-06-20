@@ -42,7 +42,6 @@ Reference: .planning/research/PITFALLS-v0.5.0.md:325-339, 438
 import sys
 
 from surg_rl.editor import HAS_GUI
-from surg_rl.editor._platform_guard import _ensure_mjpython_or_warn
 
 
 def main() -> None:
@@ -116,6 +115,7 @@ def main() -> None:
     # so MuJoCo's GL context can initialize. On macOS-with-mjpython and on
     # non-macOS this is a no-op.
     import platform
+
     from surg_rl.editor._platform_guard import _is_running_under_mjpython
     if platform.system() == "Darwin" and not _is_running_under_mjpython():
         import os
@@ -128,7 +128,9 @@ def main() -> None:
 
     # Gate 3: Phase 33 wires MainWindow here.
     from pathlib import Path
+
     from PySide6.QtWidgets import QApplication
+
     from surg_rl.editor.main_window import EditorWindow
 
     app = QApplication(sys.argv)

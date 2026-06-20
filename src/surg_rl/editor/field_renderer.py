@@ -5,7 +5,7 @@ widget factory. Unknown types fall back to QLineEdit (per D-06).
 """
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
 
 from surg_rl.editor import QtCore, QtGui, QtWidgets
 from surg_rl.editor.schema_walker import FieldSpec

@@ -9,7 +9,7 @@ Per GUI-04 + CONTEXT.md D-05, D-08, D-17:
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from surg_rl.editor import QtCore, QtGui, QtWidgets
 from surg_rl.editor._safe_error import safe_error_message
@@ -52,7 +52,7 @@ class SceneTreeView(QtWidgets.QTreeView):
 
     node_selected = QtCore.Signal(type)
 
-    def __init__(self, scene: "SceneDefinition") -> None:
+    def __init__(self, scene: SceneDefinition) -> None:
         super().__init__()
         self._scene = scene
         self._model = QtGui.QStandardItemModel()

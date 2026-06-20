@@ -8,12 +8,14 @@ Per CONTEXT.md D-01..D-04:
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from surg_rl.editor import QtCore, QtGui, QtWidgets
 
 if TYPE_CHECKING:
     import numpy as np
+
     from surg_rl.scene_definition import SceneDefinition
     from surg_rl.simulators.base_simulator import BaseSimulator
 
@@ -37,15 +39,15 @@ class ViewportPanel(QtWidgets.QWidget):
 
     def __init__(
         self,
-        scene: "SceneDefinition",
+        scene: SceneDefinition,
         on_fps_update: Callable[[float], None] | None = None,
-        on_load_simulator: Callable[["SceneDefinition"], "BaseSimulator | None"] | None = None,
+        on_load_simulator: Callable[[SceneDefinition], BaseSimulator | None] | None = None,
     ) -> None:
         super().__init__()
         self._scene = scene
         self._on_fps_update = on_fps_update
         self._on_load_simulator = on_load_simulator or _default_load_simulator
-        self._simulator: "BaseSimulator | None" = None
+        self._simulator: BaseSimulator | None = None
         self._frame_count: int = 0
         self._last_fps_check: float = 0.0
 
@@ -119,7 +121,7 @@ class ViewportPanel(QtWidgets.QWidget):
             self._frame_count = 0
             self._last_fps_check = now
 
-    def _display_array(self, arr: "np.ndarray") -> None:
+    def _display_array(self, arr: np.ndarray) -> None:
         h, w = arr.shape[:2]
         bytes_per_line = 3 * w
         qimg = QtGui.QImage(arr.data, w, h, bytes_per_line, QtGui.QImage.Format.Format_RGB888)
@@ -170,7 +172,7 @@ class ViewportPanel(QtWidgets.QWidget):
         self._camera_offset = {"azimuth": 0.0, "elevation": 0.0, "distance": 1.0, "target": (0.0, 0.0, 0.0)}
 
 
-def _default_load_simulator(scene: "SceneDefinition") -> "BaseSimulator | None":
+def _default_load_simulator(scene: SceneDefinition) -> BaseSimulator | None:
     """Default simulator loader. Returns None on import error (PySide6-free or no backend)."""
     try:
         from surg_rl.simulators.mujoco_simulator import MuJoCoSimulator

@@ -157,8 +157,7 @@ class SchemaWalker:
         if schema.get("type") == "string" and name in ("color", "colour", "hex_color", "hex"):
             return "color-picker"
 
-        if schema.get("type") in ("number", "integer"):
-            if "minimum" in schema and "maximum" in schema:
-                return "range-slider"
+        if schema.get("type") in ("number", "integer") and "minimum" in schema and "maximum" in schema:
+            return "range-slider"
 
         return "text"

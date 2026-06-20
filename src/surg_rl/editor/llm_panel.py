@@ -47,7 +47,7 @@ class LLMPanel(QtWidgets.QWidget):
         super().__init__()
         self._thread: QtCore.QThread | None = None
         self._worker: TextParserWorker | None = None
-        self._current_scene: "SceneDefinition | None" = None
+        self._current_scene: SceneDefinition | None = None
 
         self._prompt = QtWidgets.QPlainTextEdit()
         self._prompt.setPlaceholderText("Describe a surgical scene...")
@@ -126,7 +126,7 @@ class LLMPanel(QtWidgets.QWidget):
         if self._thread is not None:
             self._thread.quit()
 
-    def _on_parse_finished(self, scene: "SceneDefinition") -> None:
+    def _on_parse_finished(self, scene: SceneDefinition) -> None:
         import json
         self._current_scene = scene
         self._preview.setPlainText(json.dumps(scene.model_dump(mode="json"), indent=2))
