@@ -1303,16 +1303,10 @@ class MuJoCoSimulator(BaseSimulator):
             return False
 
         if platform.system() == "Darwin":
-            # Check the env var first (set by mjpython) — this is the
-            # authoritative signal. Fall back to checking sys.executable,
-            # but note that under mjpython that's just the regular Python
-            # binary path, not the mjpython launcher.
-            running_under_mjpython = (
-                "MJPYTHON_BIN" in os.environ
-                or "mjpython" in os.path.basename(sys.executable)
-                or "mjpython" in (sys.argv[0] if sys.argv else "")
-            )
-            if not running_under_mjpython:
+            # Use the editor's shared 3-signal mjpython detection helper
+            # (Phase 33-03 refactor: previously inlined the same check here).
+            from surg_rl.editor._platform_guard import _is_running_under_mjpython
+            if not _is_running_under_mjpython():
                 raise RuntimeError(
                     "MuJoCo passive viewer requires 'mjpython' on macOS. "
                     "Run: mjpython -m surg_rl.cli train ..."

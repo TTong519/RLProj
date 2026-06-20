@@ -37,6 +37,8 @@ def isolated_home(tmp_path, monkeypatch):
 
 @pytest.fixture(scope="session")
 def qapp():
+    if not _HAS_PYSIDE6():
+        pytest.skip("PySide6 not installed")
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
     app = QApplication.instance() or QApplication(sys.argv)
@@ -99,6 +101,7 @@ class TestSafeErrorMessage:
 # --- QSettings wrapper tests (require PySide6) ------------------------------
 
 
+@pytest.mark.skipif(not _HAS_PYSIDE6(), reason="PySide6 not installed")
 class TestEditorSettings:
     def test_save_and_load_window(self, isolated_home) -> None:
         if not _HAS_PYSIDE6():
@@ -152,6 +155,7 @@ class TestEditorSettings:
 # --- MainWindow tests (require PySide6 + offscreen) -------------------------
 
 
+@pytest.mark.skipif(not _HAS_PYSIDE6(), reason="PySide6 not installed")
 class TestMainWindow:
     def test_main_window_can_be_constructed(self, qapp, isolated_home) -> None:
         from surg_rl.editor.main_window import EditorWindow

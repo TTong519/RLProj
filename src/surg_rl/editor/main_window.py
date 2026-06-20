@@ -21,6 +21,12 @@ if TYPE_CHECKING:
 _PLACEHOLDER_TEXT = "(populated by Phase 33 plan {plan})"
 
 
+def _empty_scene_stub() -> "SceneDefinition":
+    """Create a minimal valid SceneDefinition for when the editor opens with no scene."""
+    from surg_rl.scene_definition import SceneDefinition, SimulatorType
+    return SceneDefinition(simulator=SimulatorType.MUJOCO)
+
+
 class EditorWindow(QtWidgets.QMainWindow):
     """Phase 33 PySide6 scene editor main window."""
 
@@ -32,11 +38,19 @@ class EditorWindow(QtWidgets.QMainWindow):
         self._current_path: Path | None = None
         self._scene: "SceneDefinition | None" = None
 
-        self._build_central_viewport()
+        # Phase 33-03 wires the 3D viewport as the central widget.
+        from surg_rl.editor.viewport import ViewportPanel
+        self._viewport_panel = ViewportPanel(
+            scene=self._scene or _empty_scene_stub(),
+            on_fps_update=self._update_fps_status,
+        )
+        self.setCentralWidget(self._viewport_panel)
+
         self._build_dock_widgets()
         self._build_menu_bar()
         self._build_status_bar()
         self._wire_drag_drop()
+        self._wire_shortcuts()
         self._restore_geometry()
         self._set_status("Untitled", "—", "—", "—")
 
@@ -44,11 +58,8 @@ class EditorWindow(QtWidgets.QMainWindow):
             self._open_scene(Path(scene_path))
 
     def _build_central_viewport(self) -> None:
-        self._viewport_placeholder = QtWidgets.QLabel(
-            _PLACEHOLDER_TEXT.format(plan="33-03 — 3D Viewport")
-        )
-        self._viewport_placeholder.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.setCentralWidget(self._viewport_placeholder)
+        # Replaced in __init__ by ViewportPanel (Phase 33-03).
+        pass
 
     def _build_dock_widgets(self) -> None:
         self._tree_dock = self._make_dock(
@@ -97,6 +108,11 @@ class EditorWindow(QtWidgets.QMainWindow):
         help_menu = mb.addMenu("&Help")
         help_menu.addAction("&About", self._action_about)
 
+    def _wire_shortcuts(self) -> None:
+        # Cmd+R / Ctrl+R for camera reset (D-04).
+        reset_shortcut = QtGui.QShortcut(QtGui.QKeySequence("Ctrl+R"), self)
+        reset_shortcut.activated.connect(self._viewport_panel.reset_camera)
+
     def _wire_drag_drop(self) -> None:
         self.setAcceptDrops(True)
 
@@ -132,6 +148,11 @@ class EditorWindow(QtWidgets.QMainWindow):
         self._status_sim.setText(f"sim: {sim}")
         self._status_fps.setText(f"fps: {fps}")
         self._status_validation.setText(f"validate: {validation}")
+
+    def _update_fps_status(self, fps: float) -> None:
+        path_label = self._current_path.name if self._current_path else "Untitled"
+        sim_label = self._scene.simulator.value if self._scene and hasattr(self._scene.simulator, "value") else "—"
+        self._set_status(path_label, sim_label, f"{fps:.1f}", "—")
 
     def _action_new(self) -> None: pass
     def _action_open(self) -> None: pass

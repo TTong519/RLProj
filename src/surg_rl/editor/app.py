@@ -88,11 +88,20 @@ def main() -> None:
         )
         sys.exit(1)
 
-    # Gate 2: macOS mjpython check.
-    # On non-macOS this is a no-op (returns True).
-    # On macOS without mjpython this prints a banner + returns False.
-    if not _ensure_mjpython_or_warn():
-        sys.exit(1)
+    # Gate 2: macOS mjpython re-exec (replaces warn-and-exit).
+    # On macOS without mjpython, transparently re-exec the editor under mjpython
+    # so MuJoCo's GL context can initialize. On macOS-with-mjpython and on
+    # non-macOS this is a no-op.
+    import platform
+    from surg_rl.editor._platform_guard import _is_running_under_mjpython
+    if platform.system() == "Darwin" and not _is_running_under_mjpython():
+        import os
+        print(
+            "surg-rl-gui: not running under mjpython; re-execing under mjpython for "
+            "MuJoCo GL context...",
+            file=sys.stderr,
+        )
+        os.execvp("mjpython", ["mjpython", "-m", "surg_rl.editor.app"] + sys.argv[1:])
 
     # Gate 3: Phase 33 wires MainWindow here.
     from pathlib import Path
