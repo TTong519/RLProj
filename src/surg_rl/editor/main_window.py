@@ -27,6 +27,22 @@ def _empty_scene_stub() -> "SceneDefinition":
     return SceneDefinition(simulator=SimulatorType.MUJOCO)
 
 
+def _find_instance(scene: "SceneDefinition | None", cls: type):
+    """Recursively find the first instance of `cls` in the scene tree."""
+    if scene is None:
+        return None
+    if hasattr(scene, "environment") and isinstance(getattr(scene, "environment", None), cls):
+        return scene.environment
+    if hasattr(scene, "task") and isinstance(getattr(scene, "task", None), cls):
+        return scene.task
+    for attr in ("robots", "tissues", "instruments"):
+        lst = getattr(scene, attr, None) or []
+        for inst in lst:
+            if isinstance(inst, cls):
+                return inst
+    return None
+
+
 class EditorWindow(QtWidgets.QMainWindow):
     """Phase 33 PySide6 scene editor main window."""
 
@@ -62,18 +78,28 @@ class EditorWindow(QtWidgets.QMainWindow):
         pass
 
     def _build_dock_widgets(self) -> None:
-        self._tree_dock = self._make_dock(
-            "Scene Tree", QtCore.Qt.DockWidgetArea.LeftDockWidgetArea,
-            _PLACEHOLDER_TEXT.format(plan="33-04 — Tree View"),
-        )
-        self._properties_dock = self._make_dock(
-            "Properties", QtCore.Qt.DockWidgetArea.RightDockWidgetArea,
-            _PLACEHOLDER_TEXT.format(plan="33-04 — Property Form"),
-        )
+        # Plan 33-04 wires the tree and property form into the docks.
+        from surg_rl.editor.tree_view import SceneTreeView
+        from surg_rl.editor.property_form import PropertyForm
+        self._tree_view = SceneTreeView(self._scene or _empty_scene_stub())
+        self._property_form = PropertyForm()
+
+        self._tree_dock = QtWidgets.QDockWidget("Scene Tree", self)
+        self._tree_dock.setObjectName("dock_scene_tree")
+        self._tree_dock.setWidget(self._tree_view)
+        self.addDockWidget(QtCore.Qt.DockWidgetArea.LeftDockWidgetArea, self._tree_dock)
+
+        self._properties_dock = QtWidgets.QDockWidget("Properties", self)
+        self._properties_dock.setObjectName("dock_properties")
+        self._properties_dock.setWidget(self._property_form)
+        self.addDockWidget(QtCore.Qt.DockWidgetArea.RightDockWidgetArea, self._properties_dock)
+
         self._llm_dock = self._make_dock(
             "LLM Prompt-to-JSON", QtCore.Qt.DockWidgetArea.BottomDockWidgetArea,
             _PLACEHOLDER_TEXT.format(plan="33-05 — LLM Panel"),
         )
+
+        self._tree_view.node_selected.connect(self._on_node_selected)
 
     def _make_dock(
         self, title: str, area: QtCore.Qt.DockWidgetArea, placeholder: str
@@ -153,6 +179,14 @@ class EditorWindow(QtWidgets.QMainWindow):
         path_label = self._current_path.name if self._current_path else "Untitled"
         sim_label = self._scene.simulator.value if self._scene and hasattr(self._scene.simulator, "value") else "—"
         self._set_status(path_label, sim_label, f"{fps:.1f}", "—")
+
+    def _on_node_selected(self, cls: type) -> None:
+        from surg_rl.editor.schema_walker import SchemaWalker
+        instance = _find_instance(self._scene, cls)
+        if instance is None:
+            return
+        specs = SchemaWalker().walk(cls.model_json_schema())
+        self._property_form.set_field_specs(specs, instance)
 
     def _action_new(self) -> None: pass
     def _action_open(self) -> None: pass
