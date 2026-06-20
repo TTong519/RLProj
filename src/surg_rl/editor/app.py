@@ -95,21 +95,16 @@ def main() -> None:
         sys.exit(1)
 
     # Gate 3: Phase 33 wires MainWindow here.
-    # This block is a placeholder. Phase 33 replaces it with:
-    #
-    #     from surg_rl.editor.main_window import MainWindow
-    #     from PySide6.QtWidgets import QApplication
-    #
-    #     app = QApplication(sys.argv)
-    #     window = MainWindow(scene_path=sys.argv[1] if len(sys.argv) > 1 else None)
-    #     window.show()
-    #     sys.exit(app.exec())
-    sys.stderr.write(
-        "surg-rl-gui: editor scaffolding ready (Phase 31 plan 04).\n"
-        "Phase 33 will wire the QApplication + MainWindow here.\n"
-        "Run `surg-rl-gui --help` for usage info.\n"
+    from pathlib import Path
+    from PySide6.QtWidgets import QApplication
+    from surg_rl.editor.main_window import EditorWindow
+
+    app = QApplication(sys.argv)
+    window = EditorWindow(
+        scene_path=Path(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1] != "--headless" else None
     )
-    sys.exit(0)
+    window.show()
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":
