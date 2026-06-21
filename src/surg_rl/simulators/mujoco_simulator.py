@@ -3,7 +3,6 @@
 import contextlib
 import os
 import platform
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -86,6 +85,22 @@ class MuJoCoSimulator(BaseSimulator):
             import mujoco
 
             self._mujoco = mujoco
+            # MuJoCo's Renderer.__del__ unconditionally calls self.close().
+            # If the Renderer constructor fails before setting _gl_context,
+            # __del__ later raises AttributeError, flooding the terminal with
+            # ignored-in-destructor tracebacks. Replace the destructor with a
+            # guarded version that is safe for partially-constructed objects.
+            if mujoco.Renderer.__del__.__name__ != "_safe_renderer_del":
+                _orig_renderer_del = mujoco.Renderer.__del__
+
+                def _safe_renderer_del(self) -> None:
+                    try:
+                        if getattr(self, "_gl_context", None) is not None:
+                            _orig_renderer_del(self)
+                    except Exception:  # noqa: BLE001
+                        pass
+
+                mujoco.Renderer.__del__ = _safe_renderer_del
         except ImportError as exc:
             raise ImportError(
                 "MuJoCo is not installed. Install it with: pip install mujoco"
@@ -749,8 +764,8 @@ class MuJoCoSimulator(BaseSimulator):
             # Damped least squares
             alpha = 0.1
             lam_sq = 0.001
-            J = reduced_jac[:, :col]
-            dq = alpha * np.linalg.solve(J.T @ J + lam_sq * np.eye(col), J.T @ err)
+            jac = reduced_jac[:, :col]
+            dq = alpha * np.linalg.solve(jac.T @ jac + lam_sq * np.eye(col), jac.T @ err)
 
             # Current qpos for these joints
             current_q = []
@@ -776,12 +791,13 @@ class MuJoCoSimulator(BaseSimulator):
             return
 
         # Validate arm_id if provided
-        if arm_id is not None:
-            if self._arm_joint_ranges is None or arm_id not in self._arm_joint_ranges:
-                raise ValueError(
-                    f"Unknown arm_id={arm_id!r}. "
-                    f"Available: {list(self._arm_joint_ranges.keys()) if self._arm_joint_ranges else 'none'}"
-                )
+        if arm_id is not None and (
+            self._arm_joint_ranges is None or arm_id not in self._arm_joint_ranges
+        ):
+            raise ValueError(
+                f"Unknown arm_id={arm_id!r}. "
+                f"Available: {list(self._arm_joint_ranges.keys()) if self._arm_joint_ranges else 'none'}"
+            )
 
         # --- End-effector control modes (IK) --------------------------------
         if self._action_mode in ("endeffector_pose", "endeffector_delta"):
@@ -1306,6 +1322,7 @@ class MuJoCoSimulator(BaseSimulator):
             # Use the editor's shared 3-signal mjpython detection helper
             # (Phase 33-03 refactor: previously inlined the same check here).
             from surg_rl.editor._platform_guard import _is_running_under_mjpython
+
             if not _is_running_under_mjpython():
                 raise RuntimeError(
                     "MuJoCo passive viewer requires 'mjpython' on macOS. "
@@ -1338,11 +1355,3 @@ class MuJoCoSimulator(BaseSimulator):
             self._render_thread.stop()
             self._render_thread = None
         self._viewer = None
-
-    def close(self) -> None:
-        """Clean up simulator resources."""
-        self.stop_viewer()
-        self._renderer = None
-        self._model = None
-        self._data = None
-        self._loaded = False
