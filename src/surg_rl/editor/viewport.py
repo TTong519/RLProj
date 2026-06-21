@@ -50,6 +50,10 @@ class ViewportPanel(QtWidgets.QWidget):
         self._simulator: BaseSimulator | None = None
         self._frame_count: int = 0
         self._last_fps_check: float = 0.0
+        # Render-loop guard (UAT Gap 2 fix): stop() sets this False so that
+        # already-queued QTimer.singleShot callbacks early-return instead of
+        # rescheduling indefinitely after window close.
+        self._running: bool = True
 
         self._canvas = QtWidgets.QLabel()
         self._canvas.setMinimumSize(_DEFAULT_WIDTH, _DEFAULT_HEIGHT)
@@ -68,18 +72,45 @@ class ViewportPanel(QtWidgets.QWidget):
         self._start()
 
     def _start(self) -> None:
+        self._running = True
         QtCore.QTimer.singleShot(0, self._tick)
 
     def stop(self) -> None:
+        # Halt the render loop — _tick checks _running at the top and before
+        # rescheduling, so already-queued QTimer callbacks become no-ops.
+        self._running = False
         if self._simulator is not None:
-            self._simulator.close()
+            try:
+                self._simulator.close()
+            except (AttributeError, OSError):
+                # MuJoCo Renderer.__del__ can raise AttributeError
+                # ('_gl_context') during interpreter shutdown if the GL
+                # context is already destroyed. Swallow it — we're tearing
+                # down (UAT Gap 2 fix).
+                pass
             self._simulator = None
 
+    def __del__(self) -> None:
+        # Best-effort cleanup during interpreter shutdown. Guard against
+        # MuJoCo Renderer.__del__ AttributeError when the GL context is
+        # already garbage-collected (UAT Gap 2 fix).
+        try:
+            self.stop()
+        except Exception:  # noqa: BLE001
+            pass
+
     def _tick(self) -> None:
+        if not self._running:
+            return  # stop() was called — halt the render loop
+
         if self._simulator is None:
             self._simulator = self._on_load_simulator(self._scene)
             if self._simulator is None:
                 self._canvas.setText("(simulator unavailable)")
+                # FIX (UAT Gap 2): reschedule instead of returning — the
+                # original code killed the render loop silently when the
+                # simulator was unavailable.
+                QtCore.QTimer.singleShot(_FRAME_INTERVAL_MS, self._tick)
                 return
 
         try:
@@ -106,7 +137,10 @@ class ViewportPanel(QtWidgets.QWidget):
         self._frame_count += 1
         self._maybe_update_fps()
 
-        QtCore.QTimer.singleShot(_FRAME_INTERVAL_MS, self._tick)
+        # Only reschedule if still running — stop() may have been called
+        # during render (UAT Gap 2 fix: prevents dangling QTimer callbacks).
+        if self._running:
+            QtCore.QTimer.singleShot(_FRAME_INTERVAL_MS, self._tick)
 
     def _maybe_update_fps(self) -> None:
         import time
