@@ -38,7 +38,7 @@ For the historical record of shipped milestones, see `.planning/milestones/v0.X.
 
 - [x] **Phase 31: Tech Debt Foundation** - Sweep 5 quick-win debt items (421 ruff in `src/surg_rl/dreamer/`, Dockerfile.ros2 `$TARGETARCH`, fluid step hook, cut cooldown test, PhiFlow union doc); set up `[gui]` extra + `surg-rl-gui` console script + mjpython re-exec helper so Phase 33 has scaffolding
 - [x] **Phase 32: Demo Suite Polish** - Refactor suturing demo + create knot-tying + needle-passing demos with shared `demos/_common.py` (banner, scene resolver) + `NARRATION_TEMPLATE.md` + 3 per-demo regression tests (completed 2026-06-19)
-- [ ] **Phase 33: PySide6 Scene Editor** - Marquée phase: render bridge + schema walker + tree/form + viewport + undo/redo + LLM panel + shell + smoke tests (all 10 GUI requirements)
+- [x] **Phase 33: PySide6 Scene Editor** - Marquée phase: render bridge + schema walker + tree/form + viewport + undo/redo + LLM panel + shell + smoke tests (all 10 GUI requirements) (completed 2026-06-21)
 - [ ] **Phase 34: User-Facing Docs Refresh** - Rewrite README + overhaul CONTRIBUTING + CHANGELOG v0.5.0 entry + embed 3 demo GIFs (from Phase 32) + 3 GUI screenshots (from Phase 33)
 - [ ] **Phase 35: Advanced Tech Debt** - HARD-fixture `SurgicalEnv`-construction integration test + `CurriculumStageConfig.difficulty` normalization + organ mesh licensing research spike
 
@@ -93,7 +93,7 @@ Plans:
   4. User can right-click a tree node to add/remove/duplicate, drag-reorder within parents, and see red/green validation icons; the LLM panel accepts a text prompt, runs `TextParser.parse_sync()` on a background QThread, and shows a JSON preview the user can accept (writes to draft scene) or reject
   5. User can undo/redo any property change (Cmd+Z / Cmd+Shift+Z) within the session, and the 14-subcommand `surg-rl` CLI still works without importing PySide6 even when `[gui]` is installed
 
-**Plans**: 6/7 plans executed
+**Plans**: 7/7 plans complete
 **UI hint**: yes
 
 Plans:
@@ -104,7 +104,7 @@ Plans:
 - [x] 33-04-PLAN.md — SceneTreeView (right-click context menu Add/Remove/Duplicate, drag-reorder, validation icons) + PropertyForm (QFormLayout with FieldRenderer widgets, 150 ms debounced validation)
 - [x] 33-05-PLAN.md — LLMPanel (QThread TextParserWorker calling TextParser.parse_sync) + SceneUndoStack (deep-copy snapshots, 100-level cap) + file operations (New/Open/Save/Save As) + tests/gui/ smoke test capturing 3 screenshots
 - [x] 33-06-PLAN.md — [GAP CLOSURE] Fix --headless demo scene listing (4-level path) + guard mjpython re-exec against crash/loop (shutil.which + _SURG_RL_GUI_REEXECED env var)
-- [ ] 33-07-PLAN.md — [GAP CLOSURE] Harden viewport render loop (_running flag + __del__ guard + simulator.close try/except) + wire closeEvent to stop viewport + launch smoke test
+- [x] 33-07-PLAN.md — [GAP CLOSURE] Harden viewport render loop (_running flag + __del__ guard + simulator.close try/except) + wire closeEvent to stop viewport + launch smoke test
 
 ### Phase 34: User-Facing Docs Refresh
 
@@ -142,7 +142,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 31. Tech Debt Foundation | 4/4 | Complete | 2026-06-18 |
 | 32. Demo Suite Polish | 3/3 | Complete    | 2026-06-19 |
-| 33. PySide6 Scene Editor | 6/7 | In Progress|  |
+| 33. PySide6 Scene Editor | 7/7 | Complete   | 2026-06-21 |
 | 34. User-Facing Docs Refresh | 0/TBD | Not started | - |
 | 35. Advanced Tech Debt | 0/TBD | Not started | - |
 
