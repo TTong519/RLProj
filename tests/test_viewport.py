@@ -241,3 +241,48 @@ class TestViewportRenderLoopGuard:
         panel.stop()
 
 
+@pytestmark_viewport
+class TestEditorLaunchGuard:
+    """UAT Gap 2: EditorWindow closeEvent + launch smoke test (33-07 task 2)."""
+
+    def test_close_event_stops_viewport(self, qapp, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("HOME", str(tmp_path))
+        from PySide6.QtGui import QCloseEvent
+        from surg_rl.editor.main_window import EditorWindow
+        w = EditorWindow()
+        # Replace the viewport's stop() with a Mock to observe the call.
+        mock_stop = MagicMock()
+        w._viewport_panel.stop = mock_stop
+        w.closeEvent(QCloseEvent())
+        assert mock_stop.call_count >= 1, (
+            "closeEvent must call self._viewport_panel.stop() before Qt teardown"
+        )
+        # Best-effort: close the window cleanly.
+        try:
+            w.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def test_editor_launches_without_freeze(self, qapp, tmp_path, monkeypatch) -> None:
+        """Launch smoke test — verifies the window shows and the event loop runs.
+
+        UAT Gap 2 truth: 'window opens and remains responsive'. If the
+        editor freezes on launch (the original bug), QTest.qWait(500) never
+        returns and this test times out / hangs.
+        """
+        monkeypatch.setenv("HOME", str(tmp_path))
+        from PySide6.QtTest import QTest
+        from surg_rl.editor.main_window import EditorWindow
+        w = EditorWindow()
+        w.show()
+        # Process events for 500ms — if the app froze, this blocks.
+        QTest.qWait(500)
+        assert w.isVisible(), (
+            "Window must be visible after show() + 500ms event processing "
+            "(no freeze on launch)"
+        )
+        w.close()
+        QTest.qWait(100)
+        # If we reach here, the launch did not freeze — test passes.
+
+
