@@ -151,3 +151,93 @@ class TestViewportInMainWindow:
         w.close()
 
 
+@pytestmark_viewport
+class TestViewportRenderLoopGuard:
+    """UAT Gap 2: viewport render-loop hardening (33-07 task 1)."""
+
+    def test_stop_halts_render_loop(self, qapp) -> None:
+        from surg_rl.editor import QtCore
+        from surg_rl.editor.viewport import ViewportPanel
+        scene = _fake_scene()
+        panel = ViewportPanel(scene, on_load_simulator=lambda s: None)
+        qapp.processEvents()
+        panel.stop()
+        assert panel._running is False, "stop() must set _running=False"
+        # After stop(), a queued _tick callback must NOT reschedule.
+        with patch.object(QtCore.QTimer, "singleShot") as mock:
+            panel._tick()
+            assert mock.call_count == 0, (
+                "_tick must not reschedule QTimer.singleShot after stop()"
+            )
+
+    def test_tick_recovers_from_simulator_none(self, qapp) -> None:
+        from surg_rl.editor import QtCore
+        from surg_rl.editor.viewport import ViewportPanel
+        scene = _fake_scene()
+        # Force simulator unavailable.
+        panel = ViewportPanel(scene, on_load_simulator=lambda s: None)
+        panel.stop()  # halt any auto-started loop first
+        panel._running = True  # re-enable for the manual _tick under test
+        panel._simulator = None
+        with patch.object(QtCore.QTimer, "singleShot") as mock:
+            panel._tick()
+            assert "(simulator unavailable)" in panel._canvas.text(), (
+                "canvas must show simulator-unavailable text"
+            )
+            assert mock.call_count >= 1, (
+                "_tick must reschedule when simulator is unavailable "
+                "(original bug: silent render-loop death)"
+            )
+        panel.stop()
+
+    def test_del_guarded_against_attribute_error(self, qapp) -> None:
+        from surg_rl.editor.viewport import ViewportPanel
+
+        class _BadCloseSimulator:
+            def close(self) -> None:
+                raise AttributeError("_gl_context")
+
+            def render(self, **kwargs):
+                return None
+
+        scene = _fake_scene()
+        panel = ViewportPanel(scene, on_load_simulator=lambda s: _BadCloseSimulator())
+        qapp.processEvents()
+        # stop() must swallow the AttributeError from simulator.close().
+        try:
+            panel.stop()
+        except AttributeError as exc:  # noqa: PT017
+            pytest.fail(f"stop() must not raise AttributeError: {exc}")
+        # __del__ must also be guarded — no AttributeError propagates.
+        try:
+            panel.__del__()
+        except AttributeError as exc:  # noqa: PT017
+            pytest.fail(f"__del__ must not raise AttributeError: {exc}")
+
+    def test_render_error_reschedules(self, qapp) -> None:
+        from surg_rl.editor import QtCore
+        from surg_rl.editor.viewport import ViewportPanel
+
+        class _RenderFailSimulator:
+            def close(self) -> None:
+                pass
+
+            def render(self, **kwargs):
+                raise RuntimeError("GL fail")
+
+        scene = _fake_scene()
+        panel = ViewportPanel(scene, on_load_simulator=lambda s: _RenderFailSimulator())
+        panel.stop()  # halt auto-started loop
+        panel._running = True  # re-enable for the manual _tick under test
+        panel._simulator = _RenderFailSimulator()
+        with patch.object(QtCore.QTimer, "singleShot") as mock:
+            panel._tick()
+            assert "Render error" in panel._canvas.text(), (
+                "canvas must show render error text"
+            )
+            assert mock.call_count >= 1, (
+                "_tick must reschedule after a render exception"
+            )
+        panel.stop()
+
+
