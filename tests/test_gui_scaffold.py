@@ -16,6 +16,7 @@ Reference: .planning/phases/31-tech-debt-foundation/31-04-PLAN.md
 Source of truth: src/surg_rl/editor/{__init__,app,_platform_guard}.py
 """
 
+import contextlib
 import os
 import subprocess
 import sys
@@ -286,23 +287,25 @@ class TestAppMain:
         )
 
 
-class TestMjpythonReexecGuard:
-    """Gate 2 mjpython re-exec crash + infinite-loop guards (Gap 2 closure).
+class TestMjpythonNoReexec:
+    """Gate 2 no longer re-execs under mjpython on macOS.
 
-    The hardened Gate 2 in app.py must:
-    1. Check `shutil.which("mjpython")` before `os.execvp` — prevents
-       FileNotFoundError crash when mjpython is not installed on macOS.
-    2. Check `_SURG_RL_GUI_REEXECED=1` env var before re-exec — prevents
-       infinite re-exec loop if `_is_running_under_mjpython()` fails to
-       detect mjpython after a re-exec.
-    3. Fall through to Gate 3 with a warning (NOT exit) when mjpython is
-       missing or already re-execed — the editor still works, just the 3D
-       viewport may not render.
+    Earlier builds re-execed under `mjpython` so MuJoCo's GL context would
+    be on the Cocoa main thread. That breaks PySide6 because `mjpython` runs
+    Python in a secondary thread, while Qt requires QApplication to live on
+    the process main thread. The result was a dock icon with no window and an
+    unresponsive app.
+
+    The hardened Gate 2 now:
+    1. Detects the platform/mjpython state for logging only.
+    2. Never calls `os.execvp("mjpython", ...)`.
+    3. Always falls through to Gate 3 so the Qt GUI runs under the current
+       interpreter. The viewport catches MuJoCo render errors gracefully.
 
     These tests call `main()` directly with mocked values. A fake PySide6
     module is injected into sys.modules so Gate 3's import succeeds but
     QApplication raises SystemExit(0) — proving Gate 2 fell through to
-    Gate 3 (the intended graceful-degradation path).
+    Gate 3 and did NOT re-exec.
     """
 
     @staticmethod
@@ -319,6 +322,7 @@ class TestMjpythonReexecGuard:
         Gate 3 `from surg_rl.editor.main_window import EditorWindow` import
         does not fail on the missing PySide6.QtCore submodule.
         """
+
         class _FakeQApp:
             def __init__(self, *_args, **_kwargs) -> None:
                 raise SystemExit(0)
@@ -348,95 +352,74 @@ class TestMjpythonReexecGuard:
             "surg_rl.editor.main_window": _FakeMainWindowMod,
         }
 
-    def test_mjpython_reexec_guarded_when_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """On macOS without mjpython, main() does NOT raise FileNotFoundError.
+    def test_mjpython_never_reexecs_on_darwin(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """On macOS, main() never re-execs under mjpython (PySide6 safety)."""
+        monkeypatch.setattr(sys, "argv", ["surg-rl-gui"])
+        execvp_mock = MagicMock(side_effect=RuntimeError("os.execvp should NOT be called"))
+        with (
+            patch("platform.system", return_value="Darwin"),
+            patch(
+                "surg_rl.editor._platform_guard._is_running_under_mjpython",
+                return_value=False,
+            ),
+            patch("os.execvp", execvp_mock),
+            patch("surg_rl.editor.app.HAS_GUI", True),
+            patch.dict(sys.modules, self._fake_pyside6_qapp_exit()),
+        ):
+            from surg_rl.editor.app import main
 
-        Gap 2 closure: `os.execvp("mjpython", ...)` crashes with
-        FileNotFoundError if mjpython is not on PATH. The hardened Gate 2
-        must check `shutil.which("mjpython")` first and fall through with a
-        warning instead of crashing.
+            with contextlib.suppress(SystemExit):
+                main()  # Gate 3 fake QApplication -> SystemExit(0), expected
+        # os.execvp must NOT be called on macOS now that re-exec is removed.
+        assert (
+            execvp_mock.call_count == 0
+        ), f"os.execvp must NOT be called on macOS; call_count={execvp_mock.call_count}"
+
+    def test_mjpython_no_reexec_even_if_available(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Even with mjpython on PATH, main() stays in the current interpreter.
+
+        Regression: the old Gate 2 re-execed whenever `shutil.which('mjpython')`
+        found the binary. That path is gone; availability must not trigger re-exec.
         """
         monkeypatch.setattr(sys, "argv", ["surg-rl-gui"])
         execvp_mock = MagicMock(side_effect=RuntimeError("os.execvp should NOT be called"))
-        with patch("platform.system", return_value="Darwin"), \
-             patch(
-                 "surg_rl.editor._platform_guard._is_running_under_mjpython",
-                 return_value=False,
-             ), \
-             patch("shutil.which", return_value=None), \
-             patch("os.execvp", execvp_mock), \
-             patch("surg_rl.editor.app.HAS_GUI", True), \
-             patch.dict(sys.modules, self._fake_pyside6_qapp_exit()):
+        with (
+            patch("platform.system", return_value="Darwin"),
+            patch(
+                "surg_rl.editor._platform_guard._is_running_under_mjpython",
+                return_value=False,
+            ),
+            patch("shutil.which", return_value="/fake/mjpython"),
+            patch("os.execvp", execvp_mock),
+            patch("surg_rl.editor.app.HAS_GUI", True),
+            patch.dict(sys.modules, self._fake_pyside6_qapp_exit()),
+        ):
             from surg_rl.editor.app import main
 
-            try:
+            with contextlib.suppress(SystemExit):
                 main()
-            except SystemExit:
-                pass  # Gate 3 fake QApplication -> SystemExit(0), expected
-            except FileNotFoundError:
-                pytest.fail(
-                    "main() raised FileNotFoundError — Gate 2 must check "
-                    "shutil.which('mjpython') before os.execvp"
-                )
-        # os.execvp must NOT have been called (mjpython missing).
         assert execvp_mock.call_count == 0, (
-            f"os.execvp must NOT be called when mjpython is missing; "
+            f"os.execvp must NOT be called even when mjpython is available; "
             f"call_count={execvp_mock.call_count}"
         )
 
-    def test_mjpython_reexec_loop_guard(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """If _SURG_RL_GUI_REEXECED=1 is set, main() does NOT re-exec again.
-
-        Gap 2 closure: if the re-exec'd process fails to detect mjpython
-        (e.g. _is_running_under_mjpython() returns False after re-exec),
-        the env var loop guard prevents an infinite re-exec loop.
-        """
-        monkeypatch.setattr(sys, "argv", ["surg-rl-gui"])
-        monkeypatch.setenv("_SURG_RL_GUI_REEXECED", "1")
-        execvp_mock = MagicMock(side_effect=RuntimeError("os.execvp should NOT be called"))
-        with patch("platform.system", return_value="Darwin"), \
-             patch(
-                 "surg_rl.editor._platform_guard._is_running_under_mjpython",
-                 return_value=False,
-             ), \
-             patch("shutil.which", return_value="/fake/mjpython"), \
-             patch("os.execvp", execvp_mock), \
-             patch("surg_rl.editor.app.HAS_GUI", True), \
-             patch.dict(sys.modules, self._fake_pyside6_qapp_exit()):
-            from surg_rl.editor.app import main
-
-            try:
-                main()
-            except SystemExit:
-                pass  # Gate 3 fake QApplication -> SystemExit(0), expected
-        # os.execvp must NOT have been called (already re-execed).
-        assert execvp_mock.call_count == 0, (
-            f"os.execvp must NOT be called when _SURG_RL_GUI_REEXECED=1 is set; "
-            f"call_count={execvp_mock.call_count}"
-        )
-
-    def test_mjpython_reexec_skips_non_darwin(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """On non-Darwin platforms, the mjpython gate is a no-op.
-
-        Existing behavior preserved: Gate 2 is macOS-only. On Linux/Windows,
-        no os.execvp call, no warning printed.
-        """
+    def test_mjpython_no_reexec_skips_non_darwin(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """On non-Darwin platforms, the mjpython gate is a no-op."""
         monkeypatch.setattr(sys, "argv", ["surg-rl-gui"])
         execvp_mock = MagicMock(side_effect=RuntimeError("os.execvp should NOT be called"))
-        with patch("platform.system", return_value="Linux"), \
-             patch("os.execvp", execvp_mock), \
-             patch("surg_rl.editor.app.HAS_GUI", True), \
-             patch.dict(sys.modules, self._fake_pyside6_qapp_exit()):
+        with (
+            patch("platform.system", return_value="Linux"),
+            patch("os.execvp", execvp_mock),
+            patch("surg_rl.editor.app.HAS_GUI", True),
+            patch.dict(sys.modules, self._fake_pyside6_qapp_exit()),
+        ):
             from surg_rl.editor.app import main
 
-            try:
-                main()
-            except SystemExit:
-                pass  # Gate 3 fake QApplication -> SystemExit(0), expected
+            with contextlib.suppress(SystemExit):
+                main()  # Gate 3 fake QApplication -> SystemExit(0), expected
         # os.execvp must NOT have been called (non-Darwin).
         assert execvp_mock.call_count == 0, (
-            f"os.execvp must NOT be called on non-Darwin; "
-            f"call_count={execvp_mock.call_count}"
+            f"os.execvp must NOT be called on non-Darwin; " f"call_count={execvp_mock.call_count}"
         )
 
 

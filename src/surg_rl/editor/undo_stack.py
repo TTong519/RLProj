@@ -1,8 +1,28 @@
-"""SceneUndoStack - per-scene QUndoStack with deep-copy snapshots (per D-09..D-12)."""
+"""SceneUndoStack - per-scene QUndoStack with deep-copy snapshots (per D-09..D-12).
+
+Import discipline (debug: gui-no-render-under-mjpython):
+    `from surg_rl.scene_definition import SceneDefinition` is a module-level
+    runtime import in `scene_definition.schema` -> `from surg_rl.rl.difficulty
+    import DifficultyLevel`, which triggers `surg_rl.rl.__init__` -> eagerly
+    imports stable_baselines3 + torch + tensorflow (~9-11s). Running that
+    inside `EditorWindow.__init__` blocks the QApplication event loop before
+    `window.show()`, producing the "Application Not Responding" launch freeze.
+
+    To keep this module cheap to import (it is imported lazily inside
+    EditorWindow.__init__ at main_window.py:58), the SceneDefinition import
+    is deferred to method scope. Annotations rely on
+    `from __future__ import annotations` + TYPE_CHECKING so the runtime
+    cost is paid only when push_snapshot / take_active_apply actually run.
+"""
+
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from surg_rl.editor import QtGui
-from surg_rl.scene_definition import SceneDefinition
+
+if TYPE_CHECKING:
+    from surg_rl.scene_definition import SceneDefinition
 
 _MAX_DEPTH: int = 100  # Per D-11.
 

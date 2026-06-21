@@ -34,90 +34,35 @@ Example:
     ...     total_timesteps=100000,
     ... ))
     >>> model = manager.train()
+
+Lazy import discipline (debug: gui-no-render-under-mjpython):
+    The submodules of this package (callbacks, environment, training,
+    rllib) transitively import heavy third-party dependencies
+    (stable_baselines3 -> torch -> tensorflow, ray). Eagerly importing
+    them at package-init time made every `from surg_rl.rl.<submodule>
+    import X` statement pay ~9-11s of import cost — even when the caller
+    only wanted the lightweight `DifficultyLevel` enum (a leaf module
+    with no surg_rl.* imports). This caused the GUI (`surg-rl-gui`) to
+    freeze for ~11s inside `EditorWindow.__init__` (via
+    `scene_definition.schema` -> `from surg_rl.rl.difficulty import
+    DifficultyLevel`), blocking the QApplication event loop before
+    `window.show()` and producing the macOS "Application Not Responding"
+    state with no visible window.
+
+    To fix this without breaking the public API (`from surg_rl.rl import
+    SurgicalEnv`, etc.), the re-exports are deferred behind PEP 562 module
+    ``__getattr__``. The first attribute access on the package triggers
+    the heavy imports; callers that only import a submodule directly
+    (e.g. ``from surg_rl.rl.difficulty import DifficultyLevel``) no longer
+    pay the full cost. All production callers in ``src/`` use the
+    ``from surg_rl.rl.<submodule> import X`` form, so they benefit
+    immediately. Tests and examples that use ``from surg_rl.rl import X``
+    still work via ``__getattr__``.
 """
 
-# Observation spaces
-# Action spaces
-from .action import (
-    DEFAULT_ACTION_SPECS,
-    ENDEFFECTOR_DELTA_SPEC,
-    ENDEFFECTOR_POSE_SPEC,
-    GRIPPER_SPEC,
-    JOINT_TORQUES_SPEC,
-    ActionBuilder,
-    ActionConfig,
-    ActionScaling,
-    ActionSpec,
-    ActionType,
-)
-from .action import (
-    JOINT_POSITIONS_SPEC as ACTION_JOINT_POSITIONS_SPEC,
-)
-from .action import (
-    JOINT_VELOCITIES_SPEC as ACTION_JOINT_VELOCITIES_SPEC,
-)
-
-# Callbacks
-from .callbacks import (
-    CheckpointCallback,
-    CurriculumCallback,
-    EvaluationCallback,
-    TensorBoardCallback,
-    TrainingProgressCallback,
-)
-
-# Difficulty presets (EASY/MEDIUM/HARD enum with scalar values)
+# Lightweight submodules that are cheap to import (no heavy third-party
+# deps). These are imported eagerly so they are available immediately.
 from .difficulty import DifficultyLevel
-
-# Environment
-from .environment import (
-    SurgicalEnv,
-    SurgicalEnvConfig,
-    make_env,
-    make_vec_env,
-)
-from .observation import (
-    ANGLE_TO_TARGET_SPEC,
-    DEFAULT_SPECS,
-    DEPTH_IMAGE_SPEC,
-    DISTANCE_TO_TARGET_SPEC,
-    ENDEFFECTOR_POS_SPEC,
-    ENDEFFECTOR_QUAT_SPEC,
-    FORCE_TORQUE_SPEC,
-    # Default specs
-    JOINT_POSITIONS_SPEC,
-    JOINT_VELOCITIES_SPEC,
-    RGB_IMAGE_SPEC,
-    SEGMENTATION_SPEC,
-    TARGET_POS_SPEC,
-    TARGET_QUAT_SPEC,
-    TISSUE_STATE_SPEC,
-    ObservationBuilder,
-    ObservationConfig,
-    ObservationSpec,
-    ObservationType,
-)
-
-# Reward functions
-from .rewards import (
-    ActionPenalty,
-    BaseRewardFunction,
-    CollisionPenalty,
-    CompositeReward,
-    DissectionReward,
-    DistanceReward,
-    NeedlePassingReward,
-    OrientationReward,
-    RewardConfig,
-    RewardResult,
-    RewardType,
-    SuccessReward,
-    SuturingReward,
-    TimePenalty,
-    create_default_reward,
-)
-
-# Task results
 from .task_results import (
     TASK_RESULT_MAP,
     CuttingResult,
@@ -129,12 +74,76 @@ from .task_results import (
     TaskResult,
 )
 
-# Training
-from .training import (
-    AlgorithmConfig,
-    TrainingConfig,
-    TrainingManager,
-)
+# Heavy submodules (callbacks -> stable_baselines3 -> torch -> tensorflow,
+# environment -> simulators, training -> SB3, rllib -> ray) are deferred
+# to PEP 562 __getattr__ below. This keeps `import surg_rl.rl` and
+# `from surg_rl.rl.difficulty import DifficultyLevel` cheap.
+
+_LAZY_EXPORTS: dict[str, tuple[str, str]] = {
+    # Observation
+    "ObservationBuilder": (".observation", "ObservationBuilder"),
+    "ObservationConfig": (".observation", "ObservationConfig"),
+    "ObservationSpec": (".observation", "ObservationSpec"),
+    "ObservationType": (".observation", "ObservationType"),
+    "DEFAULT_SPECS": (".observation", "DEFAULT_SPECS"),
+    "JOINT_POSITIONS_SPEC": (".observation", "JOINT_POSITIONS_SPEC"),
+    "JOINT_VELOCITIES_SPEC": (".observation", "JOINT_VELOCITIES_SPEC"),
+    "ENDEFFECTOR_POS_SPEC": (".observation", "ENDEFFECTOR_POS_SPEC"),
+    "ENDEFFECTOR_QUAT_SPEC": (".observation", "ENDEFFECTOR_QUAT_SPEC"),
+    "FORCE_TORQUE_SPEC": (".observation", "FORCE_TORQUE_SPEC"),
+    "TISSUE_STATE_SPEC": (".observation", "TISSUE_STATE_SPEC"),
+    "TARGET_POS_SPEC": (".observation", "TARGET_POS_SPEC"),
+    "TARGET_QUAT_SPEC": (".observation", "TARGET_QUAT_SPEC"),
+    "DISTANCE_TO_TARGET_SPEC": (".observation", "DISTANCE_TO_TARGET_SPEC"),
+    "ANGLE_TO_TARGET_SPEC": (".observation", "ANGLE_TO_TARGET_SPEC"),
+    "RGB_IMAGE_SPEC": (".observation", "RGB_IMAGE_SPEC"),
+    "DEPTH_IMAGE_SPEC": (".observation", "DEPTH_IMAGE_SPEC"),
+    "SEGMENTATION_SPEC": (".observation", "SEGMENTATION_SPEC"),
+    # Action
+    "ActionBuilder": (".action", "ActionBuilder"),
+    "ActionConfig": (".action", "ActionConfig"),
+    "ActionScaling": (".action", "ActionScaling"),
+    "ActionSpec": (".action", "ActionSpec"),
+    "ActionType": (".action", "ActionType"),
+    "DEFAULT_ACTION_SPECS": (".action", "DEFAULT_ACTION_SPECS"),
+    "ACTION_JOINT_POSITIONS_SPEC": (".action", "JOINT_POSITIONS_SPEC"),
+    "ACTION_JOINT_VELOCITIES_SPEC": (".action", "JOINT_VELOCITIES_SPEC"),
+    "JOINT_TORQUES_SPEC": (".action", "JOINT_TORQUES_SPEC"),
+    "ENDEFFECTOR_POSE_SPEC": (".action", "ENDEFFECTOR_POSE_SPEC"),
+    "ENDEFFECTOR_DELTA_SPEC": (".action", "ENDEFFECTOR_DELTA_SPEC"),
+    "GRIPPER_SPEC": (".action", "GRIPPER_SPEC"),
+    # Callbacks
+    "CheckpointCallback": (".callbacks", "CheckpointCallback"),
+    "CurriculumCallback": (".callbacks", "CurriculumCallback"),
+    "EvaluationCallback": (".callbacks", "EvaluationCallback"),
+    "TensorBoardCallback": (".callbacks", "TensorBoardCallback"),
+    "TrainingProgressCallback": (".callbacks", "TrainingProgressCallback"),
+    # Reward
+    "ActionPenalty": (".rewards", "ActionPenalty"),
+    "BaseRewardFunction": (".rewards", "BaseRewardFunction"),
+    "CollisionPenalty": (".rewards", "CollisionPenalty"),
+    "CompositeReward": (".rewards", "CompositeReward"),
+    "DissectionReward": (".rewards", "DissectionReward"),
+    "DistanceReward": (".rewards", "DistanceReward"),
+    "NeedlePassingReward": (".rewards", "NeedlePassingReward"),
+    "OrientationReward": (".rewards", "OrientationReward"),
+    "RewardConfig": (".rewards", "RewardConfig"),
+    "RewardResult": (".rewards", "RewardResult"),
+    "RewardType": (".rewards", "RewardType"),
+    "SuccessReward": (".rewards", "SuccessReward"),
+    "SuturingReward": (".rewards", "SuturingReward"),
+    "TimePenalty": (".rewards", "TimePenalty"),
+    "create_default_reward": (".rewards", "create_default_reward"),
+    # Environment
+    "SurgicalEnv": (".environment", "SurgicalEnv"),
+    "SurgicalEnvConfig": (".environment", "SurgicalEnvConfig"),
+    "make_env": (".environment", "make_env"),
+    "make_vec_env": (".environment", "make_vec_env"),
+    # Training
+    "AlgorithmConfig": (".training", "AlgorithmConfig"),
+    "TrainingConfig": (".training", "TrainingConfig"),
+    "TrainingManager": (".training", "TrainingManager"),
+}
 
 __all__ = [
     # Observation
@@ -169,7 +178,7 @@ __all__ = [
     "ENDEFFECTOR_POSE_SPEC",
     "ENDEFFECTOR_DELTA_SPEC",
     "GRIPPER_SPEC",
-    # Difficulty presets
+    # Difficulty presets (eagerly imported — leaf module)
     "DifficultyLevel",
     # Reward
     "ActionPenalty",
@@ -192,7 +201,7 @@ __all__ = [
     "SurgicalEnvConfig",
     "make_env",
     "make_vec_env",
-    # Task results
+    # Task results (eagerly imported — lightweight)
     "TaskResult",
     "SuturingResult",
     "KnotTyingResult",
@@ -213,9 +222,38 @@ __all__ = [
     "TrainingProgressCallback",
 ]
 
-try:
-    from surg_rl.rl.rllib import RllibConfig, train_rllib  # type: ignore[import,unused-import]
 
-    __all__.extend(["RllibConfig", "train_rllib"])
-except ImportError:
-    pass
+def __getattr__(name: str) -> object:
+    """PEP 562 lazy attribute access for heavy re-exports.
+
+    Imports the submodule on first access and binds the attribute. Raises
+    ``AttributeError`` for unknown names (matching the eager ``__all__``
+    contract). ``RllibConfig`` / ``train_rllib`` are handled separately
+    because their import may legitimately fail if ``ray`` is not
+    installed (the eager version swallowed that in a try/except).
+    """
+    if name == "RllibConfig":
+        from surg_rl.rl.rllib import RllibConfig  # type: ignore[import]
+
+        globals()["RllibConfig"] = RllibConfig
+        return RllibConfig
+    if name == "train_rllib":
+        from surg_rl.rl.rllib import train_rllib  # type: ignore[import]
+
+        globals()["train_rllib"] = train_rllib
+        return train_rllib
+
+    spec = _LAZY_EXPORTS.get(name)
+    if spec is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    submodule, attr_name = spec
+    import importlib
+
+    module = importlib.import_module(submodule, __package__)
+    value = getattr(module, attr_name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(__all__) | {"RllibConfig", "train_rllib"})

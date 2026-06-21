@@ -10,11 +10,11 @@ This module exposes:
   `MJPYTHON_BIN`, basename `mjpython` in `sys.executable`, `mjpython` in
   `sys.argv[0]`). Extracted from the inline block at
   `src/surg_rl/simulators/mujoco_simulator.py:1294-1298` so the editor
-  AND `start_viewer()` can share the same detection logic.
+  package and `start_viewer()` share the same detection logic.
 - `_ensure_mjpython_or_warn() -> bool` — on macOS without mjpython,
   prints a clear warning banner (mirrors the ros2_bridge macOS guard
-  pattern at `src/surg_rl/cli.py:858-865`). Caller decides whether to
-  re-exec via `os.execvp("mjpython", ...)` or exit.
+  pattern at `src/surg_rl/cli.py:858-865`). The Qt GUI no longer uses
+  this to re-exec; it is kept for callers that still want the warning.
 
 Phase 31 plan 04 ships these helpers; Phase 33 wires `app.main()` to
 call `_ensure_mjpython_or_warn()` and `os.execvp("mjpython", ...)`
@@ -83,18 +83,13 @@ def _ensure_mjpython_or_warn() -> bool:
         or macOS with mjpython detected). False if on macOS without
         mjpython (the warning banner has been printed to stderr).
 
-    The caller decides whether to `os.execvp("mjpython", ...)` or to
-    exit with a non-zero code. Phase 33's `app.main()` will use:
-
-    .. code-block:: python
-
-        if not _ensure_mjpython_or_warn():
-            sys.exit(1)
-            # OR: os.execvp("mjpython", ["mjpython", "-m", "surg_rl.editor.app"] + sys.argv)
-
-    On non-macOS platforms, this helper is a no-op (returns True) —
-    the mjpython check is macOS-specific. This mirrors the ros2_bridge
-    pattern at `src/surg_rl/cli.py:858` (which is also macOS-only).
+    The Qt GUI editor intentionally does NOT re-exec under `mjpython`,
+    because `mjpython` runs the Python interpreter in a secondary thread and
+    PySide6's QApplication must live on the process main thread. Callers that
+    still need the banner can use this helper; it returns True on non-macOS
+    platforms (no-op) and prints the warning on macOS without mjpython.
+    This mirrors the ros2_bridge macOS-only guard pattern at
+    `src/surg_rl/cli.py:858`.
     """
     if platform.system() != "Darwin":
         return True  # Non-macOS — no check needed.

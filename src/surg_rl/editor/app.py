@@ -11,10 +11,10 @@ Qt main window (Phase 33 wires the actual QApplication + MainWindow):
 1. **PySide6 install gate** — checks `surg_rl.editor.HAS_GUI`. If False
    (PySide6 not installed), prints the install hint to stderr and exits
    non-zero. Verified by `surg-rl-gui --help` on a PySide6-free system.
-2. **macOS mjpython gate** — on macOS, calls
-   `surg_rl.editor._platform_guard._ensure_mjpython_or_warn()`. If the
-   process is not running under `mjpython`, the helper prints a banner
-   and returns False; `main()` exits non-zero.
+2. **macOS detection gate** — logs whether the process is running under
+   the stock interpreter or `mjpython`. The Qt GUI no longer re-execs under
+   `mjpython` because `mjpython` runs Python on a secondary thread and
+   breaks PySide6's main-thread requirement.
 3. **Phase 33 MainWindow gate** — the `# Phase 33 wires MainWindow here`
    placeholder is where Phase 33 inserts the QApplication + MainWindow
    + app.exec() sequence. This plan does NOT ship the QMainWindow —
@@ -31,7 +31,7 @@ Usage:
     $ surg-rl-gui --headless       # print available scenes and exit
 
 Pitfalls addressed (per .planning/research/PITFALLS-v0.5.0.md):
-- P1 (mjpython re-exec): macOS check via `_ensure_mjpython_or_warn()`.
+- P1 (mjpython check): detected but no re-exec for Qt GUI; `_is_running_under_mjpython()` still used by `start_viewer()`.
 - P6 (optional-dep regression): PySide6 only imported via HAS_GUI gate.
 - P9 ([gui] extra bloat): no PySide6 import unless `surg-rl-gui` is run.
 - P10 (GUI as Typer subcommand): this is a SEPARATE console script.
@@ -49,10 +49,10 @@ def main() -> None:
 
     Gate order (short-circuits on first failure):
     1. PySide6 installed? (`HAS_GUI`)
-    2. macOS + mjpython? (`_ensure_mjpython_or_warn()`)
-    3. Phase 33 wires MainWindow here (placeholder in this plan).
+    2. macOS detection (informational logging only; no re-exec)
+    3. Phase 33 wires MainWindow here.
 
-    Exits with code 1 on install/mjpython gate failure.
+    Exits with code 1 when PySide6 is not installed.
     Exits with code 0 on `--headless` mode.
     Phase 33 will replace the placeholder with `sys.exit(app.exec())`.
     """
@@ -84,9 +84,7 @@ def main() -> None:
         #   parent^4  -> <repo root>           (CORRECT — scenes/ lives here)
         from pathlib import Path as _Path
 
-        fixtures_dir = (
-            _Path(__file__).parent.parent.parent.parent / "tests" / "fixtures" / "scenes"
-        )
+        fixtures_dir = _Path(__file__).parent.parent.parent.parent / "tests" / "fixtures" / "scenes"
         repo_scenes = _Path(__file__).parent.parent.parent.parent / "scenes"
         candidate_dirs = []
         if fixtures_dir.is_dir():
@@ -110,61 +108,22 @@ def main() -> None:
         )
         sys.exit(1)
 
-    # Gate 2: macOS mjpython re-exec (hardened against crash + infinite loop).
-    # On macOS, MuJoCo's GL context requires running under `mjpython` (the
-    # MuJoCo-bundled Python interpreter). If the current process is NOT
-    # already under mjpython, we re-exec under it. Two guards prevent the
-    # two failure modes identified in UAT Gap 2:
+    # Gate 2: macOS detection (informational only — no re-exec).
     #
-    #   1. `shutil.which("mjpython")` check before `os.execvp` — prevents
-    #      FileNotFoundError crash when mjpython is not installed on macOS
-    #      (the user gets a warning and the editor continues without the 3D
-    #      viewport rather than crashing).
-    #   2. `_SURG_RL_GUI_REEXECED=1` env var loop guard — set before
-    #      execvp, checked at the top of Gate 2. If the re-exec'd process
-    #      fails to detect mjpython (e.g. _is_running_under_mjpython()
-    #      returns False after re-exec), the env var prevents an infinite
-    #      re-exec loop by skipping the re-exec and falling through with a
-    #      warning.
+    # Earlier builds re-execed under `mjpython` so MuJoCo's GL context would
+    # be on the Cocoa main thread. That works for MuJoCo's passive viewer
+    # but breaks PySide6: mjpython runs the Python interpreter in a secondary
+    # thread, while Qt requires QApplication to live on the process main
+    # thread. The result was a dock icon with no window and an unresponsive
+    # app. The GUI therefore stays in the current interpreter on macOS.
     #
-    # On non-macOS platforms, Gate 2 is a no-op (the `platform.system() ==
-    # "Darwin"` check short-circuits).
-    import os
-    import platform
-    import shutil
+    # We still call `_ensure_mjpython_or_warn()` so macOS users without
+    # mjpython see the warning banner, but we never re-exec or exit here.
+    # The 3D viewport uses MuJoCo's offscreen `Renderer`; render errors are
+    # caught and displayed in the canvas instead of hanging.
+    from surg_rl.editor._platform_guard import _ensure_mjpython_or_warn
 
-    from surg_rl.editor._platform_guard import _is_running_under_mjpython
-
-    if platform.system() == "Darwin" and not _is_running_under_mjpython():
-        # Loop guard: if we already re-execed, don't try again (prevents
-        # infinite re-exec loop if _is_running_under_mjpython() fails to
-        # detect mjpython after re-exec).
-        already_reexeced = os.environ.get("_SURG_RL_GUI_REEXECED") == "1"
-
-        if not already_reexeced and shutil.which("mjpython") is not None:
-            # mjpython is installed — re-exec under it for MuJoCo GL context.
-            print(
-                "surg-rl-gui: not running under mjpython; re-execing under "
-                "mjpython for MuJoCo GL context...",
-                file=sys.stderr,
-            )
-            os.environ["_SURG_RL_GUI_REEXECED"] = "1"
-            os.execvp("mjpython", ["mjpython", "-m", "surg_rl.editor.app"] + sys.argv[1:])
-        else:
-            # mjpython not installed OR already re-execed — continue with a
-            # warning. The viewport will catch GL-context errors gracefully
-            # (Plan 33-07 hardens the viewport against render failures).
-            reason = (
-                "mjpython not found on PATH"
-                if shutil.which("mjpython") is None
-                else "re-exec did not detect mjpython"
-            )
-            print(
-                f"surg-rl-gui: warning — {reason}. MuJoCo 3D viewport may not "
-                "initialize. Install mjpython (bundled with `pip install "
-                "mujoco`) for full 3D support. Continuing without re-exec...",
-                file=sys.stderr,
-            )
+    _ensure_mjpython_or_warn()  # Returns False on macOS without mjpython; warning already printed.
 
     # Gate 3: Phase 33 wires MainWindow here.
     from pathlib import Path
@@ -175,7 +134,9 @@ def main() -> None:
 
     app = QApplication(sys.argv)
     window = EditorWindow(
-        scene_path=Path(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1] != "--headless" else None
+        scene_path=(
+            Path(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1] != "--headless" else None
+        )
     )
     window.show()
     sys.exit(app.exec())
@@ -183,4 +144,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
