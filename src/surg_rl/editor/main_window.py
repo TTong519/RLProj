@@ -334,5 +334,12 @@ class EditorWindow(QtWidgets.QMainWindow):
             self.restoreState(state)
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:  # noqa: N802
+        # Stop the viewport render loop BEFORE Qt tears down — prevents
+        # dangling QTimer callbacks and MuJoCo Renderer __del__ crashes
+        # during interpreter shutdown (UAT Gap 2 fix, plan 33-07).
+        try:
+            self._viewport_panel.stop()
+        except Exception:  # noqa: BLE001
+            pass  # best-effort — don't block window close on viewport cleanup
         self._settings.save_window(self.saveGeometry(), self.saveState())
         super().closeEvent(event)
