@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: Overview
-current_phase: 33
-current_phase_name: pyside6-scene-editor
-status: completed
+current_phase: 35
+current_phase_name: advanced-tech-debt
+status: executing
 stopped_at: Phase 33 context gathered
 last_updated: "2026-06-21T01:00:21.878Z"
 last_activity: 2026-06-20
 last_activity_desc: Phase 33 execution started
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 14
-  completed_plans: 12
-  percent: 40
+  completed_plans: 16
+  percent: 60
 ---
 
 # Project State
@@ -24,17 +24,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-18 v0.5.0 milestone started)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** Phase 33 — pyside6-scene-editor
+**Current focus:** Phase 35 — advanced-tech-debt
 
 ## Current Position
 
 Milestone: v0.5.0 — Scene Editor & UX Polish (EXECUTING 2026-06-18)
-Phase: 33 (pyside6-scene-editor) — EXECUTING
-Plan: 1 of 7
+Phase: 34 (user-facing-docs-refresh) — COMPLETE
+Plan: 4 of 4
 Status: complete
+Last activity: 2026-06-21 — Phase 34 docs refresh committed
 Last activity: 2026-06-20 — Phase 33 execution started
 
-Progress: ████████░░░░░░░░░░░░░░░░░░░░░░░░░ 25%
+Progress: ████████████░░░░░░░░░░░░░░░░░░░░░░░ 40%
 
 ## Performance Metrics
 
