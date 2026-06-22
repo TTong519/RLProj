@@ -7,10 +7,13 @@ Usage:
   python demos/capture_demo_gif.py --task needle_passing --output docs/demos/needle_passing.gif
 
 Dependencies:
-  - imageio (bundled with `[simulation]` / `[gui]` extras, or install manually)
+  - imageio (bundled with `[gui]` extra, or install manually)
   - The matching demo module (demos/{task}_demo.py) for reward construction helpers.
 
 The script runs the simulator headlessly and collects rgb_array frames.
+If imageio is unavailable, an ffmpeg-based fallback can be produced by
+pointing ffmpeg at a pre-rendered frame sequence; this script uses imageio
+as the preferred writer.
 """
 
 # fmt: off
@@ -23,10 +26,9 @@ import _platform_guard  # noqa: F401, E402
 
 import argparse
 import sys
-import time
 from pathlib import Path
 
-# Add repo root for `from demos._common import ...`
+# Add repo root so src/ and demos/ are importable when run directly.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
@@ -35,22 +37,16 @@ try:
     import imageio
 except Exception as exc:  # pragma: no cover - runtime dependency hint
     print(
-        "imageio is required for GIF capture. Install it with:
-"
-        "  pip install imageio
-"
-        "or install the [simulation] extra:
-"
+        "imageio is required for GIF capture. Install it with:\n"
+        "  pip install imageio\n"
+        "or install the [simulation] extra:\n"
         "  pip install -e '.[simulation]'"
     )
     raise SystemExit(1) from exc
 
-from demos._common import DEFAULT_TRAINING_CONFIG, resolve_scene
-from surg_rl.scene_definition import load_scene
-from surg_rl.rl.environment import SurgicalEnv, SurgicalEnvConfig, make_env
-from surg_rl.rl.training import AlgorithmConfig, TrainingConfig, TrainingManager
+from demos._common import resolve_scene
+from surg_rl.rl.environment import make_env
 
-# Reward builders per task. Import lazily so the script only loads the demo module it needs.
 _TASK_REWARDS = {
     "suturing": "demos.suturing_demo:build_suturing_reward",
     "knot_tying": "demos.knot_tying_demo:build_knot_tying_reward",
@@ -59,8 +55,8 @@ _TASK_REWARDS = {
 
 _TASK_SCENES = {
     "suturing": "scenes/suturing_demo.json",
-    "knot_tying": "scenes/knot_tying_demo.json",
-    "needle_passing": "scenes/needle_passing_demo.json",
+    "knot_tying": "scenes/knot_tying.json",
+    "needle_passing": "scenes/needle_passing.json",
 }
 
 
@@ -72,18 +68,16 @@ def _import_callable(dotted: str):
 
 def _build_env(task: str, backend: str, max_episode_steps: int):
     scene_path = resolve_scene(_TASK_SCENES[task])
-    scene = load_scene(scene_path)
-
     reward_builder = _import_callable(_TASK_REWARDS[task])
     reward = reward_builder()
-
-    env_config = SurgicalEnvConfig(
-        scene=scene,
-        simulator_backend=backend,
-        reward=reward,
+    env = make_env(
+        scene_path=str(scene_path),
+        simulator_type=backend,
+        render_mode="rgb_array",
         max_episode_steps=max_episode_steps,
     )
-    return make_env(env_config)
+    env._reward_fn = reward
+    return env
 
 
 def capture(
@@ -103,25 +97,22 @@ def capture(
         raise ValueError(f"Output path must be inside repo root {repo_root}, got {output}") from exc
 
     env = _build_env(task, backend, max_episode_steps)
-    obs, _info = env.reset()
+    obs, _info = env.reset(seed=42)
 
-    # Train / load a small policy, or use a random-but-smooth scripted policy for visuals.
-    # For a visual GIF, a random policy is usually sufficient; we use a deterministic one
-    # seeded for reproducibility.
-    rng = np.random.default_rng(42)
     frames_list = []
 
     for _ in range(frames):
-        action = env.action_space.sample()
         if deterministic:
-            # Bias action toward the center to keep the scene visually stable.
-            action = np.zeros_like(action)
-        obs, reward, terminated, truncated, info = env.step(action)
-        rgb = env.render(mode="rgb_array")
+            action = np.zeros_like(env.action_space.sample())
+        else:
+            action = env.action_space.sample()
+        obs, _reward, terminated, truncated, _info = env.step(action)
+        rgb = env.render()
         if rgb is not None:
-            frames_list.append(rgb)
+            # imageio/PIL expect uint8 RGB arrays
+            frames_list.append(np.asarray(rgb, dtype=np.uint8))
         if terminated or truncated:
-            obs, _info = env.reset()
+            obs, _info = env.reset(seed=42)
 
     env.close()
 
@@ -130,7 +121,9 @@ def capture(
 
     duration_ms = int(1000 / fps)
     imageio.mimsave(str(output), frames_list, duration=duration_ms)
-    print(f"Wrote {len(frames_list)} frames to {output} ({frames / fps:.1f}s at {fps} FPS)")
+    print(
+        f"Wrote {len(frames_list)} frames to {output} ({len(frames_list) / fps:.1f}s at {fps} FPS)"
+    )
 
 
 def main() -> None:

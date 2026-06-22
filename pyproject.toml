@@ -138,6 +138,7 @@ dreamer = [
 gui = [
     "PySide6>=6.8.0,<7.0",
     "markdown-it-py>=3.0.0",
+    "imageio>=2.31.0",
 ]
 
 # ros2: apt deps required (rclpy, sensor-msgs, geometry-msgs, std-msgs)

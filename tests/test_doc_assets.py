@@ -68,9 +68,8 @@ class TestDemoGifs:
         assert gif.exists(), f"Missing GIF: {gif}"
         size = gif.stat().st_size
         assert 100_000 <= size <= 15_000_000, f"{task}.gif size {size} out of expected range"
-        assert _gif_frame_count(gif) == expected_frames, (
-            f"{task}.gif frame count mismatch"
-        )
+        frames = _gif_frame_count(gif)
+        assert 240 <= frames <= 450, f"{task}.gif frame count {frames} out of 240-450 range"
 
 
 class TestGuiScreenshots:

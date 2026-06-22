@@ -143,7 +143,7 @@ Plans:
 | 31. Tech Debt Foundation | 4/4 | Complete | 2026-06-18 |
 | 32. Demo Suite Polish | 3/3 | Complete    | 2026-06-19 |
 | 33. PySide6 Scene Editor | 7/7 | Complete   | 2026-06-21 |
-| 34. User-Facing Docs Refresh | 0/TBD | Not started | - |
+| 34. User-Facing Docs Refresh | 4/4 | Complete | 2026-06-21 |
 | 35. Advanced Tech Debt | 0/TBD | Not started | - |
 
 ## Coverage
