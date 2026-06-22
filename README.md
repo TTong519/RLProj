@@ -4,65 +4,49 @@
 
 **AI-powered surgical robotics scene generation and RL training system.**
 
-End-to-end pipeline from a text description or JSON/YAML scene definition to a trained RL policy in a realistic surgical simulation. Generate scenes via LLM/VLM, train agents with Stable-Baselines3 or Ray/RLlib across MuJoCo and PyBullet backends, with advanced simulation (deformable objects, volumetric cutting, grid-based fluids), domain randomization, curriculum learning, and adaptive difficulty.
-
 [![Python](https://img.shields.io/badge/python-%E2%89%A53.10-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-## Key Features
+End-to-end pipeline from a text description or JSON/YAML scene definition to a trained
+RL policy in a realistic surgical simulation. Generate scenes via LLM/VLM, train agents
+with Stable-Baselines3 or Ray/RLlib across MuJoCo and PyBullet backends, and edit
+scenes visually with the built-in PySide6 GUI editor.
 
-- **AI-powered scene generation** — Create surgical scenes from natural language (LLM) or images (VLM) with automatic primitive mesh fallbacks
-- **Dual physics backends** — MuJoCo 3.x for high-fidelity simulation and PyBullet 3.x for soft-body/deformable tissue with unified API
-- **RL training** — PPO, SAC, TD3, DDPG, and A2C via Stable-Baselines3 with Gymnasium environments
-- **Distributed training** — Scale across clusters with Ray/RLlib, hyperparameter tuning, and checkpoint inspection
-- **Advanced simulation** — Deformable objects (MuJoCo flex + PyBullet Neo-Hookean soft bodies), volumetric tetrahedral mesh cutting, and grid-based Eulerian fluids (PhiFlow backend)
-- **Tetgen mesh generation** — Platform-agnostic procedural tetrahedral mesh generation replacing PyVista with tetgen >=0.8.4
-- **Domain randomization** — Physics, visual, and dynamics randomization for robust policy transfer
-- **Curriculum & adaptive learning** — Progressive difficulty scheduling and performance-based adjustment
-- **GPU acceleration** — Auto-detect CUDA, ROCm, Metal, Intel, or CPU with graceful fallback. Full Metal MPS compute on Apple Silicon for RL training
-- **Real-time rendering** — Non-blocking viewer with 30 FPS throttle via render thread, macOS mjpython support
-- **ROS2 bridge** — Publish/subscribe joint states and action commands for hardware-in-the-loop integration
-- **ros2_control integration** — Hardware interface via controller_manager with launch file composition
-- **Production deployment** — Multi-arch Docker images (amd64 + arm64), K8s manifests with GPU scheduling
-- **Rich CLI** — Typer-powered `surg-rl` command with 12 subcommands and Rich-formatted output
-
-## Quick Install
+## 60-Second Quickstart
 
 ```bash
-# Editable install with dev dependencies (recommended)
-pip install -e ".[dev]"
+# Editable install with dev + GUI dependencies
+pip install -e ".[dev,gui]"
+
+# Copy environment template and check the CLI
+cp .env.example .env
+surg-rl version --verbose
+
+# Launch the GUI scene editor
+surg-rl-gui scenes/simple_suturing.json
 ```
 
-**Without editable install**, prefix all commands with `PYTHONPATH=src`:
+**Without editable install**, prefix direct Python invocations with `PYTHONPATH=src`:
 
 ```bash
 PYTHONPATH=src python -m surg_rl.cli version
+PYTHONPATH=src python demos/demo.py --headless --steps 0
 ```
 
-Copy `.env.example` to `.env` and configure your LLM provider:
+## Key Features
 
-```bash
-cp .env.example .env
-```
-
-## Quick Start
-
-```bash
-# Check version and GPU availability
-surg-rl version --verbose
-
-# Generate a scene from a text description
-surg-rl generate --text "A robotic arm suturing tissue with a curved needle" --output my_scene.json
-
-# Visualize a scene
-python demos/demo.py --scene scenes/simple_suturing.json
-
-# Train a PPO agent (100k timesteps)
-surg-rl train --scene scenes/simple_suturing.json --algorithm PPO --timesteps 100000
-
-# Evaluate a trained model
-surg-rl evaluate --scene scenes/simple_suturing.json --model logs/training/final_model
-```
+- **AI-powered scene generation** — Create surgical scenes from natural language (LLM) or images (VLM) with automatic primitive mesh fallbacks.
+- **PySide6 GUI scene editor** — Edit scenes with a tree/form panel, live 3D viewport, and an LLM-prompt-to-JSON panel (`surg-rl-gui`).
+- **Dual physics backends** — MuJoCo 3.x for high-fidelity simulation and PyBullet 3.x for soft-body/deformable tissue with a unified API.
+- **RL training** — PPO, SAC, TD3, DDPG, and A2C via Stable-Baselines3 with Gymnasium environments.
+- **Distributed training** — Scale across clusters with Ray/RLlib and hyperparameter tuning.
+- **Advanced simulation** — Deformable objects, volumetric tetrahedral mesh cutting, and grid-based Eulerian fluids (PhiFlow backend).
+- **Tetgen mesh generation** — Platform-agnostic procedural tetrahedral mesh generation.
+- **Domain randomization** — Physics, visual, and dynamics randomization for robust policy transfer.
+- **Curriculum & adaptive learning** — Progressive difficulty scheduling and performance-based adjustment.
+- **GPU acceleration** — Auto-detect CUDA, ROCm, Metal, Intel, or CPU with graceful fallback.
+- **ROS2 bridge** — Publish/subscribe joint states and action commands for hardware-in-the-loop integration.
+- **Production deployment** — Multi-arch Docker images (amd64 + arm64) and K8s manifests.
 
 ## Simulator Backends
 
@@ -71,96 +55,110 @@ surg-rl evaluate --scene scenes/simple_suturing.json --model logs/training/final
 | **MuJoCo** | High-fidelity rigid-body simulation | Fast, accurate physics with GPU-accelerated rendering |
 | **PyBullet** | Soft-body / deformable tissue | Tetrahedral mesh simulation with tetgen mesh generation |
 
-Switch backends via CLI flag or config:
+Switch backends via CLI flag or environment variable:
 
 ```bash
-# CLI
 surg-rl train --backend pybullet --scene scenes/simple_suturing.json --algorithm PPO
-
-# Environment variable
 export DEFAULT_SIMULATOR=pybullet
 ```
 
+## Demo Walkthroughs
+
+Each demo follows the 5-stage narration structure from `demos/NARRATION_TEMPLATE.md`:
+**Setup**, **Action**, **Critical Moment**, **Outcome**, **Takeaway**.
+
+### Suturing
+
+The agent operates a surgical gripper inside a suturing scene with two skin-patch
+tissues and a curved needle. The policy approaches the needle, grasps the shaft,
+and drives the curved body through both tissue patches to complete a single suture.
+
+![Suturing demo](docs/demos/suturing.gif)
+
+Run it yourself:
+
+```bash
+python demos/suturing_demo.py --headless --steps 10000
+```
+
+### Knot-Tying
+
+Two needle drivers coordinate to wrap suture thread around a target point and tighten
+a surgical knot. The critical moment is maintaining thread tension while the second
+driver slides the knot down to the tissue surface.
+
+![Knot-tying demo](docs/demos/knot_tying.gif)
+
+```bash
+python demos/knot_tying_demo.py --headless --steps 10000
+```
+
+### Needle-Passing
+
+The agent passes a curved needle through a narrow target window without contacting
+surrounding tissue. Success requires aligning the needle arc with the entry plane and
+releasing at the correct depth.
+
+![Needle-passing demo](docs/demos/needle_passing.gif)
+
+```bash
+python demos/needle_passing_demo.py --headless --steps 10000
+```
+
+## GUI Scene Editor
+
+Install the GUI extra and launch the editor from any scene file:
+
+```bash
+pip install '.[gui]'
+surg-rl-gui scenes/simple_suturing.json
+```
+
+The editor provides a 4-pane workspace: scene tree on the left, live 3D viewport in
+the center, property form editor on the right, and an LLM-prompt-to-JSON panel at the
+bottom.
+
+![GUI viewport](docs/gui/viewport.png)
+
+For a walkthrough of the tree/form panel and the LLM panel, see the screenshots below:
+
+![GUI tree and form editor](docs/gui/tree_form.png)
+![GUI LLM panel](docs/gui/llm_panel.png)
+
 ## Optional Extras
 
-Install additional capabilities with extras syntax:
+| Extra | What it adds |
+|-------|--------------|
+| *(none)* | Core runtime |
+| `dev` | pytest, black, ruff, mypy, pre-commit |
+| `gui` | PySide6 scene editor (`surg-rl-gui`) |
+| `marl` | PettingZoo multi-agent RL |
+| `dreamer` | DreamerV3 / JAX world-model training |
+| `ros2` | ROS2 hardware-in-the-loop bridge |
+| `simulation` | PhiFlow fluids + cutting |
+| `distributed` | Ray / RLlib |
+| `vision` | VLM-based scene parsing |
+| `llm` | LLM-based scene generation |
+| `tracking` | W&B / MLflow experiment tracking |
+| `meshing` | trimesh real-mesh loading |
+| `docs` | Sphinx documentation toolchain |
+| `benchmark` | matplotlib / seaborn / rliable reporting |
+
+Combine extras:
 
 ```bash
-pip install -e ".[distributed]"   # Ray/RLlib for distributed training
-pip install -e ".[simulation]"     # Advanced simulation: fluids + cutting (phiflow, scikit-image)
-pip install -e ".[ros2]"          # ROS2 bridge (requires apt deps on Linux)
-pip install -e ".[vision]"        # Vision-based scene parsing (torch, transformers)
-pip install -e ".[llm]"           # LLM-based scene generation (openai, anthropic)
-pip install -e ".[tracking]"      # Weights & Biases / MLflow experiment tracking
-pip install -e ".[meshing]"       # PyVista for mesh manipulation
-pip install -e ".[docs]"          # Sphinx documentation toolchain
+pip install -e ".[dev,gui,marl]"
 ```
-
-Combine multiple extras:
-```bash
-pip install -e ".[dev,distributed,vision,llm,tracking]"
-```
-
-| Extra | Package | Description |
-|-------|---------|-------------|
-| `distributed` | `ray[rllib]` | Multi-node RL training and hyperparameter tuning |
-| `simulation` | `phiflow`, `scikit-image` | Grid-based fluids and volumetric cutting |
-| `ros2` | `PyYAML` | ROS2 bridge (requires system ROS2 installation) |
-| `vision` | `torch`, `transformers` | Image-based scene parsing |
-| `llm` | `openai`, `anthropic` | Text-based scene generation |
-| `tracking` | `wandb`, `mlflow` | Experiment monitoring and logging |
-| `meshing` | `pyvista` | Advanced mesh I/O and manipulation |
-| `docs` | `sphinx` | Build documentation locally |
-| `dev` | `pytest`, `ruff`, `black`, `mypy` | Development and testing tools |
-
-## CLI Commands
-
-| Command | Description |
-|---------|-------------|
-| `surg-rl version` | Show version and GPU availability |
-| `surg-rl config` | Display current configuration |
-| `surg-rl setup` | Create required directories |
-| `surg-rl generate` | Generate surgical scenes from text/images |
-| `surg-rl train` | Train an RL agent (PPO/SAC/TD3/DDPG/A2C) |
-| `surg-rl evaluate` | Evaluate a trained model |
-| `surg-rl train-rllib` | Distributed training with RLlib |
-| `surg-rl tune` | Hyperparameter tuning |
-| `surg-rl checkpoint-inspect` | Inspect RLlib checkpoint contents |
-| `surg-rl ros2-bridge` | Start ROS2 bridge for hardware integration |
-| `surg-rl ros2-replay` | Replay trajectory via ROS2 |
-| `surg-rl ros2-control` | Start bridge with ros2_control hardware interface |
-
-### Using ros2 launch with pip install
-
-If you installed surg-rl via pip (not a colcon workspace), use `ROS_PACKAGE_PATH`:
-
-```bash
-ROS_PACKAGE_PATH=src ros2 launch surg_rl bridge.launch.py scene:=path/to/scene.json
-ROS_PACKAGE_PATH=src ros2 launch surg_rl replay.launch.py model:=path/to/checkpoint.zip
-```
-
-For colcon workspaces, no `ROS_PACKAGE_PATH` is needed — colcon's `setup.bash` handles package discovery automatically.
 
 ## Documentation
 
-Full documentation is available in the [`docs/`](docs/) directory:
-
-| Document | Covers |
-|----------|--------|
-| [Getting Started](docs/GETTING_STARTED.md) | Installation, prerequisites, first run |
-| [Architecture](docs/ARCHITECTURE.md) | System design, data flow, key abstractions |
-| [API Reference](docs/API_REFERENCE.md) | Complete public API surface |
-| [Scene Format](docs/SCENE_FORMAT.md) | JSON/YAML scene definition schema |
-| [Configuration](docs/CONFIGURATION.md) | Environment variables and config options |
-| [Dynamics API](docs/DYNAMICS_API.md) | Domain randomization, curriculum, adaptive difficulty |
-| [Testing](docs/TESTING.md) | Test framework, running tests, coverage |
-| [Development Guide](docs/DEVELOPMENT.md) | Local setup, build, code style, PR process |
-| [Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues and solutions |
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+- [CONTRIBUTING.md](CONTRIBUTING.md) — setup, workflow, and conventions
+- [CHANGELOG.md](CHANGELOG.md) — release notes
+- [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) — extended first-run guide
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — full development guide
+- [docs/API_REFERENCE.md](docs/API_REFERENCE.md) — API reference
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system architecture
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE).

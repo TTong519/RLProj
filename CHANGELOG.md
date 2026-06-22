@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
@@ -28,6 +28,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `simulators/scene_builder.py`: Correct ground plane check from `physics.ground_plane` to `environment.ground_plane`
 - `dynamics/adaptive_difficulty.py`: Align `mass_ratio`/`friction` keys between `_get_base_parameters` and `apply_parameters`
 - `dynamics/curriculum.py`: Guard `list.index()` against custom stages; use `hasattr(simulator, "_physics_client")` instead of `_pb` per project rules
+
+
+## [0.5.0] - 2026-06-21
+
+### Added
+- **PySide6 GUI scene editor** (`surg-rl-gui`) with 4-pane layout: scene tree, 3D viewport,
+  property form editor, and LLM-prompt-to-JSON panel.
+- **Knot-tying demo** (`demos/knot_tying_demo.py`) with narration following the 5-stage
+  template in `demos/NARRATION_TEMPLATE.md`.
+- **Needle-passing demo** (`demos/needle_passing_demo.py`) with the same narration structure.
+- Three demo walkthrough GIFs embedded in the README: `docs/demos/{suturing,knot_tying,needle_passing}.gif`.
+- Three GUI editor screenshots embedded in the README: `docs/gui/{viewport,tree_form,llm_panel}.png`.
+- `[gui]` optional dependency in `pyproject.toml` (`PySide6>=6.8.0,<7.0`, `markdown-it-py>=3.0.0`).
+- `surg-rl-gui` console-script entry point separate from the 14-subcommand `surg-rl` CLI.
+
+### Changed
+- Demo narration refactor: all demos now share `demos/_common.py` helpers (`print_banner`,
+  `print_scene_info`, `resolve_scene`, `format_narration_step`, `DEFAULT_TRAINING_CONFIG`)
+  and follow the 5-stage narration template.
+
+### Fixed
+- **421 ruff issues** in `src/surg_rl/dreamer/` reduced to 0 (`ruff check src/surg_rl/dreamer/`).
+- **`Dockerfile.ros2`** now uses `$TARGETARCH` instead of hardcoded `amd64`, enabling multi-arch
+  `docker buildx` builds.
+- **`BaseSimulator.fluid_step(dt)`** added as a no-op default with MuJoCo and PyBullet overrides
+  and `SurgicalEnv` wiring.
+- **Cut cooldown tests** added for both MuJoCo and PyBullet backends.
+- **PhiFlow multi-obstacle `union()` workaround** documented at module level.
+- **mjpython re-exec helper** extracted from `mujoco_simulator.py` and reused by the GUI editor
+  for macOS compatibility.
 
 ## [0.1.0] - 2026-04-07
 
