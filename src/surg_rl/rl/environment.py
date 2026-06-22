@@ -190,41 +190,8 @@ class SurgicalEnv(gym.Env):
             self.observation_space = self._obs_builder.get_observation_space()
         self.action_space = self._action_builder.get_action_space()
 
-        # Initialize reward function
-        task_name = None
-        task_type = None
-        if self._scene.task is not None:
-            task_name = self._scene.task.name
-            task_type = getattr(self._scene.task, "task_type", None)
-
-        # Phase 21: Use TaskRewardRouter when task_type is configured (D-02, D-03)
-        # Phase 29: Read difficulty from TaskConfig.difficulty_level first, then
-        # fall back to env config difficulty (if present), then default 0.5.
-        if task_type is not None:
-            if self._scene.task is not None and self._scene.task.difficulty_level is not None:
-                difficulty: float | DifficultyLevel = self._scene.task.difficulty_level
-            else:
-                # SurgicalEnvConfig may or may not have a difficulty field; getattr is safe
-                difficulty = getattr(self.config, "difficulty", 0.5)
-            router = TaskRewardRouter(difficulty=difficulty)
-            reward_list = router.build(task_type)
-            self._reward_fn = CompositeReward([(r, 1.0) for r in reward_list])
-        else:
-            self._reward_fn = create_default_reward(self.config.reward_config, task_name=task_name)
-
-        # Phase 21 / Phase 29: Track difficulty for TaskResult population.
-        # Use task.difficulty_level.value if set, else env config difficulty,
-        # else default 0.5. The float() coercion handles both enum and float
-        # difficulty values (Phase 29 union: CurriculumStageConfig.difficulty
-        # is float | DifficultyLevel; TaskConfig.difficulty_level is enum | None).
-        if self._scene.task is not None and self._scene.task.difficulty_level is not None:
-            self._task_difficulty = float(self._scene.task.difficulty_level.value)
-        elif hasattr(self.config, "difficulty"):
-            self._task_difficulty = float(self.config.difficulty)
-        else:
-            self._task_difficulty = 0.5
-
-        # Initialize environment controller
+        # Initialize environment controller before reward setup so curriculum
+        # difficulty is available at reward construction time.
         self._controller: EnvironmentController | None = None
         self._setup_controller()
 
@@ -235,6 +202,11 @@ class SurgicalEnv(gym.Env):
         # ros2_control ControllerBridge
         self._controller_bridge: ControllerBridge | None = None
         self._setup_controller_bridge()
+
+        # Initialize reward function and difficulty (single normalization point).
+        self._reward_fn: BaseRewardFunction | CompositeReward | None = None
+        self._task_difficulty: float = 0.5
+        self._setup_rewards()
 
         # Episode state
         self._step_count = 0
@@ -508,6 +480,45 @@ class SurgicalEnv(gym.Env):
             joint_names=joint_names,
         )
         self._controller_bridge.start()
+
+    def _setup_rewards(self) -> None:
+        """Build the reward function and resolve the difficulty scalar.
+
+        This is the single env-construction place where reward difficulty is
+        resolved and normalized to a float before it reaches the reward builder.
+        """
+        task_name = None
+        task_type = None
+        if self._scene.task is not None:
+            task_name = self._scene.task.name
+            task_type = getattr(self._scene.task, "task_type", None)
+
+        # Resolve difficulty scalar from task -> config -> curriculum -> default.
+        difficulty: float | DifficultyLevel
+        if self._scene.task is not None and self._scene.task.difficulty_level is not None:
+            difficulty = self._scene.task.difficulty_level
+        else:
+            # SurgicalEnvConfig may or may not have a difficulty field; getattr is safe
+            difficulty = getattr(self.config, "difficulty", 0.5)
+
+        # If curriculum drives difficulty, normalize the scheduler's current value.
+        if (
+            self.config.use_curriculum
+            and self._controller is not None
+            and self._controller._curriculum is not None
+        ):
+            difficulty = self._controller._curriculum.current_difficulty
+
+        # Phase 29: coerce enum or float to a scalar float for all reward builders.
+        difficulty_float = float(difficulty.value) if isinstance(difficulty, DifficultyLevel) else float(difficulty)
+        self._task_difficulty = difficulty_float
+
+        if task_type is not None:
+            router = TaskRewardRouter(difficulty=difficulty_float)
+            reward_list = router.build(task_type)
+            self._reward_fn = CompositeReward([(r, 1.0) for r in reward_list])
+        else:
+            self._reward_fn = create_default_reward(self.config.reward_config, task_name=task_name)
 
     def _teardown_controller_bridge(self) -> None:
         """Stop and clean up the ros2_control ControllerBridge."""

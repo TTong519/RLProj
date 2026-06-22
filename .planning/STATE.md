@@ -4,17 +4,17 @@ milestone: v0.5.0
 milestone_name: Overview
 current_phase: 35
 current_phase_name: advanced-tech-debt
-status: executing
+status: complete
 stopped_at: Phase 33 context gathered
 last_updated: "2026-06-22T04:43:32.833Z"
-last_activity: 2026-06-21
-last_activity_desc: Phase 34 docs refresh completed
+last_activity: 2026-06-22
+last_activity_desc: Phase 35 advanced tech debt completed
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 14
   completed_plans: 16
-  percent: 80
+  percent: 100
 ---
 
 # Project State
@@ -24,18 +24,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-18 v0.5.0 milestone started)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** Phase 35 — advanced-tech-debt
+**Current focus:** v0.5.0 milestone closeout
 
 ## Current Position
 
 Milestone: v0.5.0 — Scene Editor & UX Polish (EXECUTING 2026-06-18)
-Phase: 34 (user-facing-docs-refresh) — COMPLETE
+Milestone: v0.5.0 — Scene Editor & UX Polish (SHIPPED)
 Plan: 4 of 4
 Status: complete
 Last activity: 2026-06-21 — Phase 34 docs refresh committed
 Last activity: 2026-06-20 — Phase 33 execution started
 
-Progress: ████████████░░░░░░░░░░░░░░░░░░░░░░░ 40%
+Progress: ██████████████████████████████████████ 100%
 
 ## Performance Metrics
 
@@ -110,8 +110,8 @@ Items acknowledged and carried forward from previous milestone close:
 | TASK-02 | Per-level override schema (DifficultyLevelConfig with tissue_stiffness/target_precision_tolerance/tool_position_noise/time_limit) | Deferred | v0.4.2 |
 | TASK-02 | CurriculumScheduler discrete level progression | Deferred | v0.4.2 |
 | TASK-02 | Scene-level `difficulty_levels: list[3]` blocks in scene JSON files | Deferred | v0.4.2 |
-| Phase 29 | End-to-end SurgicalEnv-construction integration test for HARD fixture scene | Deferred (code review WR-02) | v0.4.2 |
-| Phase 29 | CurriculumStageConfig.difficulty normalization at env-construction | Deferred (code review WR-03) | v0.4.2 |
+| Phase 29 | End-to-end SurgicalEnv-construction integration test for HARD fixture scene | Closed in v0.5.0 | v0.4.2 |
+| Phase 29 | CurriculumStageConfig.difficulty normalization at env-construction | Closed in v0.5.0 | v0.4.2 |
 | Phase 30 | Stub-state sentinel flip when real dreamerv3 is integrated (replaces `_build_agent`) | Deferred | v0.4.2 |
 | Phase 17 | Per-tet generation counter for degenerate tets | Deferred | v0.3.2 |
 | Phase 17 | Cut cooldown unit test | **Closed in Phase 31 (TestCutCooldown x 2 backends)** | v0.3.2 |
@@ -124,7 +124,7 @@ Items acknowledged and carried forward from previous milestone close:
 | v2 | TASK-05 task chains (grasp→cut→suture) | v2 | v0.4.0 |
 | v2 | MARL-05 RLlib centralized critic | v2 | v0.4.0 |
 | v2 | DMV3-06 DreamerV3 offline training from demos | v2 | v0.4.0 |
-| Assets | Organ mesh source licensing (surgtoolloc or procedural) | Acknowledged | v0.4.0 |
+| Assets | Organ mesh source licensing (surgtoolloc or procedural) | Researched; deferred to v0.6.0 | v0.4.0 |
 | Testing | Linux-only ROS2 subscriber e2e tests | Acknowledged | v0.3.1 |
 
 ## Session Continuity

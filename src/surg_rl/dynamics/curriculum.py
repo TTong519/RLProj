@@ -206,7 +206,8 @@ class CurriculumScheduler(BaseController):
     @property
     def current_difficulty(self) -> float:
         """Current difficulty level (0.0 to 1.0)."""
-        return self._stages[self._current_stage].difficulty
+        d = self._stages[self._current_stage].difficulty
+        return float(d.value) if isinstance(d, DifficultyLevel) else float(d)
 
     @property
     def stage_config(self) -> CurriculumStageConfig:
