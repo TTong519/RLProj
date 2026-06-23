@@ -12,7 +12,22 @@ from surg_rl.editor.schema_walker import FieldSpec
 
 
 def _make_vec3_spinbox(spec: FieldSpec) -> QtWidgets.QWidget:
-    """3 QDoubleSpinBox side-by-side (x, y, z) inside a QWidget container."""
+    """3 QDoubleSpinBox side-by-side (x, y, z) inside a QWidget container.
+
+    If the FieldSpec represents a single numeric leaf (e.g. a Position scalar
+    tagged with the parent object's vec3 hint), render a single spinbox
+    instead so the form shows one widget per leaf.
+    """
+    is_scalar = spec.type in ("number", "integer")
+    if is_scalar:
+        spin = QtWidgets.QDoubleSpinBox()
+        spin.setObjectName(spec.field_name)
+        spin.setDecimals(4)
+        spin.setRange(-1e6, 1e6)
+        default = spec.default_value if isinstance(spec.default_value, (int, float)) else 0.0
+        spin.setValue(float(default))
+        return spin
+
     container = QtWidgets.QWidget()
     layout = QtWidgets.QHBoxLayout(container)
     layout.setContentsMargins(0, 0, 0, 0)

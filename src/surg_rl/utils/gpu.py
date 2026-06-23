@@ -240,6 +240,12 @@ def get_metal_memory_info() -> dict[str, Any] | None:
             return {"unified_memory_gb": round(bytes_total / (1024**3), 1)}
     except (subprocess.SubprocessError, ValueError, OSError):
         pass
+    # Sandbox / restricted environments may block subprocesses.
+    try:
+        bytes_total = os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
+        return {"unified_memory_gb": round(bytes_total / (1024**3), 1)}
+    except (ValueError, OSError):
+        pass
     return None
 
 

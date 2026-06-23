@@ -39,7 +39,7 @@ class TestFieldRendererRegistry:
 
 
 class TestFieldRendererWidgetDispatch:
-    def test_vec3_spinbox_renders_three_number_inputs(self, skip_no_pyside6, qapp) -> None:
+    def test_vec3_spinbox_renders_three_number_inputs(self, qapp) -> None:
         from surg_rl.editor.field_renderer import FieldRenderer
         from surg_rl.editor.schema_walker import FieldSpec
         from PySide6.QtWidgets import QWidget, QDoubleSpinBox
@@ -52,7 +52,7 @@ class TestFieldRendererWidgetDispatch:
         assert len(spinboxes) == 3
         assert [s.objectName() for s in spinboxes] == ["x", "y", "z"]
 
-    def test_enum_combobox_renders_with_enum_values(self, skip_no_pyside6, qapp) -> None:
+    def test_enum_combobox_renders_with_enum_values(self, qapp) -> None:
         from surg_rl.editor.field_renderer import FieldRenderer
         from surg_rl.editor.schema_walker import FieldSpec
         from PySide6.QtWidgets import QComboBox
@@ -65,7 +65,7 @@ class TestFieldRendererWidgetDispatch:
         assert [widget.itemText(i) for i in range(widget.count())] == ["red", "green", "blue"]
         assert widget.currentText() == "red"
 
-    def test_file_picker_renders_line_edit_plus_button(self, skip_no_pyside6, qapp) -> None:
+    def test_file_picker_renders_line_edit_plus_button(self, qapp) -> None:
         from surg_rl.editor.field_renderer import FieldRenderer
         from surg_rl.editor.schema_walker import FieldSpec
         from PySide6.QtWidgets import QWidget, QLineEdit, QPushButton
@@ -77,7 +77,7 @@ class TestFieldRendererWidgetDispatch:
         assert widget.findChild(QLineEdit) is not None
         assert widget.findChild(QPushButton) is not None
 
-    def test_color_picker_renders_button(self, skip_no_pyside6, qapp) -> None:
+    def test_color_picker_renders_button(self, qapp) -> None:
         from surg_rl.editor.field_renderer import FieldRenderer
         from surg_rl.editor.schema_walker import FieldSpec
         from PySide6.QtWidgets import QPushButton
@@ -87,7 +87,7 @@ class TestFieldRendererWidgetDispatch:
         widget = r.render(spec)
         assert isinstance(widget, QPushButton)
 
-    def test_range_slider_renders_slider_with_constraints(self, skip_no_pyside6, qapp) -> None:
+    def test_range_slider_renders_slider_with_constraints(self, qapp) -> None:
         from surg_rl.editor.field_renderer import FieldRenderer
         from surg_rl.editor.schema_walker import FieldSpec
         from PySide6.QtWidgets import QSlider
@@ -102,7 +102,7 @@ class TestFieldRendererWidgetDispatch:
 
 
 class TestFieldRendererDefaults:
-    def test_widget_displays_default_value(self, skip_no_pyside6, qapp) -> None:
+    def test_widget_displays_default_value(self, qapp) -> None:
         from surg_rl.editor.field_renderer import FieldRenderer
         from surg_rl.editor.schema_walker import FieldSpec
         from PySide6.QtWidgets import QLineEdit
@@ -113,7 +113,7 @@ class TestFieldRendererDefaults:
         assert isinstance(widget, QLineEdit)
         assert widget.text() == "hello"
 
-    def test_widget_omits_none_for_optional_fields(self, skip_no_pyside6, qapp) -> None:
+    def test_widget_omits_none_for_optional_fields(self, qapp) -> None:
         from surg_rl.editor.field_renderer import FieldRenderer
         from surg_rl.editor.schema_walker import FieldSpec
         from PySide6.QtWidgets import QLineEdit

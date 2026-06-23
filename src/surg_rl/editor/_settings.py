@@ -27,7 +27,13 @@ class EditorSettings:
     """
 
     def __init__(self) -> None:
-        self._q: QSettings = QSettings(_ORG, _APP)
+        # Use INI format explicitly so tests can isolate with QSettings.setPath.
+        self._q: QSettings = QSettings(
+            QSettings.Format.IniFormat,
+            QSettings.Scope.UserScope,
+            _ORG,
+            _APP,
+        )
 
     def save_window(self, geometry: QByteArray, state: QByteArray) -> None:
         self._q.setValue("window/geometry", geometry)
@@ -58,4 +64,5 @@ class EditorSettings:
         self._q.sync()
 
     def last_provider(self) -> str | None:
-        return self._q.value("llm/last_provider", None, type=str)
+        value = self._q.value("llm/last_provider", None, type=str)
+        return value if value else None

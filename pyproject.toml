@@ -120,6 +120,7 @@ tracking = [
 # Ray/RLlib: pip-installable, requires Python >=3.10
 distributed = [
     "ray[rllib]>=2.10",
+    "dm-tree>=0.1.8",
     "tune-sklearn>=0.4.6",
 ]
 

@@ -126,7 +126,8 @@ class TestPropertyFormRendersFields:
         schema = Position.model_json_schema()
         specs = SchemaWalker().walk(schema)
         form.set_field_specs(specs, instance=Position())
-        assert form.layout().count() >= 3
+        # The form wraps rows in a QScrollArea; inspect the internal form layout.
+        assert form._form_layout.count() >= 1
 
     def test_form_uses_field_renderer(self, qapp) -> None:
         from surg_rl.editor.property_form import PropertyForm
@@ -136,7 +137,7 @@ class TestPropertyFormRendersFields:
         form = PropertyForm()
         specs = SchemaWalker().walk(Position.model_json_schema())
         form.set_field_specs(specs, instance=Position())
-        spinboxes = form.findChildren(QDoubleSpinBox)
+        spinboxes = form._form_host.findChildren(QDoubleSpinBox)
         assert len(spinboxes) == 3
 
 

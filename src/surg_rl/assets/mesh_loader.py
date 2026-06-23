@@ -109,7 +109,7 @@ def decimate_and_decompose(
 
     visual = mesh.copy()
     if target_face_count and len(visual.faces) > target_face_count:
-        visual = visual.simplify_quadratic_decimation(target_face_count)
+        visual = visual.simplify_quadric_decimation(target_face_count)
         logger.info(f"Decimated mesh from {len(mesh.faces)} to {len(visual.faces)} faces")
 
     try:

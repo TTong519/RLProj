@@ -141,9 +141,20 @@ class TestPlatformGuard:
 
     def test_platform_guard_does_not_import_pyside6(self) -> None:
         """Importing the platform guard module does NOT trigger PySide6 import."""
-        import surg_rl.editor._platform_guard  # noqa: F401
-
-        assert "PySide6" not in sys.modules
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import surg_rl.editor._platform_guard; import sys; assert 'PySide6' not in sys.modules",
+            ],
+            capture_output=True,
+            text=True,
+            env={**os.environ, "PYTHONPATH": str(SRC_DIR)},
+        )
+        assert result.returncode == 0, (
+            f"_platform_guard must not import PySide6. "
+            f"stdout={result.stdout!r} stderr={result.stderr!r}"
+        )
 
 
 class TestAppMain:
@@ -457,4 +468,3 @@ class TestSurgRlCliIndependence:
             f"surg-rl --help must NOT import PySide6. "
             f"stdout={result.stdout!r} stderr={result.stderr!r}"
         )
-        assert "PySide6" not in sys.modules

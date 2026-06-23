@@ -17,9 +17,13 @@ from surg_rl.utils.logging import get_logger
 logger = get_logger(__name__)
 
 try:
-    from surg_rl.assets.mesh_loader import load_and_generate_urdf  # noqa: F401
+    from surg_rl.assets.mesh_loader import (
+        load_and_generate_obj_paths,
+        load_and_generate_urdf,
+    )
 except ImportError:
     load_and_generate_urdf = None  # type: ignore[assignment]
+    load_and_generate_obj_paths = None  # type: ignore[assignment]
 
 
 class AssetMissingError(Exception):
@@ -1233,15 +1237,31 @@ f 5 4 8
             pos = "0 0 0"
         body.set("pos", pos)
 
-        # Try loading via trimesh mesh_loader first (produces URDF with V-HACD)
         mesh_asset = getattr(instrument, "mesh", None)
-        if mesh_asset is not None:
-            urdf_path = self._load_instrument_geometry(instrument)
-            if urdf_path:
-                include_elem = ET.SubElement(body, "include", file=urdf_path)
+
+        # Use generated procedural mesh assets for MuJoCo. We cannot ``<include>``
+        # a URDF inside an MJCF — MuJoCo only allows including MJCF files. The
+        # mesh_loader can generate OBJs from real meshes or procedural shapes;
+        # reference those directly via ``<mesh>`` assets + ``<geom type="mesh">``.
+        if mesh_asset is not None and load_and_generate_obj_paths is not None:
+            target_faces = getattr(mesh_asset, "target_face_count", None)
+            mesh_path = getattr(mesh_asset, "path", None)
+            generated = load_and_generate_obj_paths(
+                instrument_type=instrument.type.value,
+                mesh_path=mesh_path,
+                target_face_count=target_faces,
+                name=instrument.name,
+            )
+            if generated is not None:
+                visual_path, _collision_paths = generated
+                mesh_name = f"{instrument.name}_mesh"
+                ET.SubElement(asset, "mesh", name=mesh_name, file=str(visual_path))
+                ET.SubElement(
+                    body, "geom", name=f"{instrument.name}_geom", type="mesh", mesh=mesh_name
+                )
                 return
 
-        # Fallback to direct OBJ mesh reference (existing code path)
+        # Fallback to direct OBJ mesh reference when a real mesh file exists.
         if mesh_asset and getattr(mesh_asset, "path", None):
             resolved = self.resolve_asset_path(mesh_asset.path)
             if resolved and resolved.exists():

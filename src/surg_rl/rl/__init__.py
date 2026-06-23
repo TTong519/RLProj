@@ -60,6 +60,10 @@ Lazy import discipline (debug: gui-no-render-under-mjpython):
     still work via ``__getattr__``.
 """
 
+from typing import Any
+
+import importlib
+
 # Lightweight submodules that are cheap to import (no heavy third-party
 # deps). These are imported eagerly so they are available immediately.
 from .difficulty import DifficultyLevel
@@ -145,6 +149,50 @@ _LAZY_EXPORTS: dict[str, tuple[str, str]] = {
     "TrainingManager": (".training", "TrainingManager"),
 }
 
+# Expose heavy submodules as attributes so tests can monkeypatch
+# names like ``surg_rl.rl.environment.MuJoCoSimulator``.
+_SUBMODULE_NAMES = frozenset({
+    "action",
+    "callbacks",
+    "difficulty",
+    "environment",
+    "observation",
+    "rewards",
+    "rllib",
+    "task_results",
+    "task_reward_router",
+    "task_termination",
+    "training",
+})
+
+
+def __getattr__(name: str) -> Any:
+    """Lazy import heavy submodules and selected public symbols."""
+    if name in _SUBMODULE_NAMES:
+        module = importlib.import_module(f".{name}", __package__)
+        globals()[name] = module
+        return module
+    if name == "RllibConfig":
+        from surg_rl.rl.rllib import RllibConfig  # type: ignore[import]
+
+        globals()["RllibConfig"] = RllibConfig
+        return RllibConfig
+    if name == "train_rllib":
+        from surg_rl.rl.rllib import train_rllib  # type: ignore[import]
+
+        globals()["train_rllib"] = train_rllib
+        return train_rllib
+
+    spec = _LAZY_EXPORTS.get(name)
+    if spec is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    submodule, attr_name = spec
+    module = importlib.import_module(submodule, __package__)
+    value = getattr(module, attr_name)
+    globals()[name] = value
+    return value
+
+
 __all__ = [
     # Observation
     "ObservationBuilder",
@@ -222,38 +270,3 @@ __all__ = [
     "TrainingProgressCallback",
 ]
 
-
-def __getattr__(name: str) -> object:
-    """PEP 562 lazy attribute access for heavy re-exports.
-
-    Imports the submodule on first access and binds the attribute. Raises
-    ``AttributeError`` for unknown names (matching the eager ``__all__``
-    contract). ``RllibConfig`` / ``train_rllib`` are handled separately
-    because their import may legitimately fail if ``ray`` is not
-    installed (the eager version swallowed that in a try/except).
-    """
-    if name == "RllibConfig":
-        from surg_rl.rl.rllib import RllibConfig  # type: ignore[import]
-
-        globals()["RllibConfig"] = RllibConfig
-        return RllibConfig
-    if name == "train_rllib":
-        from surg_rl.rl.rllib import train_rllib  # type: ignore[import]
-
-        globals()["train_rllib"] = train_rllib
-        return train_rllib
-
-    spec = _LAZY_EXPORTS.get(name)
-    if spec is None:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    submodule, attr_name = spec
-    import importlib
-
-    module = importlib.import_module(submodule, __package__)
-    value = getattr(module, attr_name)
-    globals()[name] = value
-    return value
-
-
-def __dir__() -> list[str]:
-    return sorted(set(__all__) | {"RllibConfig", "train_rllib"})

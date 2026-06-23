@@ -9,6 +9,13 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
+def _rllib_available() -> bool:
+    """True only when Ray + dm-tree are importable (Ray needs dm-tree at runtime)."""
+    if __import__("importlib").util.find_spec("ray") is None:
+        return False
+    return __import__("importlib").util.find_spec("tree") is not None
+
+
 
 # --------------------------------------------------------------------------- #
 # GPU auto-configuration (already partially covered in test_rllib_env_registration)
@@ -60,8 +67,8 @@ def test_cpu_only_zero_gpus():
 
 
 @pytest.mark.skipif(
-    __import__("importlib").util.find_spec("ray") is None,
-    reason="ray[rllib] not installed",
+    not _rllib_available(),
+    reason="ray[rllib] / dm-tree not installed",
 )
 def test_train_rllib_rllib_config_builds():
     """``build_rllib_config`` returns an RLlib object when Ray is available."""
@@ -75,8 +82,8 @@ def test_train_rllib_rllib_config_builds():
 
 
 @pytest.mark.skipif(
-    __import__("importlib").util.find_spec("ray") is None,
-    reason="ray[rllib] not installed",
+    not _rllib_available(),
+    reason="ray[rllib] / dm-tree not installed",
 )
 def test_train_rllib_rllib_sac_builds():
     """``build_rllib_config`` works for SAC too."""
@@ -89,8 +96,8 @@ def test_train_rllib_rllib_sac_builds():
 
 
 @pytest.mark.skipif(
-    __import__("importlib").util.find_spec("ray") is None,
-    reason="ray[rllib] not installed",
+    not _rllib_available(),
+    reason="ray[rllib] / dm-tree not installed",
 )
 class TestTrainRllibIntegration:
     """Integration tests for train_rllib() configuration pipeline."""

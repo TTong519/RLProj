@@ -82,16 +82,19 @@ def _minimal_scene() -> dict:
 
 @pytestmark_viewport
 class TestSaveScene:
-    def test_save_writes_valid_json(self, tmp_path) -> None:
+    def test_save_writes_valid_json(self, qapp, tmp_path) -> None:
         from surg_rl.editor.main_window import EditorWindow
         from surg_rl.scene_definition import SceneDefinition, SimulatorType
-        w = EditorWindow.__new__(EditorWindow)
+        w = EditorWindow()
         w._scene = SceneDefinition(simulator=SimulatorType.MUJOCO)
         target = tmp_path / "out.json"
         w._save_scene_to(target)
-        assert target.exists()
-        loaded = json.loads(target.read_text())
-        assert "simulator" in loaded
+        try:
+            assert target.exists()
+            loaded = json.loads(target.read_text())
+            assert "simulator" in loaded
+        finally:
+            w.close()
 
 
 @pytestmark_viewport

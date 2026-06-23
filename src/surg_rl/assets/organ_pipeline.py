@@ -80,7 +80,7 @@ def load_and_repair_organ_surface(
             logger.warning(f"Auto-repair failed: {e}. Proceeding with raw mesh.")
 
     if target_face_count and len(mesh.faces) > target_face_count:
-        mesh = mesh.simplify_quadratic_decimation(target_face_count)
+        mesh = mesh.simplify_quadric_decimation(target_face_count)
         logger.info(f"Decimated organ to {len(mesh.faces)} faces")
 
     return mesh

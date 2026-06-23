@@ -3,6 +3,8 @@
 DIST-06
 """
 
+import os
+from pathlib import Path
 import subprocess
 import sys
 
@@ -10,6 +12,16 @@ import pytest
 
 
 @pytest.mark.slow
+def _is_online() -> bool:
+    """Return True if pypi.org appears reachable."""
+    import socket
+    try:
+        socket.gethostbyname("pypi.org")
+        return True
+    except OSError:
+        return False
+
+
 def test_distributed_extra_resolves():
     """Verify ``pip install --dry-run -e '.[distributed]'`` resolves.
 
@@ -17,11 +29,19 @@ def test_distributed_extra_resolves():
     wheel-availability failures as non-blocking and only assert that the
     dependency graph parses cleanly (no version conflicts).
     """
+    if not _is_online():
+        pytest.skip("Network unavailable — pip cannot resolve [distributed] extra")
+    env = {
+        **os.environ,
+        "PIP_NO_CACHE_DIR": "1",
+        "PIP_CACHE_DIR": str(Path(__file__).parent.parent / ".pip_cache"),
+    }
     result = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "--dry-run", "-e", ".[distributed]"],
+        [sys.executable, "-m", "pip", "install", "--dry-run", "--no-cache-dir", "-e", ".[distributed]"],
         capture_output=True,
         text=True,
         cwd=".",
+        env=env,
     )
     combined = (result.stdout + result.stderr).lower()
 

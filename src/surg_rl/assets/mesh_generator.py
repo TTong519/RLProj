@@ -37,7 +37,7 @@ def _scalpel(target_face_count: int | None = None) -> Any:
     handle.apply_translation([0, 0, -0.09])
     mesh = trimesh.util.concatenate([blade, handle])
     if target_face_count:
-        mesh = mesh.simplify_quadratic_decimation(target_face_count)
+        mesh = mesh.simplify_quadric_decimation(target_face_count)
     return mesh
 
 
@@ -55,7 +55,7 @@ def _forceps(target_face_count: int | None = None) -> Any:
     jaw_r.apply_translation([-0.004, 0, -0.165])
     mesh = trimesh.util.concatenate([shaft, jaw_l, jaw_r])
     if target_face_count:
-        mesh = mesh.simplify_quadratic_decimation(target_face_count)
+        mesh = mesh.simplify_quadric_decimation(target_face_count)
     return mesh
 
 
@@ -71,7 +71,7 @@ def _needle_driver(target_face_count: int | None = None) -> Any:
     jaw.apply_translation([0, 0, -0.155])
     mesh = trimesh.util.concatenate([shaft, jaw])
     if target_face_count:
-        mesh = mesh.simplify_quadratic_decimation(target_face_count)
+        mesh = mesh.simplify_quadric_decimation(target_face_count)
     return mesh
 
 
@@ -86,7 +86,7 @@ def _scissors(target_face_count: int | None = None) -> Any:
     handle.apply_translation([0, 0, -0.075])
     mesh = trimesh.util.concatenate([blade, handle])
     if target_face_count:
-        mesh = mesh.simplify_quadratic_decimation(target_face_count)
+        mesh = mesh.simplify_quadric_decimation(target_face_count)
     return mesh
 
 
@@ -102,7 +102,7 @@ def _clamp(target_face_count: int | None = None) -> Any:
     jaw.apply_translation([0, 0, -0.14])
     mesh = trimesh.util.concatenate([shaft, jaw])
     if target_face_count:
-        mesh = mesh.simplify_quadratic_decimation(target_face_count)
+        mesh = mesh.simplify_quadric_decimation(target_face_count)
     return mesh
 
 
@@ -115,7 +115,7 @@ def _suction(target_face_count: int | None = None) -> Any:
     tube = trimesh.creation.cylinder(radius=0.006, height=0.15, sections=20)
     tube.apply_translation([0, 0, -0.075])
     if target_face_count:
-        tube = tube.simplify_quadratic_decimation(target_face_count)
+        tube = tube.simplify_quadric_decimation(target_face_count)
     return tube
 
 
@@ -131,7 +131,7 @@ def _cautery(target_face_count: int | None = None) -> Any:
     tip.apply_translation([0, 0, -0.15])
     mesh = trimesh.util.concatenate([shaft, tip])
     if target_face_count:
-        mesh = mesh.simplify_quadratic_decimation(target_face_count)
+        mesh = mesh.simplify_quadric_decimation(target_face_count)
     return mesh
 
 
@@ -147,7 +147,7 @@ def _camera(target_face_count: int | None = None) -> Any:
     lens.apply_translation([0, 0, -0.147])
     mesh = trimesh.util.concatenate([shaft, lens])
     if target_face_count:
-        mesh = mesh.simplify_quadratic_decimation(target_face_count)
+        mesh = mesh.simplify_quadric_decimation(target_face_count)
     return mesh
 
 
@@ -159,7 +159,7 @@ def _retractor(target_face_count: int | None = None) -> Any:
 
     blade = trimesh.creation.box(extents=[0.015, 0.003, 0.12])
     if target_face_count:
-        blade = blade.simplify_quadratic_decimation(target_face_count)
+        blade = blade.simplify_quadric_decimation(target_face_count)
     return blade
 
 
@@ -182,7 +182,7 @@ def _needle(target_face_count: int | None = None) -> Any:
         major_radius=0.008, minor_radius=0.0006, major_sections=32, minor_sections=8
     )
     if target_face_count:
-        needle = needle.simplify_quadratic_decimation(target_face_count)
+        needle = needle.simplify_quadric_decimation(target_face_count)
     return needle
 
 
@@ -202,7 +202,7 @@ def _knot_tier(target_face_count: int | None = None) -> Any:
     tip.apply_translation([0, 0, 0.07])
     mesh = trimesh.util.concatenate([shaft, tip])
     if target_face_count:
-        mesh = mesh.simplify_quadratic_decimation(target_face_count)
+        mesh = mesh.simplify_quadric_decimation(target_face_count)
     return mesh
 
 
@@ -222,7 +222,7 @@ def _custom(target_face_count: int | None = None) -> Any:
 
     tool = trimesh.creation.box(extents=[0.006, 0.006, 0.05])
     if target_face_count:
-        tool = tool.simplify_quadratic_decimation(target_face_count)
+        tool = tool.simplify_quadric_decimation(target_face_count)
     return tool
 
 
@@ -248,7 +248,7 @@ def _liver(target_face_count: int | None = None) -> Any:
     mesh.vertices[:, 1] *= 0.6  # flatten Y axis
     mesh.vertices[:, 0] *= 1.2  # widen X axis
     if target_face_count:
-        mesh = mesh.simplify_quadratic_decimation(target_face_count)
+        mesh = mesh.simplify_quadric_decimation(target_face_count)
     return mesh
 
 
@@ -261,7 +261,7 @@ def _kidney(target_face_count: int | None = None) -> Any:
     mesh = trimesh.creation.icosphere(subdivisions=3, radius=0.05)
     mesh.vertices[:, 1] *= 0.5
     if target_face_count:
-        mesh = mesh.simplify_quadratic_decimation(target_face_count)
+        mesh = mesh.simplify_quadric_decimation(target_face_count)
     return mesh
 
 
@@ -275,7 +275,7 @@ def _stomach(target_face_count: int | None = None) -> Any:
     mesh.vertices[:, 1] *= 1.4
     mesh.vertices[:, 0] *= 0.7
     if target_face_count:
-        mesh = mesh.simplify_quadratic_decimation(target_face_count)
+        mesh = mesh.simplify_quadric_decimation(target_face_count)
     return mesh
 
 
@@ -288,7 +288,7 @@ def _gallbladder(target_face_count: int | None = None) -> Any:
     mesh = trimesh.creation.icosphere(subdivisions=2, radius=0.035)
     mesh.vertices[:, 1] *= 1.5
     if target_face_count:
-        mesh = mesh.simplify_quadratic_decimation(target_face_count)
+        mesh = mesh.simplify_quadric_decimation(target_face_count)
     return mesh
 
 

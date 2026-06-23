@@ -29,12 +29,18 @@ class LazyImport:
     def available(self) -> bool:
         """Check whether the underlying module is importable.
 
-        Does NOT raise — returns ``True`` if import succeeded, ``False`` otherwise.
+        Does NOT raise — returns ``True`` if the module appears installable,
+        ``False`` otherwise. Uses ``importlib.util.find_spec`` on the top-level
+        package to avoid actually importing the module (which matters for heavy
+        optional deps like PySide6).
         """
+        if self._import_attempted:
+            return self._module is not None
+        from importlib.util import find_spec
+        top_level = self._module_name.split(".")[0]
         try:
-            self._ensure_import()
-            return True
-        except ImportError:
+            return find_spec(top_level) is not None
+        except (ImportError, ModuleNotFoundError, ValueError):
             return False
 
     def _ensure_import(self) -> None:

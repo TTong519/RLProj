@@ -176,6 +176,7 @@ class MuJoCoSimulator(BaseSimulator):
             self._loaded = True
             self._build_control_map()
             self._build_arm_joint_ranges()
+            self._mujoco.mj_forward(self._model, self._data)
             logger.info(f"Loaded scene: {scene_definition.metadata.name}")
         except Exception as exc:
             logger.error(f"Failed to load MuJoCo model: {exc}")
@@ -198,6 +199,7 @@ class MuJoCoSimulator(BaseSimulator):
             self._rng = np.random.default_rng(seed)
 
         self._mujoco.mj_resetData(self._model, self._data)
+        self._mujoco.mj_forward(self._model, self._data)
         self._simulation_time = 0.0
 
         return self._get_observation()
