@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A comprehensive surgical-robotics reinforcement learning training system with production deployment infrastructure and competitive RL research capabilities. Generates and simulates surgical scenes from text/images via LLM/VLM or JSON scene definitions, trains RL agents (PPO, SAC, TD3, DDPG, A2C) in MuJoCo or PyBullet with domain randomization, curriculum learning, adaptive difficulty, and dual-arm multi-agent support. Real instrument and organ meshes (trimesh) replace primitive fallbacks; 6 surgical task types span easy/medium/hard difficulty; SB3 benchmark reports with publication-quality plots; optional DreamerV3 world model integration runs in process isolation. Features platform-agnostic tetgen mesh generation, FEM deformable objects, real-time volumetric tetrahedral mesh cutting, and Eulerian grid fluid simulation. Supports Apple Silicon Metal GPU compute, multi-arch Docker images, ROS2 ros2_control integration, and Kubernetes deployment. Built for robotics researchers and surgical training simulators.
+A comprehensive surgical-robotics reinforcement learning training system with an interactive PySide6 scene editor, production deployment infrastructure, and competitive RL research capabilities. Generates and simulates surgical scenes from text/images via LLM/VLM or JSON scene definitions — or builds them by hand in the GUI editor — and trains RL agents (PPO, SAC, TD3, DDPG, A2C) in MuJoCo or PyBullet with domain randomization, curriculum learning, adaptive difficulty, and dual-arm multi-agent support. Real instrument and organ meshes (trimesh) replace primitive fallbacks; 6 surgical task types span easy/medium/hard difficulty; SB3 benchmark reports with publication-quality plots; optional DreamerV3 world model integration runs in process isolation. Features platform-agnostic tetgen mesh generation, FEM deformable objects, real-time volumetric tetrahedral mesh cutting, and Eulerian grid fluid simulation. Supports Apple Silicon Metal GPU compute, multi-arch Docker images, ROS2 ros2_control integration, and Kubernetes deployment. Built for robotics researchers and surgical training simulators.
 
 ## Core Value
 
@@ -10,28 +10,23 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 
 ## Current State
 
-**Shipped v0.4.2** (2026-06-14) — Audit Leftovers. All v0.1.0 through v0.4.2 milestones shipped (8 milestones, 30 phases, 87 plans, 23/23 v1 requirements satisfied, 0 partial, 0 deferred). v0.4.2 closed the 2 residual v0.4.0 audit gaps (TASK-02 3-difficulty-levels + DreamerV3 real-subprocess E2E) with 2 surgical phases (3 plans).
+**Shipped v0.5.0** (2026-06-24) — Scene Editor & UX Polish. All v0.1.0 through v0.5.0 milestones shipped (9 milestones, 35 phases, 109 plans, 26/26 v1 requirements satisfied). v0.5.0 delivered the marquée PySide6 GUI scene editor plus 3 polished task demos, a user-facing docs refresh, and 6 tech-debt items (incl. the 421-ruff `dreamer/` cleanup). Test baseline grew 1,134 → 1,325 passing.
 
-**Active v0.5.0** (2026-06-18) — Scene Editor & UX Polish (PLANNING). Phase 31+ roadmap being defined via `/gsd-new-milestone`. Marquée: PySide6 GUI scene editor (3D viewport + tree/form editor + LLM-prompt-to-JSON). Supporting: 3 polished task demos (suturing + knot-tying + needle-passing), user-facing docs refresh (README + CONTRIBUTING + CHANGELOG), interleaved tech debt cleanup (421 ruff, HARD fixture test, fluid step hook, cut cooldown, Dockerfile.ros2 amd64, PhiFlow union workaround).
+**Next:** No milestone defined yet — run `/gsd-new-milestone` to start the next cycle. Carried-forward debt: Phase 09 ros2-bridge verification gaps, Phase 24 DreamerV3 UAT (GPU-gated), and the v0.6.0-deferred items (K8s PVC e2e, organ mesh licensing decision, real DreamerV3 integration, TASK-02 per-level override schema, 3D fluid flag).
 
-## Current Milestone: v0.5.0 Scene Editor & UX Polish (PLANNING 2026-06-18)
+## Shipped Milestone: v0.5.0 Scene Editor & UX Polish (SHIPPED 2026-06-24)
 
 **Goal:** Ship a full PySide6 scene editor (3D viewport + tree/form editor + LLM-prompt-to-JSON), polish 3 surgical task demos (suturing, knot-tying, needle-passing) with consistent narration and walkthroughs, refresh user-facing docs (README, CONTRIBUTING, CHANGELOG), and interleave tech debt cleanup (421 ruff issues, HARD fixture test, fluid step hook, cut cooldown test, Dockerfile.ros2 amd64, PhiFlow multi-obstacle union() workaround). Marquée feature is the GUI editor; demos and docs support adoption.
 
-**Target features:**
-- **PySide6 Scene Editor** — full GUI with 3D viewport (MuJoCo/PyBullet OpenGL context), tree+form property editor, LLM-prompt-to-JSON via existing `scene_generation/text_parser.py`, save/load `.planning/scenes/*.json`, optional dependency group `[gui]`
-- **Demo suite polish (3 demos)** — suturing (already 1168-test clean from quick 20260617-demo-rework), knot-tying (new), needle-passing (new); consistent narration, demo banner, README walkthrough, regression test per demo
-- **User-facing docs refresh** — README rewrite with screenshots/GIFs of GUI and demos, CONTRIBUTING.md overhaul, CHANGELOG entry, demo transcripts; no deep API tutorials (deferred to v0.6.0)
-- **Tech debt cleanup (interleaved with features)** — 421 ruff in `src/surg_rl/dreamer/` (F841/B904/E402), HARD-fixture env-construction integration test, fluid step hook in `base_simulator.py`, cut cooldown unit test, Dockerfile.ros2 amd64 hardcode fix, PhiFlow multi-obstacle union() workaround; deferred items: K8s PVC e2e, organ mesh licensing research, 3D fluid flag, per-tet generation counter
+**Audit verdict:** count-complete — 5/5 phases shipped (22 plans), 26/26 v1 requirements delivered. Pre-close `audit-open` found 3 older-milestone items (Phase 09 verification gaps, Phase 24 UAT partial, demo-rework quick task); demo-rework was already complete (stale marker), the other two acknowledged as deferred in STATE.md. No `v0.5.0-MILESTONE-AUDIT.md` was run.
 
-**Phase ordering (planned):**
-1. **Tech debt foundation** — ruff cleanup, Dockerfile.ros2 amd64 fix, fluid step hook, cut cooldown test, PhiFlow union workaround; one phase to retire quick-win debt so feature work starts clean
-2. **Demo suite polish** — 3 demos (suturing + knot-tying + needle-passing), consistent narration, README walkthrough sections
-3. **PySide6 Scene Editor** — full GUI (3D viewport + tree/form editor + LLM-prompt-to-JSON); marquee phase
-4. **User-facing docs refresh** — README, CONTRIBUTING, CHANGELOG; screenshot capture during Phase 3; transcript from Phase 2 demos
-5. **Advanced tech debt** — HARD-fixture integration test, K8s PVC e2e scaffolding, organ mesh licensing research spike
+**Delivered:**
+- ✓ **PySide6 Scene Editor** (Phase 33, marquée) — `surg-rl-gui` console script launches a full editor: 3D viewport (orbit/pan/zoom, custom `ViewportCanvas`, MuJoCo/PyBullet render bridge with framebuffer retry + persistent-failure short-circuit), schema-driven tree+form via `SchemaWalker` + `FieldRenderer` registry, LLM-prompt-to-JSON panel on a background QThread, undo/redo, File menu + drag-drop, `safe_error_message()` redactor. Optional `[gui]` extra keeps PySide6 install-optional; CLI stays headless-clean.
+- ✓ **Demo suite polish** (Phase 32) — `demos/_common.py` shared narration + `NARRATION_TEMPLATE.md` (5-stage: Setup → Action → Critical Moment → Outcome → Takeaway) + suturing/knot-tying/needle-passing demos + 6 regression tests
+- ✓ **User-facing docs refresh** (Phase 34) — README + CONTRIBUTING + CHANGELOG rewritten for v0.5.0; 3 demo GIFs + 3 GUI screenshots embedded
+- ✓ **Tech debt cleanup** (Phases 31 + 35) — 421→0 ruff in `src/surg_rl/dreamer/`, `Dockerfile.ros2` multi-arch via `$TARGETARCH`, `BaseSimulator.fluid_step` hook, cut cooldown test parametrized over both backends, PhiFlow `union()` workaround documented, HARD-fixture `SurgicalEnv`-construction integration test, `CurriculumStageConfig.difficulty` normalization at env-construction, K8s PVC e2e scaffolding (stubbed, deferred to v0.6.0), organ mesh licensing research spike (deferred decision to v0.6.0)
 
-**Key context:** Phase 30 stub-state sentinel flips when real dreamerv3 is integrated (carries forward, NOT in v0.5.0 scope). Existing DifficultyLevel enum (EASY/MEDIUM/HARD), 6 task types, PettingZoo MultiAgentSurgicalEnv, ExperimentRunner benchmarking, and DreamerV3 stub from v0.4.0–v0.4.2 all carry forward unchanged. Optional dependency group `[gui]` keeps PySide6 install optional; CLI remains the primary entry point for headless servers.
+**Key context:** The GUI no longer re-execs under `mjpython` — mjpython runs Python on a secondary thread, violating PySide6's main-thread requirement and producing the "dock icon, no window" hang (resolved in commit `3031ed9` F-01). Heavy `stable_baselines3`/`torch` re-exports are PEP-562 lazy via `surg_rl.rl.__init__.__getattr__` so editor import does not freeze for 9–11s. Phase 30 DreamerV3 stub-state sentinel carries forward (flips when real dreamerv3 is integrated, NOT in v0.5.0 scope).
 
 ### Previous Milestone: v0.4.2 Audit Leftovers (SHIPPED 2026-06-14)
 
@@ -136,7 +131,7 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 
 ## Requirements
 
-### Validated (v0.4.0–v0.4.2)
+### Validated (v0.4.0–v0.5.0)
 
 - ✓ All v0.3.0–v0.3.2 features (Metal GPU, multi-arch Docker, ros2_control, K8s, tetgen, FEM deformables, volumetric cutting, grid fluids)
 - ✓ **Real Surgical Assets** — trimesh OBJ loading, V-HACD collision, organ OBJ→tetgen, primitive fallback (ASET-01..05) — v0.4.0
@@ -144,10 +139,14 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 - ✓ **Multi-Agent RL** — PettingZoo ParallelEnv dual-arm, SuperSuit wrappers, shared/independent policies, `SurgicalEnv.passthrough_step()` adapter (MARL-01..04) — v0.4.0 + v0.4.1
 - ✓ **Performance Benchmarking** — ExperimentRunner multiprocessing, rliable IQM, per-backend reports, deterministic YAML, 6 task scene JSONs (BENCH-01..05) — v0.4.0 + v0.4.1
 - ✓ **DreamerV3 World Models** — Feasibility spike, process-isolated JAX, `_JsonStdout` wrapper, pixel/state obs, auto-discovery, real-subprocess E2E test gated on GPU+dreamerv3+jax (DMV3-01..05) — v0.4.0 + v0.4.1 + v0.4.2
+- ✓ **PySide6 Scene Editor** — `surg-rl-gui` with 3D viewport, schema-driven tree/form, LLM-prompt-to-JSON, undo/redo, `[gui]` optional extra (GUI-01..10) — v0.5.0
+- ✓ **Demo Suite Polish** — 3 demos (suturing + knot-tying + needle-passing) with shared `demos/_common.py` narration + regression tests (DEMO-01..05) — v0.5.0
+- ✓ **User-Facing Docs Refresh** — README + CONTRIBUTING + CHANGELOG with embedded demo GIFs + GUI screenshots (DOC-01..05) — v0.5.0
+- ✓ **Tech Debt Cleanup** — 421→0 ruff in `dreamer/`, Dockerfile.ros2 multi-arch, fluid_step hook, cut cooldown test, PhiFlow union doc, HARD-fixture env-construction test, CurriculumStageConfig difficulty normalization (DEBT-01..06) — v0.5.0
 
-### Active (v0.5.0+)
+### Active (next milestone)
 
-_(being defined — see `.planning/REQUIREMENTS.md` after this milestone initialization completes)_
+_(not yet defined — run `/gsd-new-milestone` to start the next cycle; phase numbering continues from 36)_
 
 ### Out of Scope
 
@@ -178,7 +177,7 @@ _(being defined — see `.planning/REQUIREMENTS.md` after this milestone initial
 | v0.4.0 | 19–24 | 21 | Complete |
 | v0.4.1 | 25–28 | 4 | Complete |
 | v0.4.2 | 29–30 | 3 | Complete |
-| v0.5.0 | TBD | TBD | Planning (Scene Editor & UX Polish) |
+| v0.5.0 | 31–35 | 22 | Complete (Scene Editor & UX Polish) |
 
 ## Context
 
@@ -186,7 +185,7 @@ _(being defined — see `.planning/REQUIREMENTS.md` after this milestone initial
 **Build:** setuptools, pip, pyproject.toml
 **CLI:** Typer + Rich (`surg-rl` command, 14 subcommands: train, evaluate, benchmark, dreamer-train, dreamer-spike, marl-train, download-assets, version, plus others)
 **Config:** Pydantic v2 dataclasses + pydantic-settings (.env support)
-**Testing:** pytest (pytest.ini with `pythonpath = src`), 1,053+ tests, 0 failures
+**Testing:** pytest (pytest.ini with `pythonpath = src`), 1,325+ tests, 0 failures
 **Lint/Type:** ruff, black, mypy
 
 ## Key Architecture Decisions
@@ -225,6 +224,11 @@ _(being defined — see `.planning/REQUIREMENTS.md` after this milestone initial
 - `TaskRewardRouter` uses strict `type() is float` check (not `==`) in tests to avoid float-mixin equality false-positive (which would mask failure mode where router stored the enum member instead of normalizing)
 - Phase 30 E2E test asserts the EXPECTED `RuntimeError("Agent not configured")` from the current Phase 24 `_build_agent` stub, rather than positive completion — sentinel that will START FAILING when real dreamerv3 is integrated and must be flipped then
 - Phase 30 module-level `pytest.mark.skipif` evaluates at collection time (BEFORE test bodies run); heavy imports (e.g., `run_dreamer_training`) live inside test methods so a missing import in the production module does not crash collection on macOS
+- **v0.5.0 GUI does NOT re-exec under `mjpython`** — mjpython runs Python on a secondary thread, violating PySide6's main-thread requirement and causing a silent "dock icon, no window" hang. The GUI stays in the stock interpreter; mjpython is detected only for a warning banner. (commit `3031ed9` F-01)
+- **PEP 562 lazy `__getattr__` in `surg_rl.rl.__init__`** — heavy `stable_baselines3`/`torch` re-exports load on first attribute access, not at import, so the editor import path does not freeze for 9–11s before `window.show()`
+- **Editor viewport uses a custom `ViewportCanvas(QWidget)`**, not a `QLabel` — reliable mouse/wheel event delivery on macOS; camera offsets are pushed into the simulator via `_editor_camera_*` attrs (PyBullet offscreen fallback honors them; MuJoCo ignores them)
+- **PyBullet RGB normalization** — `_normalize_pb_rgb()` converts all `getCameraImage` pixel payloads (HxWx4, HxWx3, flat tuples/arrays) to a canonical `(H, W, 3) uint8` so the render bridge is robust across PyBullet versions/flags
+- **MuJoCo offscreen renderer short-circuits on persistent CGL/EGL failure** (`_renderer_available = False`) instead of repeating the same error every frame
 
 ## Evolution
 
@@ -245,4 +249,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-06-18 — v0.5.0 milestone initiated (Scene Editor & UX Polish, PLANNING)*
+*Last updated: 2026-06-24 — v0.5.0 milestone shipped (Scene Editor & UX Polish)*

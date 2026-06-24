@@ -1,41 +1,37 @@
 ---
 gsd_state_version: 1.0
 milestone: v0.5.0
-milestone_name: Overview
-current_phase: 35
-current_phase_name: advanced-tech-debt
-status: complete
-stopped_at: Phase 33 context gathered
-last_updated: "2026-06-22T04:43:32.833Z"
-last_activity: 2026-06-22
-last_activity_desc: Phase 35 advanced tech debt completed
+milestone_name: Scene Editor & UX Polish
+current_phase: null
+status: Awaiting next milestone
+stopped_at: null
+last_updated: "2026-06-24T05:18:29.700Z"
+last_activity: 2026-06-24
+last_activity_desc: Milestone v0.5.0 completed and archived
 progress:
   total_phases: 5
   completed_phases: 5
-  total_plans: 14
-  completed_plans: 16
+  total_plans: 22
+  completed_plans: 22
   percent: 100
+current_phase_name: null
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-18 v0.5.0 milestone started)
+See: .planning/PROJECT.md (updated 2026-06-24 v0.5.0 milestone shipped)
 
-**Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation
-**Current focus:** v0.5.0 milestone closeout
+**Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation — with an interactive PySide6 GUI scene editor, automatic primitive fallbacks when real assets are missing, and a benchmarking framework for systematic RL research comparisons.
+**Current focus:** v0.5.0 shipped; next milestone not yet defined — run `/gsd-new-milestone`
 
 ## Current Position
 
-Milestone: v0.5.0 — Scene Editor & UX Polish (EXECUTING 2026-06-18)
-Milestone: v0.5.0 — Scene Editor & UX Polish (SHIPPED)
-Plan: 4 of 4
-Status: complete
-Last activity: 2026-06-21 — Phase 34 docs refresh committed
-Last activity: 2026-06-20 — Phase 33 execution started
-
-Progress: ██████████████████████████████████████ 100%
+Phase: Milestone v0.5.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-06-24 — Milestone v0.5.0 completed and archived
 
 ## Performance Metrics
 
@@ -107,6 +103,18 @@ Items acknowledged and carried forward from previous milestone close:
 |----------|------|--------|-------------|
 | TASK-02 | 3-difficulty-levels (easy/medium/hard presets) | **Closed in v0.4.2** | v0.4.1 |
 | DreamerV3 | Real-subprocess E2E test | **Closed in v0.4.2** | v0.4.1 |
+
+### Acknowledged at v0.5.0 close (2026-06-23)
+
+Open artifacts from the pre-close `audit-open` scan, acknowledged and
+carried forward (3 items; the v0.5.0-relevant `gui-no-render-under-mjpython`
+debug session was resolved by commit `3031ed9` and closed separately):
+
+| Category | Item | Status | Note |
+|----------|------|--------|------|
+| verification | Phase 09 ros2-bridge `09-VERIFICATION.md` gaps_found | Deferred | Older milestone (v0.3.0) verification debt |
+| uat | Phase 24 DreamerV3 `24-UAT.md` partial | Deferred | GPU-gated; macOS local xfail-skip, CI GPU host required |
+| quick_task | demo-rework (20260617) | **Complete** | SUMMARY records "Verified (1168/1168 tests pass)"; audit read stale `[unknown]` marker — actually shipped in commit `9e11c3f` |
 | TASK-02 | Per-level override schema (DifficultyLevelConfig with tissue_stiffness/target_precision_tolerance/tool_position_noise/time_limit) | Deferred | v0.4.2 |
 | TASK-02 | CurriculumScheduler discrete level progression | Deferred | v0.4.2 |
 | TASK-02 | Scene-level `difficulty_levels: list[3]` blocks in scene JSON files | Deferred | v0.4.2 |
@@ -136,3 +144,7 @@ Resume file: .planning/phases/33-pyside6-scene-editor/33-CONTEXT.md
 ---
 
 *Updated: 2026-06-18 — Phase 31 SHIPPED (4/4 plans, 5/5 DEBT-01..05 closed; 1200 tests pass)*
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone

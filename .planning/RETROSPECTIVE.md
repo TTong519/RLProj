@@ -2,6 +2,45 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v0.5.0 — Scene Editor & UX Polish
+
+**Shipped:** 2026-06-24
+**Phases:** 5 (31–35) | **Plans:** 22 | **Requirements:** 26/26 v1 complete
+
+### What Was Built
+- PySide6 GUI scene editor (marquée): `surg-rl-gui` with 3D viewport (custom `ViewportCanvas`, MuJoCo/PyBullet render bridge), schema-driven tree/form via `SchemaWalker` + `FieldRenderer`, LLM-prompt-to-JSON on a background QThread, undo/redo, File menu + drag-drop
+- 3 polished task demos (suturing + knot-tying + needle-passing) sharing `demos/_common.py` narration + `NARRATION_TEMPLATE.md`
+- User-facing docs refresh (README + CONTRIBUTING + CHANGELOG) with embedded demo GIFs + GUI screenshots
+- 6 tech-debt items closed: 421→0 ruff in `dreamer/`, Dockerfile.ros2 multi-arch, `BaseSimulator.fluid_step` hook, cut cooldown test (both backends), PhiFlow `union()` workaround documented, HARD-fixture env-construction test, `CurriculumStageConfig.difficulty` normalization, organ mesh licensing spike
+
+### What Worked
+- Splitting the milestone into 5 phases with a clean-baseline phase first (31) let the marquée editor (33) start on a ruff-clean, scaffolded baseline; Phase 35 (parallel tech debt) ran concurrently via worktrees
+- The `[gui]` optional-extra pattern kept PySide6 out of the headless install; CLI stayed import-clean
+- Per-demo regression tests (`--headless --steps 0` → exit 0) caught demo regressions cheaply
+- `safe_error_message()` redactor centralized API-key/error scrubbing before logs/UI
+
+### What Was Inefficient
+- The `gui-no-render-under-mjpython` debug session consumed 3 attempts and was left `status: fixing` even after the fix (`3031ed9`) landed — the session file was never flipped to resolved, so it kept surfacing in `audit-open` and nearly blocked milestone close. **Stale debug-session status is a real cost.**
+- REQUIREMENTS.md traceability table was never updated as phases shipped (21/26 rows still "Pending" at close despite all phases complete); the archive step had to flip them mechanically
+- An orphaned empty `34-docs-refresh/` directory (left from a renamed phase dir) made the roadmap tool report Phase 34 as unstarted — a false negative that would have routed to re-planning completed work
+
+### Patterns Established
+- **Custom `QWidget` canvas over `QLabel`** for any interactive Qt render surface — reliable mouse/wheel delivery on macOS
+- **Simulator camera offsets via `_editor_camera_*` attrs** — the editor pushes orbit/pan/zoom into the simulator; PyBullet honors them, MuJoCo ignores them, no simulator API change
+- **`_normalize_pb_rgb()` canonicalization** — never trust PyBullet pixel payload shape; normalize to `(H, W, 3) uint8` at the boundary
+- **Persistent-renderer-failure short-circuit** — set `_renderer_available = False` after one CGL/EGL failure rather than spamming the error every frame
+- **PEP 562 `__getattr__` lazy re-exports** for any heavy subpackage (`surg_rl.rl`) imported by a latency-sensitive path (GUI)
+
+### Key Lessons
+- **Mechanical verification ≠ user runtime experience.** The mjpython debug session's stderr-based checks all "passed" while the user saw a silent hang — the Cocoa bundle swallowed stdout/stderr. When a GUI is silent, only a logfile (open+flush) reveals the truth.
+- **Remove the re-exec, don't fix it.** The mjpython re-exec was the root cause; the cleaner fix was to stop re-execing and keep Qt on the main thread, not to patch PYTHONPATH propagation in a path that was fundamentally wrong for PySide6.
+- **Close out your artifacts.** A debug session left `fixing` or an empty phase dir left behind will haunt `audit-open` and can block milestone close. Flip status / remove dirs at the same commit that lands the fix.
+
+### Cost Observations
+- 64 commits across the milestone (2026-06-18 → 2026-06-24), 145 files, +26,483/−559 LOC
+- Test baseline grew 1,134 → 1,325 passing (+191)
+- Model mix: planner=opus, executor=sonnet per config
+
 ## Milestone: v0.4.0 — Training Infrastructure & Realism
 
 **Shipped:** 2026-06-09
@@ -111,6 +150,9 @@
 | v0.3.1 | 1 | 1 | Audit gap closure — first milestone audit cycle |
 | v0.3.2 | 4 | 9 | Advanced simulation — inline plans, in-memory bridges |
 | v0.4.0 | 6 | 21 | Schema-first, optional deps, MARL + DreamerV3, benchmarking |
+| v0.4.1 | 4 | 4 | Gap closure (MARL/DreamerV3 defects, retroactive verification) |
+| v0.4.2 | 2 | 3 | Audit leftovers (DifficultyLevel enum, DreamerV3 E2E) |
+| v0.5.0 | 5 | 22 | PySide6 GUI editor, demo polish, docs refresh, tech-debt sweep |
 
 ### Cumulative Quality
 
@@ -121,7 +163,10 @@
 | v0.3.0 | 826 | — | +51 tests, production infra |
 | v0.3.1 | 833 | — | +7 tests, gap closure |
 | v0.3.2 | 910 | — | +77 tests, advanced simulation |
-| v0.4.0 | TBD | — | +schema+MARL+benchmarking, deferred items carried forward |
+| v0.4.0 | 1,043 | — | +schema+MARL+benchmarking, deferred items carried forward |
+| v0.4.1 | 1,053 | — | +10 tests, MARL/DreamerV3 defect closure |
+| v0.4.2 | 1,134 | — | +81 tests, DifficultyLevel + DreamerV3 E2E |
+| v0.5.0 | 1,325 | — | +191 tests, GUI editor + demo polish + tech-debt sweep |
 
 ### Top Lessons (Verified Across Milestones)
 
