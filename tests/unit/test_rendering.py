@@ -8,12 +8,13 @@ import platform
 import time
 from unittest.mock import MagicMock
 
+import numpy as np
 import pytest
 
 from surg_rl.render_thread import RenderThread
 from surg_rl.rl.environment import SurgicalEnv, SurgicalEnvConfig
 from surg_rl.simulators.mujoco_simulator import MuJoCoSimulator
-from surg_rl.simulators.pybullet_simulator import PyBulletSimulator
+from surg_rl.simulators.pybullet_simulator import PyBulletSimulator, _normalize_pb_rgb
 
 # ============================================================================
 # RenderThread tests
@@ -388,3 +389,92 @@ class TestCliRenderHumanWiring:
         config = SurgicalEnvConfig(render_mode="human", render_fps=30.0)
         assert config.render_mode == "human"
         assert config.render_fps == 30.0
+
+
+# ============================================================================
+# PyBullet RGB normalization tests
+# ============================================================================
+
+
+class TestPyBulletRgbNormalization:
+    """_normalize_pb_rgb must convert all PyBullet pixel payloads to (H, W, 3)."""
+
+    def test_rgba_numpy_array(self):
+        rgba = np.zeros((60, 80, 4), dtype=np.uint8)
+        rgba[:, :, :3] = 42
+        rgb = _normalize_pb_rgb(rgba, 60, 80)
+        assert rgb.shape == (60, 80, 3)
+        assert rgb.dtype == np.uint8
+        assert np.all(rgb == 42)
+
+    def test_rgb_numpy_array(self):
+        rgb_in = np.full((60, 80, 3), 17, dtype=np.uint8)
+        rgb = _normalize_pb_rgb(rgb_in, 60, 80)
+        assert rgb.shape == (60, 80, 3)
+        assert np.all(rgb == 17)
+
+    def test_flat_rgba_tuple(self):
+        flat = [255] * (60 * 80 * 4)
+        rgb = _normalize_pb_rgb(flat, 60, 80)
+        assert rgb.shape == (60, 80, 3)
+        assert rgb.dtype == np.uint8
+        assert np.all(rgb == 255)
+
+    def test_flat_rgb_tuple(self):
+        flat = [128] * (60 * 80 * 3)
+        rgb = _normalize_pb_rgb(flat, 60, 80)
+        assert rgb.shape == (60, 80, 3)
+        assert np.all(rgb == 128)
+
+    def test_flat_rgba_numpy_array(self):
+        flat = np.zeros(60 * 80 * 4, dtype=np.uint8)
+        flat[::4] = 99
+        rgb = _normalize_pb_rgb(flat, 60, 80)
+        assert rgb.shape == (60, 80, 3)
+        assert np.all(rgb[:, :, 0] == 99)
+
+    def test_unexpected_size_returns_black(self):
+        rgb = _normalize_pb_rgb([1, 2, 3], 60, 80)
+        assert rgb.shape == (60, 80, 3)
+        assert rgb.dtype == np.uint8
+        assert np.all(rgb == 0)
+
+
+class TestPyBulletRenderWiring:
+    """render() and get_camera_image() must normalize PyBullet pixel payloads."""
+
+    def test_render_normalizes_flat_tuple_from_getcameraimage(self):
+
+        sim = PyBulletSimulator(render_mode="DIRECT")
+        sim._loaded = True
+        sim.render_width = 8
+        sim.render_height = 6
+        pb = MagicMock()
+        # Return a flat tuple of RGBA ints (PyBullet default when no numpy).
+        pb.getCameraImage.return_value = (8, 6, [42] * (8 * 6 * 4), (), ())
+        pb.computeViewMatrixFromYawPitchRoll.return_value = [0] * 16
+        pb.computeProjectionMatrixFOV.return_value = [0] * 16
+        sim._pb = pb
+
+        rgb = sim.render(mode="rgb_array", width=8, height=6)
+        assert rgb.shape == (6, 8, 3)
+        assert np.all(rgb == 42)
+
+    def test_get_camera_image_normalizes_flat_tuple(self):
+
+        sim = PyBulletSimulator(render_mode="DIRECT")
+        sim._loaded = True
+        sim.render_width = 8
+        sim.render_height = 6
+        scene = MagicMock()
+        scene.environment.cameras = []
+        sim._scene = scene
+        pb = MagicMock()
+        pb.getCameraImage.return_value = (8, 6, [7] * (8 * 6 * 4), (), ())
+        pb.computeViewMatrix.return_value = [0] * 16
+        pb.computeProjectionMatrixFOV.return_value = [0] * 16
+        sim._pb = pb
+
+        rgb = sim.get_camera_image("main", width=8, height=6)
+        assert rgb.shape == (6, 8, 3)
+        assert np.all(rgb == 7)

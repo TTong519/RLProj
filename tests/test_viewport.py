@@ -78,14 +78,12 @@ def _fake_scene() -> MagicMock:
 
 @pytestmark_viewport
 class TestViewportFrame:
-    def test_canvas_is_qlabel_with_pixmap(self, qapp) -> None:
-        from PySide6.QtWidgets import QLabel
-
-        from surg_rl.editor.viewport import ViewportPanel
+    def test_canvas_is_custom_viewport_canvas(self, qapp) -> None:
+        from surg_rl.editor.viewport import ViewportCanvas, ViewportPanel
 
         scene = _fake_scene()
         panel = ViewportPanel(scene)
-        assert isinstance(panel._canvas, QLabel)
+        assert isinstance(panel._canvas, ViewportCanvas)
         panel.stop()
 
     def test_display_array_sets_pixmap(self, qapp) -> None:
@@ -128,7 +126,7 @@ class TestViewportCameraReset:
         panel._camera_offset["distance"] = 0.3
         panel.reset_camera()
         assert panel._camera_offset["azimuth"] == 0.0
-        assert panel._camera_offset["distance"] == 1.0
+        assert panel._camera_offset["distance"] == 2.5
         panel.stop()
 
 
@@ -248,6 +246,49 @@ class TestViewportRenderLoopGuard:
             panel._tick()
             assert "Render error" in panel._canvas.text(), "canvas must show render error text"
             assert mock.call_count >= 1, "_tick must reschedule after a render exception"
+        panel.stop()
+
+    def test_render_none_shows_unavailable_message(self, qapp) -> None:
+        from surg_rl.editor import QtCore
+        from surg_rl.editor.viewport import ViewportPanel
+
+        class _NoRenderSimulator:
+            def close(self) -> None:
+                pass
+
+            def render(self, **kwargs):
+                return None
+
+        scene = _fake_scene()
+        panel = ViewportPanel(scene, on_load_simulator=lambda s: _NoRenderSimulator())
+        panel.stop()  # halt auto-started loop
+        panel._running = True  # re-enable for the manual _tick under test
+        panel._simulator = _NoRenderSimulator()
+        with patch.object(QtCore.QTimer, "singleShot") as mock:
+            panel._tick()
+            assert (
+                "preview render unavailable" in panel._canvas.text()
+            ), "canvas must show unavailable message when render returns None"
+            assert mock.call_count >= 1, "_tick must reschedule after None render"
+        panel.stop()
+
+    def test_simulator_load_exception_shows_error_and_reschedules(self, qapp) -> None:
+        from surg_rl.editor import QtCore
+        from surg_rl.editor.viewport import ViewportPanel
+
+        scene = _fake_scene()
+        panel = ViewportPanel(
+            scene, on_load_simulator=lambda s: (_ for _ in ()).throw(RuntimeError("GL init failed"))
+        )
+        panel.stop()  # halt auto-started loop
+        panel._running = True  # re-enable for the manual _tick under test
+        panel._simulator = None
+        with patch.object(QtCore.QTimer, "singleShot") as mock:
+            panel._tick()
+            assert (
+                "Simulator load error" in panel._canvas.text()
+            ), "canvas must show load error when on_load_simulator raises"
+            assert mock.call_count >= 1, "_tick must reschedule after simulator load exception"
         panel.stop()
 
 
@@ -414,3 +455,259 @@ class TestEditorLaunchImportCost:
         assert (
             "torch" not in sys.modules
         ), "Importing surg_rl.scene_definition must NOT eagerly load torch."
+
+
+@pytestmark_viewport
+class TestViewportFallback:
+    """PyBullet software fallback when MuJoCo offscreen render is unavailable."""
+
+    def _make_scene(self) -> MagicMock:
+        scene = MagicMock()
+        scene.environment.cameras = []
+        scene.simulator.value = "mujoco"
+        return scene
+
+    def test_default_load_uses_mujoco_when_render_works(self, qapp) -> None:
+        from surg_rl.editor import viewport
+        from surg_rl.editor.viewport import _default_load_simulator
+
+        scene = self._make_scene()
+        mj_sim = MagicMock()
+        mj_sim.render.return_value = MagicMock(shape=(24, 32, 3))
+        mj_sim.close = MagicMock()
+
+        with (
+            patch("surg_rl.simulators.mujoco_simulator.MuJoCoSimulator") as mock_mj,
+            patch("surg_rl.simulators.pybullet_simulator.PyBulletSimulator") as mock_pb,
+            patch.object(viewport.platform, "system", return_value="Linux"),
+        ):
+            mock_mj.return_value = mj_sim
+            result = _default_load_simulator(scene)
+
+        assert result is mj_sim, "should keep MuJoCo simulator when probe render works on non-macOS"
+        mock_pb.assert_not_called()
+        mj_sim.close.assert_not_called()
+
+    def test_default_load_falls_back_to_pybullet_when_mujoco_probe_fails(self, qapp) -> None:
+        from surg_rl.editor import viewport
+        from surg_rl.editor.viewport import _default_load_simulator
+
+        scene = self._make_scene()
+        mj_sim = MagicMock()
+        mj_sim.render.return_value = None
+        mj_sim.close = MagicMock()
+        pb_sim = MagicMock()
+        pb_sim.render.return_value = MagicMock(shape=(24, 32, 3))
+
+        with (
+            patch("surg_rl.simulators.mujoco_simulator.MuJoCoSimulator") as mock_mj,
+            patch("surg_rl.simulators.pybullet_simulator.PyBulletSimulator") as mock_pb,
+            patch.object(viewport.platform, "system", return_value="Linux"),
+        ):
+            mock_mj.return_value = mj_sim
+            mock_pb.return_value = pb_sim
+            result = _default_load_simulator(scene)
+
+        assert result is pb_sim, "should fall back to PyBullet when MuJoCo probe fails"
+        mj_sim.close.assert_called_once()
+        mock_pb.assert_called_once_with(render_mode="DIRECT")
+        pb_sim.load_scene.assert_called_once_with(scene)
+
+    def test_macos_stock_python_forces_pybullet_fallback(self, qapp) -> None:
+        from surg_rl.editor import viewport
+        from surg_rl.editor.viewport import _default_load_simulator
+
+        scene = self._make_scene()
+        mj_sim = MagicMock()
+        mj_sim.render.return_value = MagicMock(shape=(24, 32, 3))
+        mj_sim.close = MagicMock()
+        pb_sim = MagicMock()
+
+        with (
+            patch("surg_rl.simulators.mujoco_simulator.MuJoCoSimulator") as mock_mj,
+            patch("surg_rl.simulators.pybullet_simulator.PyBulletSimulator") as mock_pb,
+            patch.object(viewport.platform, "system", return_value="Darwin"),
+            patch.object(viewport, "_is_running_under_mjpython", return_value=False),
+        ):
+            mock_mj.return_value = mj_sim
+            mock_pb.return_value = pb_sim
+            result = _default_load_simulator(scene)
+
+        assert result is pb_sim, "macOS stock Python should force PyBullet preview fallback"
+        mj_sim.close.assert_called_once()
+        mock_pb.assert_called_once_with(render_mode="DIRECT")
+
+
+@pytestmark_viewport
+class TestDisplayArrayChannels:
+    """_display_array must accept RGB, RGBA, grayscale, and flat buffers."""
+
+    def _make_panel(self):
+        from surg_rl.editor.viewport import ViewportPanel
+
+        scene = _fake_scene()
+        scene.environment.cameras = []
+        return ViewportPanel(scene)
+
+    def test_display_array_handles_rgba(self, qapp) -> None:
+        import numpy as np
+
+        from surg_rl.editor.viewport import ViewportPanel
+
+        scene = _fake_scene()
+        scene.environment.cameras = []
+        panel = ViewportPanel(scene)
+        arr = np.zeros((60, 80, 4), dtype=np.uint8)
+        arr[:, :, 3] = 255
+        panel._display_array(arr)
+        assert panel._canvas.pixmap() is not None
+        assert not panel._canvas.pixmap().isNull()
+        panel.stop()
+
+    def test_display_array_handles_grayscale(self, qapp) -> None:
+        import numpy as np
+
+        from surg_rl.editor.viewport import ViewportPanel
+
+        scene = _fake_scene()
+        scene.environment.cameras = []
+        panel = ViewportPanel(scene)
+        arr = np.full((60, 80), 128, dtype=np.uint8)
+        panel._display_array(arr)
+        assert panel._canvas.pixmap() is not None
+        assert not panel._canvas.pixmap().isNull()
+        panel.stop()
+
+    def test_display_array_handles_flat_rgb_buffer(self, qapp) -> None:
+        import numpy as np
+
+        from surg_rl.editor.viewport import ViewportPanel
+
+        scene = _fake_scene()
+        scene.environment.cameras = []
+        panel = ViewportPanel(scene)
+        panel._last_render_width = 80
+        panel._last_render_height = 60
+        arr = np.zeros(60 * 80 * 3, dtype=np.uint8)
+        arr[:] = 255
+        panel._display_array(arr)
+        assert panel._canvas.pixmap() is not None
+        assert not panel._canvas.pixmap().isNull()
+        panel.stop()
+
+
+@pytestmark_viewport
+class TestViewportMouseInteraction:
+    """Camera orbit/pan/zoom must update _camera_offset via the custom canvas."""
+
+    def _make_panel(self):
+        from surg_rl.editor.viewport import ViewportPanel
+
+        scene = _fake_scene()
+        scene.environment.cameras = []
+        return ViewportPanel(scene)
+
+    def test_left_drag_updates_azimuth_and_elevation(self, qapp) -> None:
+        from PySide6.QtCore import QPoint, Qt
+
+        panel = self._make_panel()
+        panel._on_mouse_press(QPoint(100, 100), Qt.MouseButton.LeftButton)
+        panel._on_mouse_move(QPoint(150, 120), Qt.MouseButton.LeftButton)
+        assert panel._camera_offset["azimuth"] == pytest.approx(50 * 0.005, rel=1e-6)
+        assert panel._camera_offset["elevation"] == pytest.approx(20 * 0.005, rel=1e-6)
+        panel.stop()
+
+    def test_middle_drag_pans_target(self, qapp) -> None:
+        from PySide6.QtCore import QPoint, Qt
+
+        panel = self._make_panel()
+        panel._on_mouse_press(QPoint(100, 100), Qt.MouseButton.MiddleButton)
+        panel._on_mouse_move(QPoint(110, 90), Qt.MouseButton.MiddleButton)
+        tx, ty, tz = panel._camera_offset["target"]
+        assert tx == pytest.approx(-10 * 0.002, rel=1e-6)
+        assert ty == pytest.approx(-10 * 0.002, rel=1e-6)
+        assert tz == 0.0
+        panel.stop()
+
+    def test_wheel_zooms_distance(self, qapp) -> None:
+        panel = self._make_panel()
+        initial = panel._camera_offset["distance"]
+        panel._on_wheel(2.0)
+        assert panel._camera_offset["distance"] == pytest.approx(initial * (1.0 - 2.0 * 0.15), rel=1e-6)
+        panel.stop()
+
+    def test_wheel_distance_is_clamped(self, qapp) -> None:
+        panel = self._make_panel()
+        panel._camera_offset["distance"] = 0.05
+        panel._on_wheel(5.0)
+        assert panel._camera_offset["distance"] == pytest.approx(0.1, rel=1e-6)
+        panel._camera_offset["distance"] = 60.0
+        panel._on_wheel(-5.0)
+        assert panel._camera_offset["distance"] == pytest.approx(50.0, rel=1e-6)
+        panel.stop()
+
+    def test_canvas_mouse_events_call_panel_handlers(self, qapp) -> None:
+        from unittest.mock import MagicMock
+
+        from PySide6.QtCore import QPoint, QPointF, Qt
+
+        panel = self._make_panel()
+        canvas = panel._canvas
+
+        # Press left button inside the canvas using a minimal mock event.
+        press = MagicMock(spec=["position", "button"])
+        press.position.return_value = QPointF(50, 50)
+        press.button.return_value = Qt.MouseButton.LeftButton
+        canvas.mousePressEvent(press)
+        assert panel._last_mouse_pos == QPoint(50, 50)
+
+        # Move while holding left button.
+        move = MagicMock(spec=["position", "buttons"])
+        move.position.return_value = QPointF(70, 50)
+        move.buttons.return_value = Qt.MouseButton.LeftButton
+        canvas.mouseMoveEvent(move)
+        assert panel._camera_offset["azimuth"] == pytest.approx(20 * 0.005, rel=1e-6)
+
+        # Wheel zoom with a mock event.
+        wheel = MagicMock(spec=["angleDelta"])
+        wheel.angleDelta.return_value = QPoint(0, 120)
+        canvas.wheelEvent(wheel)
+        assert panel._camera_offset["distance"] != 2.5
+        panel.stop()
+
+
+@pytestmark_viewport
+class TestViewportFramebufferRetry:
+    """MuJoCo framebuffer-too-large errors should retry at 640x480."""
+
+    def test_render_framebuffer_error_retries_at_default_size(self, qapp) -> None:
+        from surg_rl.editor import QtCore
+        from surg_rl.editor.viewport import ViewportPanel
+
+        class _FramebufferErrorSimulator:
+            def close(self) -> None:
+                pass
+
+            def render(self, mode="rgb_array", width=None, height=None, camera_name=None):
+                if width is not None and width > 640:
+                    raise ValueError(
+                        "Image width 948 > framebuffer width 640. "
+                        "Either reduce the image width or specify a larger offscreen framebuffer"
+                    )
+                import numpy as np
+
+                return np.zeros((height or 480, width or 640, 3), dtype=np.uint8)
+
+        scene = _fake_scene()
+        scene.environment.cameras = []
+        panel = ViewportPanel(scene, on_load_simulator=lambda s: _FramebufferErrorSimulator())
+        panel.stop()
+        panel._running = True
+        panel._simulator = _FramebufferErrorSimulator()
+        with patch.object(QtCore.QTimer, "singleShot"):
+            panel._tick()
+            pixmap = panel._canvas.pixmap()
+            assert (
+                pixmap is not None and not pixmap.isNull()
+            ), "viewport should display a pixmap after framebuffer retry"
+        panel.stop()

@@ -20,7 +20,9 @@
       "Bash(git branch:*)",
       "Bash(git checkout:*)",
       "Bash(git *)",
-      "Bash(ls /Users/tt/Documents/RLProj/requirements*.txt /Users/tt/Documents/RLProj/pyproject.toml)"
+      "Bash(ls /Users/tt/Documents/RLProj/requirements*.txt /Users/tt/Documents/RLProj/pyproject.toml)",
+      "Skill(gsd-progress)",
+      "Bash(PYTHONPATH=src timeout 300 python -m pytest tests/unit/test_rendering.py tests/test_viewport.py tests/test_ros2_bridge.py -q)"
     ]
   }
 }

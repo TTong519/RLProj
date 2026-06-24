@@ -21,6 +21,50 @@ from .scene_builder import SceneBuilder
 logger = get_logger(__name__)
 
 
+def _normalize_pb_rgb(
+    rgb: Any,
+    height: int,
+    width: int,
+) -> np.ndarray:
+    """Normalize PyBullet getCameraImage RGB output to (H, W, 3) uint8.
+
+    PyBullet returns RGB data in several forms depending on version/flags:
+    - NumPy array (H, W, 4)
+    - NumPy array (H*W*4,) or (H*W*3,)
+    - tuple/list of length H*W*4 or H*W*3
+    This helper always returns a contiguous (H, W, 3) uint8 array.
+    """
+    expected_rgb = height * width * 3
+    expected_rgba = height * width * 4
+
+    # NumPy array path
+    if isinstance(rgb, np.ndarray):
+        rgb = np.ascontiguousarray(rgb)
+        if rgb.ndim == 3 and rgb.shape[2] in (3, 4):
+            return np.ascontiguousarray(rgb[:, :, :3], dtype=np.uint8)
+        flat = rgb.ravel()
+        if flat.size == expected_rgba:
+            rgba = flat.reshape((height, width, 4))
+            return np.ascontiguousarray(rgba[:, :, :3], dtype=np.uint8)
+        if flat.size == expected_rgb:
+            return np.ascontiguousarray(flat.reshape((height, width, 3)), dtype=np.uint8)
+        return np.zeros((height, width, 3), dtype=np.uint8)
+
+    # Sequence path (tuple/list)
+    try:
+        seq = list(rgb)
+    except Exception:
+        return np.zeros((height, width, 3), dtype=np.uint8)
+
+    if len(seq) == expected_rgba:
+        arr = np.array(seq, dtype=np.uint8).reshape((height, width, 4))
+        return np.ascontiguousarray(arr[:, :, :3], dtype=np.uint8)
+    if len(seq) == expected_rgb:
+        arr = np.array(seq, dtype=np.uint8).reshape((height, width, 3))
+        return np.ascontiguousarray(arr, dtype=np.uint8)
+    return np.zeros((height, width, 3), dtype=np.uint8)
+
+
 def _derive_neo_hookean_params(
     youngs_modulus: float,
     poissons_ratio: float,
@@ -838,7 +882,7 @@ class PyBulletSimulator(BaseSimulator):
             projectionMatrix=proj_matrix,
             physicsClientId=self._physics_client,
         )
-        return rgb
+        return _normalize_pb_rgb(rgb, height, width)
 
     def reset(self, seed: int | None = None) -> Observation:
         """Reset the simulation."""
@@ -940,12 +984,21 @@ class PyBulletSimulator(BaseSimulator):
         if camera_name is not None:
             return self.get_camera_image(camera_name, width=width, height=height)
 
-        # Offscreen rendering
+        # Offscreen rendering. Use editor camera offsets if present; otherwise
+        # fall back to a default orbit view pulled back far enough to see the
+        # typical surgical workspace.
+        target = getattr(self, "_editor_camera_target", None)
+        if target is None:
+            target = [0.0, 0.0, 0.0]
+        distance = getattr(self, "_editor_camera_distance", 2.5)
+        default_yaw = getattr(self, "_editor_camera_azimuth", 0.0) * 57.2958
+        default_pitch = -30.0 - getattr(self, "_editor_camera_elevation", 0.0) * 57.2958
+
         view_matrix = self._pb.computeViewMatrixFromYawPitchRoll(
-            cameraTargetPosition=[0, 0, 0],
-            distance=1.0,
-            yaw=45,
-            pitch=-30,
+            cameraTargetPosition=target,
+            distance=distance,
+            yaw=45.0 + default_yaw,
+            pitch=default_pitch,
             roll=0,
             upAxisIndex=2,
             physicsClientId=self._physics_client,
@@ -966,15 +1019,7 @@ class PyBulletSimulator(BaseSimulator):
             physicsClientId=self._physics_client,
         )
 
-        rgb_array = (
-            rgb[:, :, :3]
-            if hasattr(rgb, "shape")
-            else (
-                np.array(rgb).reshape((height, width, 4))[:, :, :3]
-                if len(rgb) == width * height * 4
-                else np.zeros((height, width, 3), dtype=np.uint8)
-            )
-        )
+        rgb_array = _normalize_pb_rgb(rgb, height, width)
 
         # Store depth for later retrieval via render('depth_array')
         if isinstance(depth, (tuple, list)):
@@ -1498,12 +1543,13 @@ class PyBulletSimulator(BaseSimulator):
             return
 
         # Validate arm_id if provided
-        if arm_id is not None:
-            if self._arm_joint_ranges is None or arm_id not in self._arm_joint_ranges:
-                raise ValueError(
-                    f"Unknown arm_id={arm_id!r}. "
-                    f"Available: {list(self._arm_joint_ranges.keys()) if self._arm_joint_ranges else 'none'}"
-                )
+        if arm_id is not None and (
+            self._arm_joint_ranges is None or arm_id not in self._arm_joint_ranges
+        ):
+            raise ValueError(
+                f"Unknown arm_id={arm_id!r}. "
+                f"Available: {list(self._arm_joint_ranges.keys()) if self._arm_joint_ranges else 'none'}"
+            )
 
         if self._action_mode in ("endeffector_pose", "endeffector_delta"):
             self._apply_action_ik(action)

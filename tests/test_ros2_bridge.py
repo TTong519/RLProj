@@ -422,6 +422,12 @@ class TestRos2BridgeGapFixes:
 
         cmd_queue = multiprocessing.Queue(maxsize=1)
         cmd_queue.put(np.array([0.5, -0.3, 0.1]))
+        # Give macOS multiprocessing.Queue a scheduling window so the item is
+        # visible to get_nowait() before forward_commands() drains it. This
+        # matches test_multiprocessing_queue_cross_process above.
+        import time
+
+        time.sleep(0.05)
 
         bridge_cfg = Ros2BridgeConfig(
             state_topic="/surg_rl/joint_states",

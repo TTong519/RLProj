@@ -1171,12 +1171,17 @@ class Ros2Bridge:
         """
         if self._command_queue is None or controller is None:
             return
+        drained = False
         try:
             while True:
                 cmd = self._command_queue.get_nowait()
                 controller.inject_external_action(cmd)
+                drained = True
         except queue.Empty:
-            pass
+            if not drained:
+                logger.debug(
+                    "forward_commands: command queue empty (no external command this step)"
+                )
 
     def publish_joint_state(self, qpos: np.ndarray, qvel: np.ndarray) -> None:
         """Publish joint state from main process — delegates to node.

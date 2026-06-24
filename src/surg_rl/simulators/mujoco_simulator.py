@@ -330,7 +330,11 @@ class MuJoCoSimulator(BaseSimulator):
                 return rgb
 
         except Exception as e:
-            logger.debug(f"Rendering failed: {e}")
+            logger.warning(f"MuJoCo offscreen rendering failed: {e}")
+            # CGL/EGL failures are persistent for this process, so short-
+            # circuit future attempts rather than repeatedly raising the same
+            # error and returning None.
+            self._renderer_available = False
             return None
 
     def get_camera_image(
