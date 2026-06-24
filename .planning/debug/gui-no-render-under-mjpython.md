@@ -1,9 +1,9 @@
 ---
 slug: gui-no-render-under-mjpython
-status: fixing
+status: resolved
 trigger: "surg-rl-gui still is just spawning a mjpython app but not rendering anything"
 created: 2026-06-20
-updated: 2026-06-20
+updated: 2026-06-23
 goal: find_and_fix
 tdd_mode: false
 ---
@@ -152,6 +152,37 @@ tdd_mode: false
   timestamp: 2026-06-20
 
 ## Resolution
+
+> **FINAL RESOLUTION (2026-06-23):** This session is **resolved** by commit
+> `3031ed9 fix(editor): F-01 resolve GUI app hang on macOS` (2026-06-20
+> 21:03), which landed ~1.5h AFTER the last update to this file (19:32) and
+> was never reflected here. That single commit addressed ALL THREE root
+> causes identified above:
+> 1. **mjpython re-exec removed** — Gate 2 no longer `os.execvp`'s into the
+>    mjpython Cocoa bundle. The GUI now runs in the stock interpreter on the
+>    process main thread where PySide6 requires QApplication to live. This
+>    eliminates the silent-crash-in-Cocoa-bundle failure mode entirely (no
+>    more `os.execvp`, no separate interpreter, no swallowed stderr).
+> 2. **Lazy RL imports (PEP 562)** — `surg_rl.rl.__init__` now lazy-loads
+>    stable_baselines3/torch via `__getattr__`, removing the 9–11s import
+>    freeze before `window.show()`.
+> 3. **Deferred `SceneDefinition` import** in `editor/undo_stack.py` (moved
+>    behind `TYPE_CHECKING`), removing the other 10.5s import stall.
+>
+> **Mechanical verification (2026-06-23):** `tests/test_viewport.py` +
+> `tests/test_gui_scaffold.py` → 55 passed, 4 skipped (display-gated).
+> Tests assert no re-exec and no eager RL imports. `grep` confirms no
+> `os.execvp`/mjpython re-exec remains in `app.py` (only docstring/comment
+> references in `_platform_guard.py` and `app.py` describe the removed
+> behavior). The originally-prescribed next_action (logfile
+> instrumentation to catch the silent mjpython Cocoa crash) is MOOT — the
+> code no longer enters that path.
+>
+> **Remaining (user-only, non-blocking):** End-to-end confirmation that
+> running `surg-rl-gui` displays a visible window cannot be done in a
+> headless agent context. The identified root causes are fixed and
+> mechanically verified; if the symptom recurs on a real `surg-rl-gui`
+> launch it would be a NEW root cause and a fresh session should be opened.
 
 - **root_cause (CURRENT — the user-visible blocker):** Gate 2 in
   `src/surg_rl/editor/app.py` re-execs into `mjpython` via
