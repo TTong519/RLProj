@@ -74,6 +74,7 @@ class SurgicalEnvConfig:
         use_adaptive_difficulty: Whether to use adaptive difficulty.
         controller_config: Environment controller configuration.
         seed: Random seed for reproducibility.
+        difficulty: Config-level difficulty scalar fallback (default 0.5).
     """
 
     scene_path: str | None = None
@@ -94,6 +95,10 @@ class SurgicalEnvConfig:
     ros2_bridge_config: Ros2BridgeConfig | None = None
     use_ros2_control: bool = False
     controller_yaml: str | None = None
+    # Config-level difficulty scalar fallback (Q2 — makes the config.difficulty
+    # precedence level real and truth-table-testable). Default 0.5 preserves
+    # v0.5.0 behavior.
+    difficulty: float = 0.5
 
 
 class SurgicalEnv(gym.Env):
@@ -512,6 +517,49 @@ class SurgicalEnv(gym.Env):
         # Phase 29: coerce enum or float to a scalar float for all reward builders.
         difficulty_float = float(difficulty.value) if isinstance(difficulty, DifficultyLevel) else float(difficulty)
         self._task_difficulty = difficulty_float
+
+        # P37 (TASK-08): scene-level difficulty_blocks override branch (additive
+        # early-return BEFORE the existing router branch). Applies ONLY when the
+        # resolved difficulty is a DifficultyLevel enum (Q4 guard) AND the task
+        # carries difficulty_blocks for that level. Under use_curriculum=True
+        # with a continuous scalar, the isinstance guard fails -> blocks are
+        # INERT and the existing router branch below runs (continuous path
+        # byte-identical, TASK-09). compose_difficulty_overrides is lazy-local
+        # imported here (Pitfall 4 — NOT module-level), mirroring the SceneLoader
+        # lazy import idiom at _load_scene.
+        blocks = (
+            getattr(self._scene.task, "difficulty_blocks", None)
+            if self._scene.task is not None
+            else None
+        )
+        if (
+            blocks is not None
+            and isinstance(difficulty, DifficultyLevel)
+            and self._scene.task is not None
+            and task_type is not None
+            and difficulty in blocks
+        ):
+            from surg_rl.dynamics.difficulty_wiring import compose_difficulty_overrides
+            from surg_rl.rl.task_reward_router import TASK_REWARD_REGISTRY
+
+            reward_cls = TASK_REWARD_REGISTRY.get(task_type)
+            if reward_cls is not None:
+                params = compose_difficulty_overrides(
+                    task_type,
+                    difficulty,
+                    blocks[difficulty],
+                    reward_cls,
+                )
+                router = TaskRewardRouter(difficulty=difficulty_float)
+                reward_list = router.build(task_type)
+                # apply_params overrides the interpolated values set by
+                # router.build()'s apply_difficulty call with the composed
+                # dict (D-06 additive). Q1 MINIMAL: only the single mapped
+                # PARAM_BOUNDS key per reward is affected (Pitfall 2 inert).
+                if hasattr(reward_list[0], "apply_params"):
+                    reward_list[0].apply_params(params)
+                self._reward_fn = CompositeReward([(r, 1.0) for r in reward_list])
+                return
 
         if task_type is not None:
             router = TaskRewardRouter(difficulty=difficulty_float)

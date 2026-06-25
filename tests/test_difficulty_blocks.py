@@ -232,6 +232,15 @@ class TestPrecedenceTruthTable:
         scene.task.difficulty_blocks = None
         config_difficulty = 0.5  # SurgicalEnvConfig.difficulty default (Q2)
 
+        # The `level` param doubles as the task.difficulty_level for the
+        # blocks / task_difficulty_level cases (a DifficultyLevel enum). For
+        # config_difficulty it is the config.difficulty scalar; for default
+        # it is None. blocks fire ONLY when the resolved difficulty is a
+        # DifficultyLevel (Q4 guard), so the blocks cases require
+        # task.difficulty_level = level.
+        if isinstance(level, DifficultyLevel):
+            scene.task.difficulty_level = level
+
         if source == "blocks":
             # Mapped override: target_precision_tolerance -> needle_position_tolerance
             # -> position_threshold. Value 0.008 is inside D-07 bounds [0.002, 0.3]
@@ -242,8 +251,6 @@ class TestPrecedenceTruthTable:
                     target_precision_tolerance=0.008
                 )
             }
-        elif source == "task_difficulty_level":
-            scene.task.difficulty_level = DifficultyLevel.HARD
         elif source == "config_difficulty":
             config_difficulty = 0.25
         elif source == "blocks_time_limit_inert":
