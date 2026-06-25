@@ -6,12 +6,16 @@ drive `interpolate_params()` (D-29-02). This avoids double-validation:
 Pydantic validates enum membership at the schema boundary; downstream
 uses only the float scalar.
 
-This module is intentionally a leaf (no imports from `surg_rl.*`) to keep
+This module is intentionally a leaf (no in-project imports) to keep
 `rewards.py` importable from `schema.py` without a circular import
-(per CONTEXT.md §Circular import risk).
+(per CONTEXT.md §Circular import risk). SC#5 enforces this via a
+substring audit on the source.
 """
 
 from enum import Enum
+from typing import Optional
+
+from pydantic import BaseModel, field_validator
 
 
 class _FloatMixin(float, Enum):
@@ -48,3 +52,51 @@ class DifficultyLevel(_FloatMixin):
     EASY = 0.0
     MEDIUM = 0.5
     HARD = 1.0
+
+
+class DifficultyLevelConfig(BaseModel):
+    """Per-level difficulty override config (Phase 36, TASK-06).
+
+    Leaf: zero in-project imports (SC#5). Carries the four locked override
+    fields as Optional[float]; each is range-checked against the verified
+    D-07 global union bounds (min/max over all endpoints, NOT "min lo /
+    max hi" — see 36-RESEARCH.md Pitfall 1). Out-of-range values raise
+    ValidationError at schema time (ASVS V5 input validation, T-36-01).
+    """
+
+    tissue_stiffness: Optional[float] = None
+    target_precision_tolerance: Optional[float] = None
+    tool_position_noise: Optional[float] = None
+    time_limit: Optional[float] = None
+
+    @field_validator("tissue_stiffness")
+    @classmethod
+    def _check_tissue_stiffness(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and not (50.0 <= v <= 300.0):
+            raise ValueError("tissue_stiffness out of global union bounds [50.0, 300.0]")
+        return v
+
+    @field_validator("target_precision_tolerance")
+    @classmethod
+    def _check_target_precision_tolerance(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and not (0.002 <= v <= 0.3):
+            raise ValueError(
+                "target_precision_tolerance out of global union bounds [0.002, 0.3]"
+            )
+        return v
+
+    @field_validator("tool_position_noise")
+    @classmethod
+    def _check_tool_position_noise(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and not (0.01 <= v <= 0.08):
+            raise ValueError(
+                "tool_position_noise out of global union bounds [0.01, 0.08]"
+            )
+        return v
+
+    @field_validator("time_limit")
+    @classmethod
+    def _check_time_limit(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and not (30.0 <= v <= 180.0):
+            raise ValueError("time_limit out of global union bounds [30.0, 180.0]")
+        return v
