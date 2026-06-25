@@ -3,7 +3,6 @@
 import pytest
 from pydantic import ValidationError
 
-from surg_rl.rl.difficulty import DifficultyLevel, DifficultyLevelConfig
 import surg_rl.rl.difficulty as _difficulty_module
 
 # Plan 02 (SC#2 / D-04) imports — the wiring layer under test.
@@ -12,15 +11,8 @@ from surg_rl.dynamics.difficulty_wiring import (  # noqa: E402
     DiscreteCurriculumConfig,
     compose_difficulty_overrides,
 )
+from surg_rl.rl.difficulty import DifficultyLevel, DifficultyLevelConfig
 from surg_rl.rl.task_reward_router import TASK_REWARD_REGISTRY  # noqa: E402
-from surg_rl.rl.rewards import (  # noqa: E402
-    CuttingReward,
-    DissectionReward,
-    GraspingReward,
-    KnotTyingReward,
-    NeedlePassingReward,
-    SuturingReward,
-)
 
 # Override values inside the verified D-07 global union bounds (Plan 01).
 _OVERRIDE_VALUES: dict[str, float] = {
@@ -131,12 +123,10 @@ class TestLeafImportAudit:
         """The leaf source contains no `surg_rl.` references outside comments."""
         source_path = _difficulty_module.__file__
         assert source_path is not None, "Could not resolve surg_rl.rl.difficulty __file__"
-        with open(source_path, "r", encoding="utf-8") as fh:
+        with open(source_path, encoding="utf-8") as fh:
             raw_lines = fh.readlines()
         # Strip comment-only lines (lines whose stripped form starts with '#').
-        non_comment_lines = [
-            line for line in raw_lines if not line.strip().startswith("#")
-        ]
+        non_comment_lines = [line for line in raw_lines if not line.strip().startswith("#")]
         remaining_source = "".join(non_comment_lines)
         assert "surg_rl." not in remaining_source, (
             "SC#5 violation: surg_rl.rl.difficulty contains an in-project import "
@@ -180,9 +170,9 @@ class TestComposeDifficultyOverrides:
         # The composed dict has exactly the baseline keys (no new/missing keys).
         assert set(composed.keys()) == set(baseline.keys())
 
-    @pytest.mark.parametrize(("task_type", "level"), [
-        (tt, lvl) for tt in _D05_ORACLE for lvl in _LEVELS
-    ])
+    @pytest.mark.parametrize(
+        ("task_type", "level"), [(tt, lvl) for tt in _D05_ORACLE for lvl in _LEVELS]
+    )
     def test_compose_empty_levels_equals_interpolation(self, task_type, level):
         """SC#2: an all-None config yields pure interpolate_params(level.value) (D-08)."""
         reward_cls = TASK_REWARD_REGISTRY[task_type]
@@ -220,9 +210,7 @@ class TestComposeDifficultyOverrides:
             composed = compose_difficulty_overrides(task_type, level, cfg, reward_cls)
 
         # A warning was logged mentioning the unmapped field + task_type (D-04).
-        warning_records = [
-            r for r in caplog.records if r.levelname == "WARNING"
-        ]
+        warning_records = [r for r in caplog.records if r.levelname == "WARNING"]
         assert warning_records, "D-04: expected a WARNING log for the unmapped override"
         msg = warning_records[0].getMessage()
         assert "tissue_stiffness" in msg
