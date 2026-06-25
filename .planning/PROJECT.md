@@ -79,7 +79,7 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 - REQUIREMENTS.md BENCH-02..05 body checkboxes (pre-existing v0.4.0 audit process gap)
 - TASK-02 per-level override schema (`DifficultyLevelConfig` with tissue_stiffness/target_precision_tolerance/tool_position_noise/time_limit) — D-29-03 explicit exclusion
 - TASK-02 `CurriculumScheduler` discrete level progression — D-29-03 explicit exclusion
-- TASK-02 scene-level `difficulty_blocks: dict[DifficultyLevel, DifficultyLevelConfig]` blocks — Phase 37 (TASK-08) ships; D-29-03 exclusion lifted
+- TASK-02 scene-level `difficulty_blocks: dict[DifficultyLevel, DifficultyLevelConfig]` blocks — Phase 37 (TASK-08) complete; D-29-03 exclusion lifted (verification 5/5 PASSED)
 - End-to-end `SurgicalEnv`-construction integration test for HARD fixture scene (Phase 29 code review WR-02)
 - `CurriculumStageConfig.difficulty` normalization at env-construction (Phase 29 code review WR-03)
 - Phase 30 stub-state sentinel flip when real dreamerv3 is integrated (replaces `_build_agent` at `subprocess.py:127-131`)
@@ -266,4 +266,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-06-25 — Phase 36 complete (difficulty schema + discrete curriculum; UAT 10/10)*
+*Last updated: 2026-06-25 — Phase 37 complete (scene-level difficulty_blocks + env wiring; TASK-08 verification 5/5 PASSED)*
