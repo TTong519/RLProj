@@ -1,312 +1,272 @@
-# Technology Stack — v0.4.0 Additions
+# Technology Stack — v0.6.0 Carried-Forward Debt Closure
 
-**Project:** Surg-RL — Training Infrastructure & Realism
-**Researched:** 2026-05-13
-**Overall confidence:** HIGH
+**Project:** surg-rl
+**Milestone:** v0.6.0 (Real DreamerV3, TASK-02 per-level schema, K8s PVC e2e, 3D fluid flag)
+**Researched:** 2026-06-24
+**Scope:** Stack additions/changes needed to close the four carried-forward debt items only. The existing validated stack (Python >=3.10, MuJoCo 3.x, PyBullet >=3.2.5, Gymnasium >=0.29, Stable-Baselines3 >=2.0, Pydantic v2, PhiFlow 3.4.0, tetgen, trimesh, JAX, K8s/Kustomize manifests) is NOT re-researched.
 
-## Executive Summary
+## Headline Finding
 
-v0.4.0 adds five capability axes to Surg-RL's existing stack: real surgical mesh assets, surgical task curriculum, reproducible benchmarking, PettingZoo MARL, and DreamerV3 world models. Three of these use the existing stack with minimal additions (assets, curriculum, benchmarking are mostly schema+code over current deps). Two introduce significant new dependencies: PettingZoo brings SuperSuit but stays in the PyTorch/Gymnasium family; DreamerV3 brings JAX into the project for the first time, which is the single highest-risk stack decision for v0.4.0.
+**Three of the four debt items need ZERO new packages.** The existing pins are already current and capable:
 
-The core stack (MuJoCo 3.x, PyBullet >=3.2.5, Gymnasium >=0.29, SB3 >=2.0, Pydantic v2, Typer+Rich) remains unchanged. All new deps are added as optional groups, following the existing `[distributed]`, `[ros2]` pattern of the project.
+- `dreamerv3~=1.5.0` + `jax~=0.4.20` -- v1.5.0 is the latest and only PyPI release; the programmatic `embodied.run.train` / `dreamerv3.Agent` API is already available inside the vendored `embodied` framework.
+- `phiflow>=3.4.0` -- 3D Eulerian grids are natively supported; the `dim_3d=True` path is a constructor/validator change, not a library change.
+- Pydantic v2 -- `DifficultyLevelConfig` is pure schema work reusing the v0.4.2 forward-ref + `model_rebuild()` pattern.
 
-## Current Stack (Unchanged Core)
-
-| Technology | Version | Role |
-|------------|---------|------|
-| Python | >=3.10, <=3.13 | Runtime |
-| MuJoCo | >=3.0.0 | Primary physics + FEM flex |
-| PyBullet | >=3.2.5 | Secondary physics + soft-body |
-| Gymnasium | >=0.29.0 | RL environment API |
-| Stable-Baselines3 | >=2.0.0 | RL algorithms (PPO, SAC, TD3) |
-| Pydantic | >=2.0.0 | Schema validation |
-| Typer + Rich | >=0.9.0 / >=13.0.0 | CLI |
-| NumPy | >=1.24.0 | Array math |
-| tetgen | >=0.8.4 | Tetrahedral meshing |
-| PhiFlow | >=3.4.0 | Eulerian fluids |
-
-## New Additions by Feature
-
-### 1. Real Surgical Assets (Meshes + Organs)
-
-**What's needed:** A pure-Python mesh loading/manipulation library to replace handwritten primitive `.obj` generation in `scene_builder.py` with real surgical meshes. The existing `MeshAsset` schema already supports `path` references; we need a runtime loader that can read STL/OBJ/glTF and convert to MuJoCo MSH/PyBullet-compatible formats.
-
-**Recommendation: Trimesh >=4.5.0**
-
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| trimesh | >=4.5.0 | Mesh I/O + manipulation for surgical assets | Pure Python, battle-tested (MIT license, 3K+ stars), loads STL/OBJ/PLY/glTF/GLB/COLLADA/3MF/OFF, exports to OBJ/STL/GLB. Supports watertight checks, decimation, smoothing, convex decomposition. Integrates naturally with existing NumPy-based pipeline — mesh vertices/faces are NumPy arrays. |
-
-**Integration points:**
-- `simulators/scene_builder.py` — replace `_create_box_mesh()`, `_create_cylinder_mesh()`, `_create_sphere_mesh()` primitive writers with Trimesh `load_mesh()` for real assets, keeping primitives as `process=False` Trimesh construction
-- `scene_generation/scene_composer.py` — validate mesh files exist, check watertightness, auto-scale to target dimensions
-- `utils/mesh_generation.py` — Trimesh for pre/post-processing (smoothing, simplification) before tetgen tetrahedralization
-
-**What NOT to use:**
-- **PyVista** — Already explicitly replaced by tetgen per project design decision ("Tetgen replaces VTK entirely, not side-by-side"). PyVista requires VTK which was deliberately removed from the dependency graph.
-- **Open3D** — Not available on PyPI (`pip install open3d` fails with "No matching distribution"). Pre-built wheels don't exist for all target platforms.
-- **vedo** — VTK-dependent, same architectural concern as PyVista. Heavy dependency chain.
-
-**Schema impact:** Minimal. `MeshAsset.path` already exists. Add a new `MeshAsset.file_type` auto-inference from extension (already partially done via field_validator). No new schema types needed.
+**One new dev-only extra is needed:** `pytest-kind` for the K8s PVC e2e test (replaces the raw-subprocess stub with a session-scoped `kind_cluster` fixture).
 
 ---
 
-### 2. Surgical Task Curriculum
+## Recommended Stack Changes
 
-**What's needed:** A progressive multi-task learning system extending the existing `CurriculumScheduler` (difficulty stages: EASY→MEDIUM→HARD→EXPERT) into a surgical task suite with task chaining. The existing infrastructure (`dynamics/curriculum.py`, `dynamics/adaptive_difficulty.py`, `rl/callbacks.py:CurriculumCallback`) already handles parameter-based curriculum. We need task-type switching and task sequence composition.
+### (a) Real DreamerV3 Integration -- `_build_agent` stub flip
 
-**Recommendation: No new libraries. Extend existing infrastructure.**
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| `dreamerv3` | `~=1.5.0` (UNCHANGED) | World-model RL agent | v1.5.0 (Feb 22 2023) is the latest + only PyPI release -- no newer version exists. The existing pin is correct. |
+| `jax` | `~=0.4.20` (UNCHANGED) | DreamerV3 backend | Compatible with dreamerv3 v1.5.0; already pinned. |
+| `optax` | `>=0.1.7` (UNCHANGED) | DreamerV3 optimizer | Already in `[dreamer]` extra. |
+| `embodied` (vendored) | bundled in `dreamerv3` | Training orchestration | NOT a separate PyPI install. `embodied.run.train(...)` and `embodied.jax.Agent` ship inside the `dreamerv3` package (same monorepo, `embodied/` subdir). |
 
-The existing curriculum module already has `CurriculumStage`, `CurriculumStageConfig`, `CurriculumScheduler`, and `CurriculumCallback`. For v0.4.0, extend these with task-type awareness:
+**Programmatic API to wire into `_build_agent` / `_run_subprocess_loop`:**
 
-**New schema types (in `scene_definition/schema.py`):**
-- `SurgicalTaskType(str, Enum)` — suturing, knot_tying, needle_insertion, grasping, cutting, dissection, retraction
-- `TaskDifficultyLevel` — proficiency-based difficulty within each task type
-- `TaskChainNode` — a subtask in a sequence with prerequisites
-- `TaskChainConfig` — ordered/composable task chain with branching
+```python
+# Inside the JAX subprocess (after XLA_PYTHON_CLIENT_MEM_FRACTION is set):
+import dreamerv3
+from dreamerv3 import Agent  # inherits embodied.jax.Agent
 
-**No new dependencies** — the entire task curriculum is schema + scheduling logic built on the existing `BaseController` pattern.
+# obs_space / act_space probed from one env instance (the GymToEmbodiedWrapper)
+agent = Agent(obs_space, act_space, config)   # config = embodied.Config(dreamerv3.Config)
 
-**What's reinforced:**
-- `dynamics/curriculum.py` — extend `_should_advance()` with task-type-specific thresholds
-- `dynamics/environment_controller.py` — add task-switching hooks
-- `scene_definition/schema.py` — new task-level enums and chain configs
-- `rl/environment.py` — dynamic `TaskConfig` injection at reset for chain progression
-
----
-
-### 3. Reproducible Benchmarking
-
-**What's needed:** An experiment runner that produces benchmark plots (learning curves, success rates, reward distributions), comparison tables (algorithm vs algorithm, backend vs backend), and structured reports. The existing `[tracking]` group has `wandb>=0.16.0` and `mlflow>=2.10.0` but they're not wired into the SB3 training pipeline.
-
-**Recommendation: Weights & Biases + matplotlib + seaborn + pandas + rliable**
-
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| wandb | >=0.18.0 (bump from 0.16.0) | Experiment tracking + cloud dashboard | Already in `[tracking]`. 0.18+ has `wandb.Table`, `wandb.plot.*` (ROC, confusion matrix, bar, scatter, line), automatic artifact versioning, and SB3 callback integration. Bump from 0.16.0 minimum to get reliable table/plot APIs. Current PyPI: 0.26.1. |
-| matplotlib | >=3.9.0 | Publication-quality plots | De facto standard. Already installed (3.10.8). Explicitly add to `[benchmark]` optional group for clarity. |
-| seaborn | >=0.13.0 | Statistical plots (violin, heatmap, CI bands) | Higher-level API on matplotlib. Learning curves with bootstrap CIs, algorithm comparison heatmaps. PyPI: 0.13.2. |
-| pandas | >=2.0.0 | Data table manipulation | Results DataFrame, CSV export, summary statistics. Already installed (2.3.3). |
-| rliable | >=1.1.0 | RL-specific statistical benchmarking | Stratified bootstrap CIs, probability-of-improvement, IQM (interquartile mean). Used by rl-baselines3-zoo for `--rliable` plotting. Implements Agarwal et al. (NeurIPS 2021) best practices. PyPI: 1.2.0. |
-
-**New optional dependency group:**
-```toml
-[project.optional-dependencies]
-benchmark = [
-    "wandb>=0.18.0",
-    "matplotlib>=3.9.0",
-    "seaborn>=0.13.0",
-    "pandas>=2.0.0",
-    "rliable>=1.1.0",
-]
+carry = agent.init_train(batch_size)                # -> carry state
+carry, outs, metrics = agent.train(carry, batch)    # one gradient step on replay batch
+carry, act, out = agent.policy(carry, obs, mode='train')  # env rollout action
+metrics = agent.report(carry, data)                 # periodic diagnostics
+data = agent.save()                                 # checkpoint serialize
+agent.load(data)                                    # checkpoint restore
 ```
 
-**Integration points:**
-- `rl/training.py` — wire SB3's `EvalCallback` + `WandbCallback` during training
-- New `rl/benchmarking.py` — experiment runner: grid over algorithms × backends × seeds, result aggregation
-- New `rl/reporting.py` — plot generation from wandb runs or local CSVs, LaTeX table export
-- `cli.py` — new `surg-rl benchmark` subcommand (run experiments) and `surg-rl report` (generate plots)
+**Two viable wiring strategies (pick during phase planning, not here):**
 
-**What NOT to use:**
-- **TensorBoard** — W&B supersedes it for remote/shared dashboards, but TB can work as a local fallback (already available via SB3's `--tensorboard-log`). Not worth adding as a dependency; W&B's free tier is sufficient.
-- **mlflow** — Already in `[tracking]` but W&B is the primary recommendation. Keep mlflow as an alternative but don't build benchmarking infrastructure on it.
-- **rl-baselines3-zoo** — Use it as reference/pattern, but don't add as a dependency. It's not a library, it's a script collection. Surg-RL's task-specific benchmarking needs custom runner logic.
+1. **Reuse `embodied.run.train(make_agent, make_replay, make_env, make_stream, make_logger, args)`** as the orchestration inside the subprocess. Our existing `GymToEmbodiedWrapper` already produces the `embodied.Env`-compatible dict obs (`is_first`/`is_last`/`is_terminal`). This is the lowest-code path: supply `make_env=lambda: GymToEmbodiedWrapper(SurgicalEnv(...))`, `make_agent=lambda: Agent(obs_space, act_space, cfg)`, and let `embodied.run.train` drive replay/driver/logger/checkpoints. The existing `CONFIG/TRAIN/EVAL/CHECKPOINT` stdin/stdout JSON protocol then wraps `embodied.run.train`'s lifecycle (start/stop/metrics-forward).
+2. **Hand-roll the loop** by instantiating `Agent` directly in `_build_agent` and calling `agent.policy()` / `agent.train()` from the existing `_run_subprocess_loop` branches. More control, more code, re-implements replay buffering and driver logic that `embodied.run.train` already provides.
 
----
+**Recommendation:** strategy 1 unless the team needs fine-grained control over replay composition. The existing `_JsonStdout` wrapper + `DreamerSubprocess` parent class stay; only `_build_agent`, `_train_loop`, `_evaluate`, `_save_checkpoint`, `_load_checkpoint` get real implementations.
 
-### 4. Full MARL (PettingZoo)
+**Sentinel flip:** the Phase 30 E2E test currently asserts `RuntimeError("Agent not configured")` from the stub. Flipping `_build_agent` will make that test START FAILING -- that is the intended signal. The test must be updated in the same phase to assert positive completion (real agent constructed + >=1 train step + checkpoint save/load round-trip) gated on the existing `pytest.mark.skipif(GPU + dreamerv3 + jax)`.
 
-**What's needed:** Multi-agent RL framework for dual-arm coordination with asymmetric observation/action spaces. PettingZoo is the standard Gymnasium-compatible MARL library.
+**Do NOT add:** `dreamer` (PyPI v3.3.1, a *different* project -- `rafarodsa/dreamer-v3-purejax`, a pure-JAX reimplementation), `stable-baselines3` DreamerV3 port (does not exist), or a separate `embodied` PyPI install (it is vendored).
 
-**Recommendation: PettingZoo >=1.24.0 + SuperSuit >=3.9.0**
+### (b) 3D PhiFlow Grid Fluids -- `dim_3d=True`
 
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| PettingZoo | >=1.24.0 | MARL environment API | Farama Foundation standard. AEC (Agent Environment Cycle) and Parallel APIs. Supports asymmetric obs/act spaces per agent natively. Gymnasium 0.29+ compatible. PyPI: 1.26.1. |
-| SuperSuit | >=3.9.0 | Environment wrappers for MARL | Frame stacking, resizing, color reduction, agent death handling (`black_death_v3`), vectorization. Required by PettingZoo SB3 tutorials for preprocessing visual obs. PyPI: 3.10.0. |
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| `phiflow` | `>=3.4.0` (UNCHANGED) | 3D Eulerian grid fluid solver | 3D is natively supported in 3.4.0; no version bump. |
 
-**New optional dependency group:**
-```toml
-[project.optional-dependencies]
-marl = [
-    "pettingzoo>=1.24.0",
-    "supersuit>=3.9.0",
-]
+**Key API fact:** PhiFlow infers dimensionality from the `Box` + axis kwargs passed to `StaggeredGrid`, NOT from a `dim_3d` library flag. There is no `phi.flow.dim_3d` symbol. The `dim_3d=True` we are implementing is OUR config flag (`FluidConfig`), mapped to a 3D constructor at the `FluidSimulator` level.
+
+**2D -> 3D constructor diff:**
+
+```python
+# Current 2D (fluid_simulator.py):
+domain = Box(x=float(dims[0]), y=float(dims[2]))           # xz-slice
+self._velocity = StaggeredGrid(0.0, extrapolation.ZERO, domain,
+                               x=config.resolution[0], y=config.resolution[1])
+
+# 3D path (dim_3d=True):
+domain = Box(x=float(dims[0]), y=float(dims[1]), z=float(dims[2]))
+self._velocity = StaggeredGrid(0.0, extrapolation.ZERO, domain,
+                               x=config.resolution[0], y=config.resolution[1], z=config.resolution[2])
 ```
 
-**Integration with SB3:** PettingZoo's `pettingzoo.utils.BaseWrapper` provides an SB3 adapter pattern (wrap AEC env → Gym-like single-agent interface with action masking). For true multi-agent training (not single-agent-via-wrapper), use PettingZoo's `parallel_env` with per-agent SB3 model instantiation. SB3 2.x natively supports Gymnasium spaces, so PettingZoo's `agent_observation_space(agent)` and `agent_action_space(agent)` integrate directly.
+- `fluid.make_incompressible(velocity, obstacles, Solve(...))` works identically in 3D (pressure Poisson solve generalizes; `rel_tol`/`abs_tol`/`max_iterations` unchanged).
+- The `union(*geoms)` multi-obstacle workaround (DEBT-05) is dimension-agnostic -- carries over unchanged.
+- `compute_obstacle_forces` (force_computation.py) must handle a 3D pressure gradient; verify the per-obstacle bounding-box integration generalizes to a z-axis slice.
+- Reference example: [PhiFlow Wake_Flow](https://tum-pbs.github.io/PhiFlow/examples/grids/Wake_Flow.html) -- full 3D cylinder wake with `Box(x=200, y=100, z=5)`, `infinite_cylinder(inf_dim='z')`, `iterate(step, batch(time=200), ...)`.
 
-**Architecture pattern:**
-- `rl/environment.py` — extend `SurgRLEnv` (Gymnasium) with a parallel `SurgRLMultiAgentEnv` (PettingZoo ParallelEnv)
-- `rl/observation.py` / `rl/action.py` — extend observation/action dataclass contracts with per-agent `agent_id` field
-- `rl/training.py` — multi-agent training loop: one SB3 model per agent type (left_arm, right_arm, camera_controller)
-- Schema — add `MultiAgentConfig` to `SceneDefinition` for agent assignment (robot → agent mapping)
+**Schema change required:** `FluidConfig.resolution: tuple[int, int]` must accept `tuple[int, int, int]` when `dim_3d=True`. Recommended form:
 
-**Key constraint:** PettingZoo v1.24+ deprecates `self.observation_spaces`/`self.action_spaces` class attributes in favor of `observation_space(agent)` and `action_space(agent)` methods. This is the current API. Use method-based spaces from day one.
+```python
+dim_3d: bool = Field(default=False, description="Enable 3D Eulerian grid (vs 2D xz-slice)")
+resolution: tuple[int, int] | tuple[int, int, int] = Field(
+    default=(32, 32), description="Grid resolution (nx, ny) or (nx, ny, nz) when dim_3d=True"
+)
 
-**What NOT to use:**
-- **RLlib multi-agent** — Already available via `[distributed]` (Ray/RLlib). RLlib's multi-agent support is for distributed scale. For research-level dual-arm coordination (2–4 agents), PettingZoo is simpler and better integrated with the existing SB3 pipeline.
-- **Gymnasium-Robotics** — Task-specific (Fetch, Hand), not relevant to surgical dual-arm. PettingZoo custom env creation is the path.
-
----
-
-### 5. DreamerV3 World Models
-
-**What's needed:** DreamerV3 integration for planning in surgical scenes from pixels or low-dimensional state. This is the highest-risk stack addition because DreamerV3 uses JAX while the rest of Surg-RL is PyTorch-based (SB3, torch in [vision]).
-
-**Recommendation: DreamerV3 (PyPI) + JAX, as an optional deep dependency**
-
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| dreamerv3 | >=1.5.0 | World model RL algorithm | PyPI package (`pip install dreamerv3`). Danijar Hafner's reference implementation. Learns latent world model from pixels/low-dim obs, trains actor-critic in imagination. PyPI: 1.5.0. GitHub setup.py claims version 3.3.1 — the PyPI 1.5.0 is a packaging version, not the algorithm version. |
-| jax | >=0.4.33 | Numerical computing (required by DreamerV3) | JAX is DreamerV3's compute backend. Must match dreamerv3's requirements: `jax[cuda12]==0.4.33` in requirements.txt. Latest JAX is 0.10.0 — significant version gap. |
-| jax-metal | >=0.1.0 | Apple Silicon GPU support for JAX | Enables Metal MPS backend for macOS training. Existing stack already supports Metal (Phase 10). jax-metal 0.1.1 on PyPI. |
-| optax | >=0.2.0 | JAX optimizer library | Required by DreamerV3 for AdamW/etc. PyPI: 0.2.8. |
-| elements | >=3.19.1 | Configuration + RL utilities for DreamerV3 | Danijar Hafner's config/RL library. PyPI: 3.22.0. |
-| einops | (pinned by elements) | Einstein notation tensor ops | Brought in transitively by elements. |
-
-**Critical compatibility concern — JAX vs NumPy:**
-DreamerV3's `requirements.txt` pins `numpy<2` because of DMLab/MineRL constraints. The existing Surg-RL stack uses `numpy>=1.24.0` (allows numpy 2.x). Current installed numpy is 2.4.4. JAX 0.4.33 with `numpy<2` creates a **dependency conflict** with the main stack.
-
-**Resolution strategy:**
-Do NOT add DreamerV3 to the main dependency tree. Create a fully isolated optional group:
-
-```toml
-[project.optional-dependencies]
-dreamer = [
-    "dreamerv3>=1.5.0",
-    "jax>=0.4.33",
-    "jax-metal>=0.1.0; platform_system == 'Darwin'",
-    "optax>=0.2.0",
-    "elements>=3.19.1",
-]
+@field_validator("resolution")
+@classmethod
+def _validate_resolution(cls, v, info):
+    dim_3d = info.data.get("dim_3d", False)
+    expected_len = 3 if dim_3d else 2
+    if len(v) != expected_len:
+        raise ValueError(f"Resolution must have {expected_len} dims when dim_3d={dim_3d}")
+    if any(d < 4 for d in v):
+        raise ValueError("Resolution must be >= 4 per dimension")
+    if any(d > 128 for d in v):
+        raise ValueError("Resolution capped at 128 per dimension")
+    return v
 ```
 
-**Runtime isolation:** DreamerV3 training runs in a **separate process** with its own `PYTHONPATH` and venv. The integration is at the **data interface level** — Surg-RL environment produces (obs, action, reward, done) tuples; DreamerV3 consumes them. No in-process mixing of PyTorch (SB3) and JAX (DreamerV3). The architecture follows a **bridge pattern** rather than a library integration.
+**Do NOT add:** `mantaflow` (abandoned since 2022), `pyvista`/`vtk` (removed in v0.3.2 for tetgen), a GPU-fluid backend (CPU-first is the established decision; GPU fluids explicitly out of scope).
 
-**Integration points:**
-- New `rl/dreamer_bridge.py` — adapter: Surg-RL Gymnasium env → DreamerV3-compatible (obs dict, action dict, reset) protocol. Handles MuJoCo render → pixel observation for visual DreamerV3.
-- New `rl/dreamer_training.py` — subprocess spawner that runs `dreamerv3` training in isolation, reports metrics via shared filesystem or W&B.
-- `cli.py` — new `surg-rl dreamer-train` subcommand, `surg-rl dreamer-evaluate`
+### (c) DifficultyLevelConfig -- Pydantic v2 Schema
 
-**What NOT to use:**
-- **TensorFlow** — DreamerV3 originally had a TF2 implementation (danijar/dreamerv3 GitHub repo has TF in its history), but the current PyPI package (`dreamerv3>=1.5.0`) and requirements.txt (`jax[cuda12]==0.4.33`) use JAX, not TensorFlow. Do NOT add TensorFlow; it's the wrong backend.
-- **Direct numpy<2 pin in main stack** — Do not downgrade the main project's numpy minimum. The DreamerV3 integration must be process-isolated.
-- **Other world model implementations** (IRIS, STORM, TWM) — DreamerV3 is the canonical world model algorithm with a maintained codebase. Other implementations are research code with no packaging.
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| `pydantic` | v2 (UNCHANGED) | Schema for per-level difficulty overrides + scene-level blocks | Pure schema work; reuses the v0.4.2 cycle-resolution pattern. |
 
-**MacOS Metal support:** `jax-metal>=0.1.0` enables Metal MPS backend. This aligns with the existing Phase 10 Metal GPU support. DreamerV3's `--jax.platform cpu` flag provides a CPU fallback if Metal doesn't work.
+**No new packages.** The established pattern (PROJECT.md Key Architecture Decisions) applies directly:
 
----
-
-## Complete v0.4.0 Dependency Manifest
-
-### New Optional Dependency Groups
-
-```toml
-[project.optional-dependencies]
-# Existing groups unchanged: dev, llm, meshing, simulation, vision, tracking,
-# distributed, ros2, docs
-
-# v0.4.0 additions
-benchmark = [
-    "wandb>=0.18.0",
-    "matplotlib>=3.9.0",
-    "seaborn>=0.13.0",
-    "pandas>=2.0.0",
-    "rliable>=1.1.0",
-]
-
-marl = [
-    "pettingzoo>=1.24.0",
-    "supersuit>=3.9.0",
-]
-
-dreamer = [
-    "dreamerv3>=1.5.0",
-    "jax>=0.4.33",
-    "jax-metal>=0.1.0; platform_system == 'Darwin'",
-    "optax>=0.2.0",
-    "elements>=3.19.1",
-]
-
-assets = [
-    "trimesh>=4.5.0",
-]
+```python
+class DifficultyLevelConfig(BaseModel):
+    """Per-level difficulty overrides (TASK-02)."""
+    tissue_stiffness: float | None = Field(default=None, ge=0.0, description="Override FEM stiffness")
+    target_precision_tolerance: float | None = Field(default=None, ge=0.0, description="Success radius override")
+    tool_position_noise: float | None = Field(default=None, ge=0.0, description="Observation noise std")
+    time_limit: float | None = Field(default=None, gt=0.0, description="Episode time cap override (s)")
 ```
 
-### Bumped Existing Deps
+**Scene-level `difficulty_blocks: list[3]`:**
 
-| Package | Old Minimum | New Minimum | Reason |
-|---------|-------------|-------------|--------|
-| wandb | >=0.16.0 | >=0.18.0 | `wandb.Table` and `wandb.plot.*` APIs stabilized in 0.18+ |
+```python
+# On SceneDefinition or TaskConfig (decide in phase planning):
+difficulty_blocks: list[DifficultyLevelConfig] = Field(
+    default_factory=list, description="Exactly 3 entries: [easy, medium, hard]"
+)
 
-### No-Version-Change (Already Sufficient)
+@field_validator("difficulty_blocks")
+@classmethod
+def _exactly_three(cls, v):
+    if len(v) != 0 and len(v) != 3:
+        raise ValueError("difficulty_blocks must have exactly 3 entries [easy, medium, hard] or be empty")
+    return v
+```
 
-| Package | Existing Pin | v0.4.0 Verdict |
-|---------|-------------|----------------|
-| numpy | >=1.24.0 | Keep. DreamerV3 isolation avoids numpy<2 conflict. |
-| stable-baselines3 | >=2.0.0 | Keep. PettingZoo SB3 tutorials target SB3 2.x. |
-| gymnasium | >=0.29.0 | Keep. PettingZoo 1.24+ requires Gymnasium >=0.29. |
-| mujoco | >=3.0.0 | Keep. Trimesh exports to OBJ which MuJoCo reads natively. |
-| tetgen | >=0.8.4 | Keep. Trimesh pre-processing feeds into tetgen for FEM. |
+**Discrete `CurriculumScheduler` level progression:** indexes into the 3-block list (0=EASY, 1=MEDIUM, 2=HARD) instead of the continuous `current_difficulty: float`. The existing `DifficultyLevel` `_FloatMixin(float, Enum)` stays for the scalar path; the discrete path adds a `current_level: int` (0..2) that selects `difficulty_blocks[current_level]` and feeds `apply_difficulty()` per reward class.
+
+**Cross-package cycle resolution (reuse v0.4.2 pattern):** `from __future__ import annotations` + string forward-ref + late import at module bottom + `Model.model_rebuild()` + lazy local imports inside function bodies. The existing `TaskConfig.model_rebuild()` call at schema.py bottom already handles the `DifficultyLevel` forward ref; add `DifficultyLevelConfig` to the same late-import + rebuild block.
+
+**Do NOT add:** `enum-tools`, a separate `difficulty_schema` package, or a JSON-schema generator (Pydantic v2 native validation is sufficient).
+
+### (d) K8s PVC e2e Test -- `pytest-kind`
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| `pytest-kind` | `>=22.11.1` (**NEW, dev-only**) | Session-scoped `kind_cluster` fixture for PVC e2e | Battle-tested (stable since 2019), lightweight, matches the existing stub's `kind`-detection + `@pytest.mark.k8s` marker. |
+| `pykube-ng` | transitive (via pytest-kind) | Lightweight K8s API client for PVC state polling | Bundled with pytest-kind; avoids the 30+ MB official `kubernetes` client. |
+| `kind` (binary) | external prerequisite | Local Kubernetes cluster | Already detected by the existing stub's `_kind_cluster_available()`. |
+
+**Why `pytest-kind` over alternatives:**
+
+| Framework | Python client | Providers | Scope | Verdict |
+|-----------|--------------|-----------|-------|---------|
+| **pytest-kind** (hjacobs) | `pykube-ng` (lightweight) | kind only | session | **RECOMMENDED** -- stable since 2019, `kubectl(*args)` subprocess helper matches the declarative `kustomize apply` workflow, `load_docker_image` + `port_forward` + `kubeconfig_path` for debugging. |
+| pytest-kubernetes (Blueshoe) | dict/kubectl | k3d/kind/minikube | per-test | More providers than needed; per-test cluster recreation is wasteful for a single PVC test. |
+| pytest-k8s (v1.0.0, Jul 2025) | official `kubernetes>=33.1.0` (30+ MB) | kind only | session/module/class/function | Cleanest official-client integration but adds a heavy runtime dep for a dev-only test. |
+
+**Integration with existing stub (`tests/k8s/test_pvc_e2e.py`):**
+
+```python
+# Add to pyproject.toml [project.optional-dependencies]
+k8s-test = ["pytest-kind>=22.11.1"]
+
+# Test body (replaces the TODO):
+def test_pvc_read_write_cycle(kind_cluster):
+    # kind_cluster fixture is session-scoped, skips if kind unavailable
+    kind_cluster.kubectl("apply", "-f", "k8s/base/pvc.yaml")
+    kind_cluster.kubectl("wait", "--for=condition=Bound",
+                         "pvc/surg-rl-checkpoints", "--timeout=60s")
+    # Launch Job that writes a checkpoint to the PVC mount
+    kind_cluster.kubectl("apply", "-f", "tests/k8s/write-job.yaml")
+    kind_cluster.kubectl("wait", "--for=condition=Complete",
+                         "job/surg-rl-write", "--timeout=120s")
+    # Launch Job that reads the checkpoint back and verifies
+    kind_cluster.kubectl("apply", "-f", "tests/k8s/read-job.yaml")
+    kind_cluster.kubectl("wait", "--for=condition=Complete",
+                         "job/surg-rl-read", "--timeout=120s")
+    # Assert via logs
+    logs = kind_cluster.kubectl("logs", "job/surg-rl-read")
+    assert "CHECKPOINT_OK" in logs
+    # Cleanup
+    kind_cluster.kubectl("delete", "-f", "tests/k8s/write-job.yaml")
+    kind_cluster.kubectl("delete", "-f", "tests/k8s/read-job.yaml")
+```
+
+**Keep `kubectl` subprocess as the primary apply mechanism** (declarative, consistent with the existing `k8s/base/*.yaml` Kustomize workflow). Use the `kind_cluster.api` (pykube) only if polling PVC `.status.phase` programmatically is needed beyond `kubectl wait`.
+
+**Organ-mesh licensing decision (same debt item, no stack impact):** this is a licensing/process decision (procedural generation vs surgtoolloc dataset), NOT a stack addition. Procedural generation reuses the existing `trimesh` + `tetgen` pipeline; surgtoolloc would add a data-download step (no new runtime dep). The decision is deferred to phase planning -- no library research needed here.
+
+**Do NOT add:** the official `kubernetes` Python client (heavy, unnecessary for a PVC round-trip test), `helm` (Kustomize overlays are the established decision; Helm explicitly out of scope), `k3d`/`minikube` providers (`kind` is already the detected cluster).
 
 ---
 
-## What NOT to Add (Anti-Recommendations)
+## Alternatives Considered
 
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| PyVista / VTK | Explicitly removed from stack in v0.3.2 (Phase 15). "Tetgen replaces VTK entirely, not side-by-side." | trimesh for mesh I/O |
-| Open3D | Not available on PyPI for all target platforms. Wheel builds are inconsistent. | trimesh |
-| TensorFlow | DreamerV3's current PyPI package uses JAX, not TF. Adding TF would create a 3-way framework conflict (PyTorch + JAX + TF). | JAX (via dreamerv3) |
-| RLlib MARL (for dual-arm) | Already available via [distributed] but overkill for 2–4 agent coordination. RLlib MARL API is more complex than PettingZoo for small-scale research. | PettingZoo |
-| numpy<2 in main deps | Would break existing stack (numpy 2.4.4 installed). | Process-isolated DreamerV3 |
-| rl-baselines3-zoo as dep | Not a library — it's a script collection. | Custom experiment runner in `rl/benchmarking.py` |
-| Any new sim backend | Dual MuJoCo + PyBullet is the project's identity. No Isaac Sim, no Unity, no SAPIEN. | Extend existing simulators |
+| Category | Recommended | Alternative | Why Not |
+|----------|-------------|-------------|---------|
+| DreamerV3 agent | `dreamerv3~=1.5.0` (vendored `embodied.run.train`) | `dreamer` PyPI v3.3.1 (pure-JAX reimpl) | Different project, not a successor; would fork the codebase from the danijar reference implementation. |
+| DreamerV3 orchestration | `embodied.run.train(...)` reuse | Hand-rolled `agent.train()` loop in `_run_subprocess_loop` | Hand-roll re-implements replay/driver/logger; only choose if fine-grained control is required. |
+| 3D fluids | `phiflow>=3.4.0` 3D `StaggeredGrid` | Mantaflow / pyvista | Mantaflow abandoned since 2022; pyvista/VTK removed in v0.3.2. PhiFlow 3D is built-in. |
+| 3D fluid flag | `FluidConfig.dim_3d: bool` + `resolution` union | Separate `FluidConfig3D` model | Union + validator is less code and keeps the config single-model; matches Pydantic v2 idiom. |
+| K8s e2e framework | `pytest-kind>=22.11.1` | `pytest-k8s` (official kubernetes client) | Adds 30+ MB dev dep for one PVC test; pykube-ng is sufficient. |
+| K8s e2e framework | `pytest-kind>=22.11.1` | Raw `subprocess.run(["kubectl", ...])` (status quo stub) | Loses fixture lifecycle (session cluster, kubeconfig, load_docker_image, port_forward); the stub already hand-rolls `_kind_cluster_available()` which pytest-kind provides correctly. |
+| Difficulty schema | Pydantic v2 `DifficultyLevelConfig` model | JSON Schema + `jsonschema` validator | Project standard is Pydantic v2; reuses `model_rebuild()` cycle pattern. |
 
 ---
 
 ## Installation
 
 ```bash
-# v0.4.0 full install (all new groups)
-pip install -e ".[dev,benchmark,marl,dreamer,assets]"
+# NEW dev-only extra for K8s PVC e2e (add to pyproject.toml)
+pip install -e ".[k8s-test]"
 
-# Minimal v0.4.0 (just assets + benchmarking, no DreamerV3)
-pip install -e ".[dev,assets,benchmark]"
+# Existing extras (UNCHANGED, no re-install needed unless upgrading):
+#   [dreamer]  -> dreamerv3~=1.5.0, jax~=0.4.20, optax>=0.1.7
+#   [assets]   -> trimesh, tetgen
+#   fluids     -> phiflow>=3.4.0 (already a core dep, not optional)
 
-# Multi-agent only
-pip install -e ".[dev,marl]"
+# External prerequisite for the PVC e2e test:
+#   kind (Kubernetes in Docker) -- already detected by tests/k8s/test_pvc_e2e.py
+```
+
+**pyproject.toml diff (the only dependency change in v0.6.0):**
+
+```toml
+[project.optional-dependencies]
+# ... existing extras unchanged ...
+k8s-test = ["pytest-kind>=22.11.1"]
 ```
 
 ---
 
-## Risk Assessment
+## Integration Notes with Existing Stack
 
-| Risk | Severity | Mitigation |
-|------|----------|------------|
-| DreamerV3 JAX vs NumPy 2.x conflict | HIGH | Process-isolated DreamerV3 training; separate venv for JAX deps; data-bridge integration pattern. Document as "dreamer extra requires isolated environment" in README. |
-| JAX pre-built wheels on macOS | MEDIUM | jax-metal>=0.1.0 provides Metal-native wheels. CPU fallback via `--jax.platform cpu`. Verified working on Apple Silicon. |
-| PettingZoo API breaking changes | LOW | Pin >=1.24.0. PettingZoo follows Farama Foundation stability guarantees. 1.x API is stable. |
-| Trimesh performance on large meshes | LOW | Surgical meshes are typically <100K faces. Trimesh handles this well. Use `process=False` for raw loading, defer heavy ops. |
-| W&B free tier limits | LOW | 100 GB storage, unlimited runs. Sufficient for research benchmarking. |
+1. **DreamerV3 subprocess isolation is unchanged.** `DreamerSubprocess` (multiprocessing spawn context, `_JsonStdout` pipe wrapper, `XLA_PYTHON_CLIENT_MEM_FRACTION=0.4`, `XLA_PYTHON_CLIENT_PREALLOCATE=false`) stays. Only `_build_agent` / `_train_loop` / `_evaluate` / `_save_checkpoint` / `_load_checkpoint` get real bodies. The `CONFIG/TRAIN/EVAL/CHECKPOINT/SHUTDOWN` stdin/stdout JSON protocol stays.
 
-## Sources
+2. **`GymToEmbodiedWrapper` is already `embodied.Env`-compatible** (`is_first`/`is_last`/`is_terminal` dict obs, reset-in-action protocol). No wrapper change needed for the real agent wiring.
 
-- Context7: `/mikedh/trimesh` — mesh loading/export/available formats (verified against trimesh 4.12.2)
-- Context7: `/farama-foundation/pettingzoo` — AEC env creation, SB3 integration, SuperSuit preprocessing (verified against PettingZoo 1.26.1)
-- Context7: `/danijar/dreamerv3` — Agent init, JAX config, YAML structure, `requirements.txt` content (verified: `jax[cuda12]==0.4.33`, `numpy<2`)
-- Context7: `/wandb/wandb` — `wandb.plot.*`, `wandb.Table`, chart logging API (verified against wandb 0.26.1)
-- Context7: `/dlr-rm/rl-baselines3-zoo` — experiment plotting, `--rliable`, `--track`, optuna dashboard
-- PyPI index queries: trimesh 4.12.2, pettingzoo 1.26.1, supersuit 3.10.0, dreamerv3 1.5.0, wandb 0.26.1, matplotlib 3.10.9, seaborn 0.13.2, pandas 3.0.3, rliable 1.2.0, jax 0.10.0, jax-metal 0.1.1, optax 0.2.8, elements 3.22.0
-- GitHub: `danijar/dreamerv3/requirements.txt` (raw) — full dependency list with version pins
-- GitHub: `danijar/dreamerv3/setup.py` — version 3.3.1, MIT license
-- Project-local: `pyproject.toml` — existing deps and optional groups
-- Project-local: `AGENTS.md` — PyBullet soft body quirks, Pydantic v2 pattern
-- Project-local: `src/surg_rl/dynamics/curriculum.py` — existing `CurriculumScheduler` infrastructure
-- Project-local: `src/surg_rl/scene_definition/schema.py` — existing `MeshAsset`, `DeformableConfig`, `TaskConfig`
+3. **3D fluids are additive.** `dim_3d=False` (default) preserves the existing 2D xz-slice path bit-for-bit. The `FluidSimulator.step()` body branches on `config.dim_3d` for the `Box`/`StaggeredGrid` construction only; `make_incompressible` + `union(*geoms)` + `compute_obstacle_forces` are shared. Existing 2D tests stay green.
+
+4. **`DifficultyLevelConfig` is additive to the schema.** Existing `TaskConfig.difficulty_level: DifficultyLevel | None` (scalar enum) stays for backwards compat; `difficulty_blocks: list[DifficultyLevelConfig]` is a new optional field defaulting to empty. Existing scenes without `difficulty_blocks` load unchanged.
+
+5. **K8s PVC e2e is dev-only.** `pytest-kind` is in `[k8s-test]` extra, never imported at runtime. The `@pytest.mark.k8s` + `@pytest.mark.integration` + `@pytest.mark.slow` markers already exist in `pytest.ini`. The test stays skipped locally (no `kind` cluster) and runs in CI with a `kind` provisioner.
+
+6. **GPU gating preserved.** The DreamerV3 real-integration E2E (flipped Phase 30 test) keeps the existing `pytest.mark.skipif` on (GPU + `dreamerv3` + `jax`); macOS local skips, CI GPU host validates. The 3D fluid test and K8s PVC test are NOT GPU-gated.
 
 ---
 
-*Stack research for v0.4.0 Training Infrastructure & Realism*
-*Researched: 2026-05-13*
+## Sources
+
+- [dreamerv3 v1.5.0 on PyPI](https://pypi.org/project/dreamerv3/) -- latest + only release (Feb 22 2023); confidence MEDIUM (web).
+- [danijar/dreamerv3 README](https://github.com/danijar/dreamerv3/blob/main/README.md) -- CLI entrypoint `python -m dreamerv3.main`, YAML config, `--jax.platform` flag; confidence MEDIUM (web).
+- [danijar/dreamerv3 agent.py](https://github.com/danijar/dreamerv3/blob/b65cf81a/dreamerv3/agent.py) -- `Agent(embodied.jax.Agent)` with `init_train/train/policy/report/save/load`; confidence MEDIUM (web).
+- [danijar/dreamerv3 embodied/run/train.py](https://github.com/danijar/dreamerv3/blob/b65cf81a/embodied/run/train.py) -- `train(make_agent, make_replay, make_env, make_stream, make_logger, args)` orchestration; confidence MEDIUM (web).
+- [danijar/dreamerv3 embodied/core/base.py](https://github.com/danijar/dreamerv3/blob/b65cf81a/embodied/core/base.py) -- abstract `Agent` interface contract; confidence MEDIUM (web).
+- [DeepWiki: DreamerV3 Agent Architecture](https://deepwiki.com/danijar/dreamerv3/4-agent-architecture) -- component breakdown (enc/dyn/dec/rew/con/pol/val/slowval); confidence MEDIUM (web).
+- [DeepWiki: DreamerV3 Agent Interface](https://deepwiki.com/danijar/dreamerv3/7.1-agent-interface) -- `train(carry,data)->(carry,out,metrics)` lifecycle; confidence MEDIUM (web).
+- [PhiFlow Wake_Flow 3D example](https://tum-pbs.github.io/PhiFlow/examples/grids/Wake_Flow.html) -- `Box(x=,y=,z=)`, `StaggeredGrid(x=,y=,z=)`, `make_incompressible` in 3D; confidence MEDIUM (web).
+- [PhiFlow Staggered Grids docs](https://tum-pbs.github.io/PhiFlow/Staggered_Grids.html) -- MAC grid, 2D + 3D support; confidence MEDIUM (web).
+- [PhiFlow fluid API](https://tum-pbs.github.io/PhiFlow/phi/physics/fluid.html) -- `make_incompressible(velocity, obstacles, Solve())` signature; confidence MEDIUM (web).
+- [pytest-kind v22.11.1 on PyPI](https://pypi.org/project/pytest-kind/) -- session-scoped `kind_cluster` fixture, `kubectl(*args)`, `load_docker_image`, `port_forward`; confidence MEDIUM (web).
+- [pytest-k8s v1.0.0 on PyPI](https://pypi.org/project/pytest-k8s/) -- official `kubernetes` client alternative (rejected -- heavy dep); confidence MEDIUM (web).
+- [Blueshoe/pytest-kubernetes](https://github.com/blueshoe/pytest-kubernetes) -- k3d/kind/minikube alternative (rejected -- over-provisioned); confidence MEDIUM (web).
+- Local codebase: `src/surg_rl/dreamer/subprocess.py` (`_build_agent` stub at L125-129, sentinel at L83/88/98), `src/surg_rl/fluids/fluid_simulator.py` (2D `Box(x=,y=)` constructor), `src/surg_rl/scene_definition/schema.py` (`FluidConfig` L1463-1488, `TaskConfig.model_rebuild()` L1506), `tests/k8s/test_pvc_e2e.py` (stub body), `pyproject.toml` (`[dreamer]` extra L128-133), `pytest.ini` (markers L8-11); confidence HIGH (read directly).

@@ -12,7 +12,21 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 
 **Shipped v0.5.0** (2026-06-24) — Scene Editor & UX Polish. All v0.1.0 through v0.5.0 milestones shipped (9 milestones, 35 phases, 109 plans, 26/26 v1 requirements satisfied). v0.5.0 delivered the marquée PySide6 GUI scene editor plus 3 polished task demos, a user-facing docs refresh, and 6 tech-debt items (incl. the 421-ruff `dreamer/` cleanup). Test baseline grew 1,134 → 1,325 passing.
 
-**Next:** No milestone defined yet — run `/gsd-new-milestone` to start the next cycle. Carried-forward debt: Phase 09 ros2-bridge verification gaps, Phase 24 DreamerV3 UAT (GPU-gated), and the v0.6.0-deferred items (K8s PVC e2e, organ mesh licensing decision, real DreamerV3 integration, TASK-02 per-level override schema, 3D fluid flag).
+**Next:** v0.6.0 — Carried-Forward Debt Closure (started 2026-06-24). Closes the four items deferred from v0.4.0–v0.5.0: real DreamerV3 integration, TASK-02 per-level difficulty schema, K8s PVC e2e + organ-mesh licensing decision, and the 3D fluid flag. GUI editor depth and scene-generation features are deferred to v0.7.0.
+
+## Current Milestone: v0.6.0 Carried-Forward Debt Closure
+
+**Goal:** Close the four carried-forward tech-debt items deferred from v0.4.0–v0.5.0 — real DreamerV3 integration, the TASK-02 per-level difficulty schema, K8s PVC e2e + organ-mesh licensing decision, and the 3D fluid flag. Pure closure: no new user-facing features (those are queued for v0.7.0).
+
+**Target items:**
+- Real DreamerV3 integration — flip the Phase 24 `_build_agent` stub sentinel, wire a real DreamerV3 agent into the process-isolated JAX subprocess, validate end-to-end on GPU (CI GPU host; macOS local skips)
+- TASK-02 per-level schema — `DifficultyLevelConfig` (tissue_stiffness / target_precision_tolerance / tool_position_noise / time_limit overrides) + discrete `CurriculumScheduler` level progression + scene-level `difficulty_blocks: list[3]` in scene JSON
+- K8s PVC e2e — de-stub the checkpoint-persistence e2e test; organ-mesh licensing decision (procedural generation vs surgtoolloc dataset)
+- 3D fluid flag — implement the `dim_3d=True` path for Eulerian grid fluids (currently 2D xz-slice only)
+
+**Deferred to v0.7.0 (acknowledged, not in this roadmap):** GUI editor depth (render/sim-decoupled viewport, multi-view/lighting/gizmos/recording, editing UX, file/IO, perf/stability) + scene generation (more task templates, better LLM text→scene, VLM image→scene, procedural/batch gen, interactive LLM clarifying-question flow in GUI + CLI).
+
+**Key context:** Phase numbering continues from 36. DreamerV3 real-integration is GPU-gated (CI GPU host required; macOS local skips). This mirrors the v0.4.1/v0.4.2 gap-closure pattern — small, focused, audit-driven.
 
 ## Shipped Milestone: v0.5.0 Scene Editor & UX Polish (SHIPPED 2026-06-24)
 
@@ -144,9 +158,12 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 - ✓ **User-Facing Docs Refresh** — README + CONTRIBUTING + CHANGELOG with embedded demo GIFs + GUI screenshots (DOC-01..05) — v0.5.0
 - ✓ **Tech Debt Cleanup** — 421→0 ruff in `dreamer/`, Dockerfile.ros2 multi-arch, fluid_step hook, cut cooldown test, PhiFlow union doc, HARD-fixture env-construction test, CurriculumStageConfig difficulty normalization (DEBT-01..06) — v0.5.0
 
-### Active (next milestone)
+### Active (v0.6.0 — Carried-Forward Debt Closure)
 
-_(not yet defined — run `/gsd-new-milestone` to start the next cycle; phase numbering continues from 36)_
+- [ ] **Real DreamerV3 integration** — flip the `_build_agent` stub, wire a real agent into the JAX subprocess, validate on GPU
+- [ ] **TASK-02 per-level difficulty schema** — `DifficultyLevelConfig` overrides + discrete curriculum progression + scene-level difficulty blocks
+- [ ] **K8s PVC e2e + organ-mesh licensing decision** — de-stub checkpoint-persistence e2e; choose procedural vs surgtoolloc organ meshes
+- [ ] **3D fluid flag (`dim_3d=True`)** — implement 3D Eulerian grid fluids (currently 2D xz-slice only)
 
 ### Out of Scope
 
@@ -249,4 +266,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-06-24 — v0.5.0 milestone shipped (Scene Editor & UX Polish)*
+*Last updated: 2026-06-25 — Phase 36 complete (difficulty schema + discrete curriculum; UAT 10/10)*

@@ -1,143 +1,154 @@
 # Project Research Summary
 
-**Project:** Surg-RL v0.4.0 — Training Infrastructure & Realism
-**Domain:** Surgical robotics RL training platform upgrade
-**Researched:** 2026-05-13
+**Project:** Surg-RL
+**Domain:** Surgical-robotics RL training system — carried-forward tech-debt closure
+**Researched:** 2026-06-24
 **Confidence:** HIGH
 
 ## Executive Summary
 
-Surg-RL v0.4.0 adds five capability axes to an existing 910-test, dual-backend (MuJoCo+PyBullet) RL system: real surgical mesh assets, a surgical task curriculum, reproducible benchmarking, PettingZoo multi-agent RL, and DreamerV3 world models. Three of these are straightforward extensions of existing infrastructure (assets uses trimesh over the current primitive pipeline; curriculum extends the existing CurriculumScheduler; benchmarking wraps TrainingManager). Two introduce fundamentally incompatible environment interfaces: PettingZoo `ParallelEnv` returns dict-based step/reset with per-agent method-based spaces, and DreamerV3's `embodied.Env` bakes reset into the action dict and returns observation dicts — neither matches the Gymnasium tuple protocol the codebase assumes everywhere.
+v0.6.0 is a **closure milestone, not a feature milestone**: it pays down four carried-forward tech-debt items by flipping stubs to real implementations and recording one deferred licensing decision. Three of the four items (DreamerV3, 3D fluids, difficulty schema) require **zero new runtime dependencies** — the existing pins (`dreamerv3~=1.5.0`, `phiflow>=3.4.0`, Pydantic v2) already support the real paths. The only stack addition is a single **dev-only** extra, `pytest-kind>=22.11.1`, which de-stubs the K8s PVC e2e test with a session-scoped `kind_cluster` fixture.
 
-The core recommendation is to keep `SurgicalEnv` as the canonical single-agent Gymnasium contract and build thin adapter wrappers (`PettingZooSurgicalEnv`, `DreamerEnvBridge`) that delegate to it. The single highest-risk stack decision is adding JAX (for DreamerV3) into a PyTorch codebase — it must be process-isolated with its own optional dependency group. Cross-backend determinism is impossible; MuJoCo and PyBullet must be treated as separate benchmark targets. The existing 910-test suite must be protected by making all new schema fields optional with `None` defaults and using marker-based test selection (`@pytest.mark.marl`, `@pytest.mark.dreamer`) to keep CI fast.
+The recommended approach respects ten documented architectural invariants (INV-1..INV-10). Every closure item is **additive**: `dim_3d=False` default preserves 2D fluids; `difficulty_overrides: dict[DifficultyLevel, DifficultyLevelConfig] | None` defaults to `None` so existing scene JSON loads unchanged; `CurriculumScheduler` gets new `set_difficulty_level`/`advance_level` alongside (not replacing) the continuous `advance_stage`; the DreamerV3 subprocess JSON-over-stdio protocol, `_JsonStdout` wrapper, and `XLA_PYTHON_CLIENT_MEM_FRACTION=0.4` isolation all stay. The Phase 30 sentinel test is **flipped, not deleted** — that flip IS the closure signal.
+
+Top risks concentrate in two items. **Real DreamerV3** (highest risk): sentinel-flip must invert not delete, JAX must never leak into the parent, the dreamerv3 logger must go to stderr (not stdout — corrupts the JSON pipe), and the CI smoke test must assert structural properties (finite/decreasing loss, checkpoint exists) NOT the spike's converged `MSE<0.01` thresholds. **3D fluids**: cubic memory blow-up (NxNxN) if the 2D `grid_size` is reused, plus two-way coupling instability on thin instruments; mitigation is a separate smaller 3D default, `coupling_mode="one_way"` default for 3D, and a `union(*geoms)` SDF regression test in 3D. TASK-02's main risk is re-introducing the v0.4.2 Pydantic cross-package cycle — mitigated by leaf-module placement + `model_rebuild()`.
 
 ## Key Findings
 
-### Recommended Stack Additions
+### Recommended Stack
 
-**Two new libraries, one bumped version, zero core changes:**
+No new runtime dependencies. The existing pins are current and capable — `dreamerv3~=1.5.0` is the latest (and only) PyPI release, PhiFlow 3.4.0 natively supports 3D (dimensionality inferred from `Box`/`StaggeredGrid` shape, not a library flag), and the DifficultyLevelConfig schema is pure Pydantic v2. The only `pyproject.toml` change is one dev-only extra.
 
-| Addition | Version | Group | Purpose |
-|----------|---------|-------|---------|
-| trimesh | >=4.5.0 | `[assets]` | Mesh I/O for surgical instruments/organs; replaces primitive .obj fallbacks |
-| pettingzoo | >=1.24.0 | `[marl]` | Multi-agent RL (ParallelEnv API, dual-arm coordination) |
-| supersuit | >=3.9.0 | `[marl]` | MARL env wrappers (vectorization, frame stacking for SB3 integration) |
-| wandb (bumped) | >=0.18.0 | `[benchmark]` | Stabilized `wandb.Table`/`wandb.plot.*` APIs; already in `[tracking]` |
-| matplotlib/seaborn/pandas/rliable | latest | `[benchmark]` | Publication-quality plots, statistical benchmarking (IQM, stratified bootstrap) |
-| dreamerv3 + jax + optax + elements | >=1.5.0 (PyPI) | `[dreamer]` | World model RL; JAX-based, **process-isolated** from PyTorch stack |
+**Core technologies:**
+- `dreamerv3~=1.5.0` (vendored `embodied` framework): real agent wiring via `embodied.run.train(make_agent, make_replay, make_env, ...)` + `dreamerv3.Agent(embodied.jax.Agent)` exposing `init_train/train/policy/report/save/load` — no dep change, just stub→real.
+- `phiflow>=3.4.0`: 3D Eulerian fluids via 3D `Box(x,y,z)` + `StaggeredGrid`; `make_incompressible` + `union(*geoms)` workaround are dimension-agnostic — no version bump.
+- Pydantic v2: `DifficultyLevelConfig` reusing the v0.4.2 `from __future__ import annotations` + string forward-ref + `model_rebuild()` cycle-resolution pattern — no new package.
+- `pytest-kind>=22.11.1` (NEW, dev-only `[k8s-test]` extra): session-scoped `kind_cluster` fixture + `kubectl(*args)` helper for the PVC e2e test. Replaces the raw-subprocess stub. Rejected: `pytest-k8s` (30+ MB `kubernetes` client, heavy for one test) and raw `subprocess.run` (loses fixture lifecycle).
 
-**Critical constraint:** JAX (DreamerV3) must NOT share a process with PyTorch (SB3). DreamerV3 runs subprocess-isolated with `XLA_PYTHON_CLIENT_MEM_FRACTION=0.4`. No TensorFlow — the PyPI `dreamerv3` package uses JAX, not TF.
+### Expected Features
 
-### Expected Features — Prioritized by Research
+Four closure items, each a stub→real flip or an additive schema extension — no greenfield features.
 
-**P1 (v0.4.0 is incomplete without these):**
-- 4 real OBJ instrument meshes (forceps, scalpel, needle driver, retractor) replacing primitive boxes
-- 2 deformable organ meshes (liver, stomach) via tetgen pipeline
-- 3 trainable tasks (suturing, grasping, cutting) with reward functions + SB3 training
-- Progressive difficulty (easy/medium/hard) for all tasks
-- Reproducible experiment runner with seed propagation + training curves
-- Dual-arm PettingZoo `ParallelEnv` (independent PPO policies, shared observation)
+**Must have (table stakes):**
+- Real DreamerV3 training loop (actor/critic/world-model steps, checkpoint resume, eval) replacing the 5 stub functions (`_build_agent`/`_train_loop`/`_evaluate`/`_save_checkpoint`/`_load_checkpoint`)
+- `DifficultyLevelConfig` per-level overrides (tissue_stiffness / target_precision_tolerance / tool_position_noise / time_limit) applied additively over `interpolate_params()`
+- Discrete curriculum progression (EASY→MEDIUM→HARD) as an additive `progression_mode`, never replacing the continuous 4-stage `DEFAULT_STAGES`
+- Scene-level `difficulty_blocks` parsing + env-construction wiring with precedence truth-table
+- 3D Eulerian fluid solver (`dim_3d=True`) with the 2D path staying green
+- Real K8s PVC checkpoint-persistence e2e (write → pod restart → read on a bound PVC)
 
-**P2 (defer to v0.4.1 if schedule slips):**
-- Knot-tying, needle insertion tasks
-- Task chain system (grasp → cut → suture)
-- DreamerV3 pixel-mode for single surgical task
-- SB3 algorithm comparison reports
+**Should have (competitive):**
+- DreamerV3 checkpoint namespace per task/obs-type + auto-discovery (already partially present)
+- `coupling_mode` parameter (one_way default in 3D, two_way opt-in) for fluid/solid coupling stability
+- License-citation ADR artifact for the organ-mesh decision (procedural-as-default)
 
-**P3 (v0.5.0+):**
-- Asymmetric obs/action spaces per arm
-- SB3 vs DreamerV3 benchmark comparison
-- Hyperparameter sweeps, dissection task, multi-organ suite
+**Defer (v2+ / out of scope):**
+- DreamerV3 convergence-threshold validation on the full 6-task suite with cutting dynamics (flagged uncertain; smoke-vs-convergence split defers but does not resolve)
+- GPU fluid acceleration (CPU-first per existing decision)
+- surgtoolloc organ meshes — research confirmed it is the WRONG choice (endoscopic video with tool-presence labels, NOT organ geometry; challenge guidelines also prohibit commercial use)
 
 ### Architecture Approach
 
-All five features are additive — no existing module is rewritten. The pattern is: schema extensions (Pydantic v2 models with `None` defaults) → new modules under `src/surg_rl/{assets,task,benchmarking,marl,dreamer}/` → CLI subcommands. `PettingZooSurgicalEnv` is a thin adapter over `SurgicalEnv` (Owns one instance, routes observations/actions per agent via `ObservationRouter`/`ActionAggregator`). `DreamerEnvBridge` translates Gymnasium → `embodied.Env` protocol (dict-based returns, reset-in-action). Task chain executor is a state machine inside `SurgicalEnv` that composes with the existing `CurriculumScheduler` (physical difficulty) to provide task difficulty + procedural complexity.
+Single integration seams per item, all additive, all preserving existing invariants. (a) DreamerV3: one seam at `subprocess.py:125-129` (`_build_agent` stub) — 5 stub functions get real implementations; the JSON pipe protocol, `_JsonStdout` wrapper, `DreamerSubprocess` parent, and `GymToEmbodiedWrapper` are unchanged; Phase 30 sentinel flips negative→positive. (b) Difficulty schema: 3-part chain — `DifficultyLevelConfig` (new leaf Pydantic model) → additive `CurriculumScheduler.set_difficulty_level`/`advance_level` → scene-level `difficulty_overrides: dict[DifficultyLevel, DifficultyLevelConfig] | None` on `TaskConfig`. (c) 3D fluid: `FluidConfig.dim_3d: bool = False` + 3-tuple resolution; `FluidSimulator.__init__` branches on `dim_3d`; `fluid_step()` hook stays no-op; `force_computation.py` 3D bbox branch is the highest-complexity sub-task. (d) PVC e2e: kubectl subprocess approach (no python-client dep) + new `k8s/overlays/e2e/` overlay; organ-mesh licensing = ADR document, not code.
 
-### Critical Pitfalls (Top 5)
+**Major components:**
+1. `src/surg_rl/dreamer/subprocess.py` — replace 5 stub functions; flip Phase 30 sentinel
+2. `src/surg_rl/rl/difficulty.py` (leaf) + `schema.py` + `curriculum.py` + `environment.py` — DifficultyLevelConfig + discrete progression + scene blocks
+3. `src/surg_rl/simulators/fluid_simulator.py` + `force_computation.py` — dim_3d branch + 3D bbox coupling
+4. `tests/.../test_pvc_e2e.py` + `k8s/overlays/e2e/` + organ-mesh ADR — PVC e2e + licensing decision
 
-1. **PettingZoo API incompatibility** — `step()` returns dicts, not tuples; agent code must never unpack tuple-style. Build a completely separate `MultiAgentSurgicalEnv(ParallelEnv)`, never subclass `SurgicalEnv`. Recovery cost: VERY HIGH.
-2. **DreamerV3 embodied.Env protocol** — no separate `reset()` method; reset is baked into action dict. Must write `GymToEmbodiedWrapper` from scratch. Recovery cost: HIGH.
-3. **JAX + PyTorch GPU memory conflict** — JAX pre-allocates 90% GPU memory, leaving nothing for SB3. Run in separate subprocesses with `XLA_PYTHON_CLIENT_MEM_FRACTION=0.4`. Recovery cost: MEDIUM.
-4. **Breaking 910 existing tests** — making mesh fields mandatory invalidates all existing test scenes. All new schema fields default to `None`; use `model_construct()` in test factories. Recovery cost: HIGH.
-5. **Cross-backend nondeterminism** — MuJoCo and PyBullet are fundamentally different physics engines. Treat them as separate benchmark targets; never claim cross-backend reproducibility. Recovery cost: MEDIUM.
+### Critical Pitfalls
+
+1. **DreamerV3 sentinel flip must INVERT, not delete** — the Phase 30 test asserts the *expected* `RuntimeError("Agent not configured")`; flip it to assert positive completion AND add a guard that fails if `_build_agent` ever returns `None` again. (highest risk; GPU-gated)
+2. **JAX must never leak into the parent process** — any `import jax`/`import dreamerv3` in the parent re-introduces the GPU OOM that process isolation was designed to prevent; keep parent↔child on JSON-over-stdio and set `XLA_PYTHON_CLIENT_MEM_FRACTION` before JAX's first import; dreamerv3 logger must go to stderr (not stdout — corrupts the JSON pipe).
+3. **3D fluid cubic memory blow-up + thin-instrument coupling instability** — `dim_3d=True` must ship with a smaller 3D default `grid_size` + validator, one-way coupling default in 3D, and a `union()`-in-3D NaN-regression test. Default `dim_3d=False`.
+4. **Pydantic v2 cross-package cycle re-introduction** — `DifficultyLevelConfig` must be a leaf module wired with the established `model_rebuild()` pattern; override precedence must be TDD'd as a truth table against the existing 4-source chain in `_setup_rewards`.
+5. **CurriculumScheduler regression** — discrete progression must be ADDITIVE (`progression_mode` flag), never replace the continuous `DEFAULT_STAGES`; the full v0.4.0+v0.4.2 curriculum suite must pass unchanged as the additive gate. Naming drift: `difficulty_blocks` (PROJECT.md) vs `difficulty_levels` (STATE.md) — pick `difficulty_blocks` and reconcile in Phase 36.
 
 ## Implications for Roadmap
 
-Based on dependency analysis that de-risks the two high-risk features (MARL API incompatibility, DreamerV3 integration uncertainty):
+Based on research, suggested phase structure (continuing from v0.5.0 Phase 35 → start at Phase 36):
 
-### Phase 1: Schema Foundation
-**Rationale:** All five features need new Pydantic v2 models. No feature can start before its schema exists. This is a pure-additive phase — existing models unchanged, all new fields optional. **Delivers:** `RealMeshAsset`, `TaskChainConfig`, `MultiAgentConfig`, `DreamerConfig`, `BenchmarkConfig` in `schema.py` + optional dependency groups in `pyproject.toml`. **Avoids:** Pitfalls 1.3 (breaking 910 tests), 2.4 (schema bloat), X.1 (dependency hell).
+### Phase 36: TASK-02 Difficulty Schema + Discrete Curriculum
+**Rationale:** Lowest-risk, non-GPU-gated, pure Pydantic v2 + additive scheduler; unblocks Phase 37; combines the schema + discrete-progression sub-items to avoid a `curriculum.py` merge conflict.
+**Delivers:** `DifficultyLevelConfig` leaf model + `difficulty_overrides` on `TaskConfig` + additive `CurriculumScheduler.set_difficulty_level`/`advance_level` + naming reconciliation.
+**Addresses:** TASK-02 per-level schema (partial — scene blocks in Phase 37).
+**Avoids:** Pydantic v2 cycle re-introduction (leaf-module + `model_rebuild()`); additive-curriculum regression.
 
-### Phase 2: Real Assets + Task Curriculum (parallel-capable)
-**Assets:** Replace primitive box/cylinder/sphere generation with trimesh-loaded OBJ meshes. Add decimation pipeline, format validation, collision geometry generation. **Curriculum:** Extend `CurriculumScheduler` with task-type awareness, task-specific reward functions, and progressive difficulty. Task chain executor as a state machine in `SurgicalEnv`. **Delivers:** 4 instruments + 2 organs as real meshes; 3 trainable tasks with difficulty levels; task chain infrastructure. **Avoids:** Pitfalls 1.1 (format incompatibility), 1.2 (high-poly reset time), 2.1 (regressing `apply_parameters`), 2.2 (task chain state bleed).
+### Phase 37: Scene-Level difficulty_blocks + Env Wiring + Fixtures
+**Rationale:** Depends on Phase 36; loader needs no change (Pydantic validates); work is fixtures + `SurgicalEnv._setup_rewards` wiring + precedence truth-table test + load-all-6-scenes regression.
+**Delivers:** Scene-level `difficulty_blocks` parsing, env-construction override application, precedence truth-table test.
+**Uses:** DifficultyLevelConfig from Phase 36.
+**Implements:** `_setup_rewards` override-precedence chain.
 
-### Phase 3: Multi-Agent RL (PettingZoo)
-**Rationale:** MARL needs real instruments (Phase 2) for dual-arm scenes but is architecturally independent of curriculum. Build `MultiAgentSurgicalEnv(ParallelEnv)` as a clean adapter — never touch `SurgicalEnv` internals. **Delivers:** Dual-arm `ParallelEnv`, observation router, action aggregator, independent PPO policies. **Avoids:** Pitfalls 4.1 (API incompatibility — the biggest danger in v0.4.0), 4.2 (asymmetric builders), 4.3 (agent death handling), X.5 (mypy explosion with PettingZoo generics).
+### Phase 38: 3D Fluid Flag (`dim_3d=True`)
+**Rationale:** Independent of the difficulty chain; PhiFlow 3D API HIGH-confidence; additive (`dim_3d=False` default); parallelizable with 37/39 via worktrees.
+**Delivers:** `FluidConfig.dim_3d` + 3D `Box`/`StaggeredGrid` branch + 3D `force_computation` bbox + dual-mode parametrized test.
+**Avoids:** Cubic memory blow-up (separate 3D default + validator); thin-instrument coupling instability (one-way default).
 
-### Phase 4: Reproducible Benchmarking
-**Rationale:** Must come after tasks exist (Phase 2) to have something to benchmark. Wraps `TrainingManager` in `ExperimentRunner` loop. Includes SB3-only benchmarks first; DreamerV3 comparison added in Phase 5. **Delivers:** `surg-rl benchmark/compare/report` CLI, seed propagation + config hashing, training curves, metric tables, W&B integration. **Avoids:** Pitfalls 3.1 (cross-backend nondeterminism — treat backends as separate targets), 3.2 (hardware-dependent metrics — always report wall-time + hardware spec), 3.4 (metric name collisions — use `BenchmarkMetric` enum).
+### Phase 39: K8s PVC e2e + Organ-Mesh Licensing Decision
+**Rationale:** Independent; (d1) test plumbing + (d2) ADR combine cleanly; low-risk landing before the GPU-gated DreamerV3 phase; parallelizable with 37/38.
+**Delivers:** De-stubbed PVC checkpoint-persistence e2e (`pytest-kind` + `kubectl wait --for=condition=Bound`) + `k8s/overlays/e2e/` + organ-mesh licensing ADR (procedural-as-default; surgtoolloc rejected with cited rationale).
+**Uses:** `pytest-kind>=22.11.1` (new dev-only extra).
 
-### Phase 5: DreamerV3 World Models
-**Rationale:** Highest risk (JAX + new env protocol + uncertain surgical dynamics modeling). Placed after benchmarking so it can compare against established SB3 baselines. Start with a feasibility spike on a single task (reaching or grasping) before committing to full surgical procedure training. **Delivers:** `GymToEmbodiedWrapper`, `DreamerEnvBridge`, `surg-rl dreamer-train`, pixel and low-dim observation paths. **Avoids:** Pitfalls 5.1 (embodied.Env protocol — wrapper from scratch), 5.2 (JAX+PyTorch GPU conflict — subprocess isolation), 5.3 (image dtype mismatch — uint8 raw pixels), 5.4 (config complexity — start with `dmc_vision` config, tune for surgical domain).
+### Phase 40: Real DreamerV3 Integration + Sentinel Flip
+**Rationale:** LAST — GPU-gated (CI GPU host; macOS skips per INV-8), highest external-API risk; benefits from the clean baseline of landed (b)(c)(d). Sentinel flip is the milestone closure signal.
+**Delivers:** 5 real stub implementations against `embodied.run.train` / `dreamerv3.Agent`; Phase 30 sentinel inverted to positive-path + regression guard; CI GPU matrix entry.
+**Avoids:** JAX-in-parent OOM; stdout-logger JSON-pipe corruption; smoke-vs-convergence conflation (CI asserts structural properties, not converged thresholds).
 
 ### Phase Ordering Rationale
-- **Schema first** — unblocks all features, zero risk, Pydantic v2 pattern is well-understood.
-- **Assets before curriculum** — curriculum needs real meshes for task-specific instrument assignments.
-- **MARL before DreamerV3** — PettingZoo integration is engineering (well-understood API); DreamerV3 is research (uncertain feasibility). Get the known work done first.
-- **Benchmarking before** (and after) **DreamerV3** — Phase 4 delivers SB3-only benchmarking while Phase 5 adds the DreamerV3 comparison capability. This decouples the report infrastructure from the risky world-model integration.
-- **DreamerV3 last** — if the feasibility spike shows RSSM can't model surgical dynamics, defer to v0.5.0 without blocking the rest of v0.4.0.
+
+- Dependency chain: DifficultyLevelConfig (36) → scene blocks + env wiring (37) — discrete progression needs something to advance TO.
+- Independence: 3D fluids (38), K8s PVC + licensing (39) are fully independent of the difficulty chain and of each other → parallelizable via worktrees alongside 36/37.
+- Risk ordering: DreamerV3 (40) is GPU-gated and highest external-API risk → last, so macOS dev on the other 4 items isn't blocked by GPU-host availability.
+- Pitfall avoidance: additive-curriculum invariant gated by the full v0.4.0+v0.4.2 curriculum suite; 3D fluids gated by `union()`-in-3D NaN test; DreamerV3 gated by inverted sentinel + parent-import guard.
 
 ### Research Flags
 
-**Needs `/gsd-research-phase` during planning:**
-- **Phase 5 (DreamerV3):** JAX `embodied.Env` protocol details, surgical domain config tuning, RSSM capacity for deformable dynamics. This is research-level uncertainty.
+Phases likely needing deeper research during planning:
+- **Phase 40 (Real DreamerV3):** external `dreamerv3` factory composition (`make_agent`/`make_replay`/`make_stream`/`make_logger` + `encoder.mlp_keys`/`cnn_keys` for custom envs) — official `example.py` is 404-unreachable; signatures inferred from DeepWiki + `embodied.run.train` source. Also CI GPU host provisioning strategy.
+- **Phase 38 (3D fluid — `force_computation` 3D branch):** 2D pressure-gradient bbox integration generalization to a z-axis slice needs design validation. PhiFlow 3D API itself is HIGH confidence.
+- **Phase 39 (Organ-mesh licensing ADR):** needs the specific SurgToolLoc/EndoVis MICCAI license clause text cited (legal-text research, not code).
 
-**Standard patterns (skip research-phase):**
-- **Phase 1 (Schema):** Pydantic v2 is well-documented; existing codebase has strong patterns.
-- **Phase 2 (Assets):** trimesh is the standard Python mesh library; additive to existing SceneBuilder.
-- **Phase 3 (MARL):** PettingZoo ParallelEnv API is documented; adapter pattern is clean.
-- **Phase 4 (Benchmarking):** Well-established pattern from rl-baselines3-zoo; wraps existing TrainingManager.
+Phases with standard patterns (skip research-phase):
+- **Phase 36:** Pydantic v2 + additive scheduler — reuses v0.4.2 cycle-resolution pattern.
+- **Phase 37:** fixture + `_setup_rewards` wiring.
+- **Phase 39 (PVC e2e test plumbing only):** `pytest-kind` is well-documented; standard kubectl-e2e 4-step pattern.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Direct PyPI verification for all additions; trimesh/wandb/pettingzoo confirmed working versions. JAX-PyTorch isolation strategy is proven. |
-| Features | HIGH | Clear P1/P2/P3 split; surgical task definitions from JIGSAWS literature; MARL capability is bounded (dual-arm only). |
-| Architecture | HIGH | All five features are additive; adapter pattern avoids rewriting SurgicalEnv; schema extensions are optional. |
-| Pitfalls | HIGH | Direct codebase audit of 910 tests, scene_builder, curriculum, simulators. PettingZoo and DreamerV3 API gotchas verified via Context7 + official docs. |
+| Stack | HIGH | Only `pytest-kind` added; 3/4 items zero new deps; versions verified via PyPI/Context7 |
+| Features | HIGH | In-repo stub locations + prior milestone deliverables confirmed by direct code inspection |
+| Architecture | HIGH | Integration seams verified in codebase; DreamerV3 external API at MEDIUM |
+| Pitfalls | HIGH | Built on 3 milestones of documented Phase 24/26/29/30 context; SurgToolLoc license terms MEDIUM-HIGH (recommend phase-1 citation artifact) |
 
-**Overall confidence: HIGH** — with one caveat: DreamerV3's ability to model deformable surgical dynamics is an open research question. The architecture is correct regardless; the learning performance may not be.
+**Overall confidence:** HIGH (3 of 4 items are in-repo stub→real flips verified by direct code inspection; DreamerV3 external API at MEDIUM)
 
 ### Gaps to Address
 
-- **DreamerV3 surgery feasibility:** Whether RSSM can learn tet mesh cutting dynamics is unknown. Handle via feasibility spike in Phase 5; have a clear kill switch to defer to v0.5.0.
-- **Organ mesh source licensing:** Need MIT/CC0 organ meshes. MuJoCo Menagerie has no surgical instruments. Candidate: surgtoolloc dataset or procedural generation. Resolve in Phase 2 planning.
-- **SB3/PettingZoo training loop:** PettingZoo envs don't work directly with SB3's single-agent VecEnv. Need either RLlib multi-agent API (already partially in codebase) or custom training loop. Decide in Phase 3 planning.
-- **PyBullet soft-body mesh limits:** Performance degrades quadratically with vertex count. Enforce `max_faces <= 50K` with actionable errors. Calibrate in Phase 2.
+- DreamerV3 factory composition — validate against the installed `dreamerv3` package during Phase 40 planning.
+- CI GPU host provisioning — design the matrix entry that runs the GPU-skipif tests (else milestone audit fails on 100%-skipped).
+- `force_computation.py` 3D bbox branch — design validation of z-axis slice integration.
+- SurgToolLoc license clause text — quote the exact redistribution terms in the ADR.
+- Naming drift: `difficulty_blocks` vs `difficulty_levels` — pick `difficulty_blocks` and update STATE.md in Phase 36.
 
 ## Sources
 
-### Primary (HIGH confidence — verified via Context7 + PyPI)
-- Context7 `/mikedh/trimesh` — mesh formats, watertight checks, decimation
-- Context7 `/farama-foundation/pettingzoo` — ParallelEnv API, SB3 integration, SuperSuit
-- Context7 `/danijar/dreamerv3` — Agent init, JAX config, requirements.txt (`jax[cuda12]==0.4.33`, no TF)
-- Context7 `/wandb/wandb` — Table/plot APIs (verified against 0.26.1)
-- PyPI: trimesh 4.12.2, pettingzoo 1.26.1, supersuit 3.10.0, dreamerv3 1.5.0, wandb 0.26.1
+### Primary (HIGH confidence)
+- In-repo code inspection: `src/surg_rl/dreamer/subprocess.py` (`_build_agent` stub at 125-131), `tests/dreamer/test_dreamerv3_subprocess_e2e.py` (Phase 30 sentinel), `src/surg_rl/rl/difficulty.py`, `schema.py`, `curriculum.py`, `environment.py` (`_setup_rewards` precedence chain), `fluid_simulator.py` + `force_computation.py`, `k8s/` overlays + PVC stub
+- `.planning/STATE.md`, `.planning/PROJECT.md`, `.planning/MILESTONES.md` — prior decisions (v0.4.0 Phase 24 spike, v0.4.2 Phase 29/30 DifficultyLevel + sentinel)
 
-### Secondary (MEDIUM — codebase audit)
-- `src/surg_rl/scene_definition/schema.py` — existing MeshAsset, TaskConfig, TissueMeshDefinition
-- `src/surg_rl/simulators/scene_builder.py` — primitive fallback pattern, mesh resolution
-- `src/surg_rl/rl/training.py` — TrainingManager, AlgorithmConfig, save/load
-- `src/surg_rl/dynamics/curriculum.py` — CurriculumScheduler, apply_parameters (Phase 3 fix)
-- `tests/` — 910 tests across 53 files, marker patterns, backend parametrization
+### Secondary (MEDIUM confidence)
+- [danijar/dreamerv3](https://github.com/danijar/dreamerv3) + [PyPI dreamerv3](https://pypi.org/project/dreamerv3/) — v1.5.0 is latest/only release; vendored `embodied` framework
+- [DeepWiki DreamerV3 Agent Architecture / Interface](https://deepwiki.com/danijar/dreamerv3/4-agent-architecture) — factory composition signatures (official `example.py` 404)
+- [PhiFlow StaggeredGrids](https://tum-pbs.github.io/PhiFlow/Staggered_Grids.html) + [fluid API](https://tum-pbs.github.io/PhiFlow/phi/physics/fluid.html) + [Wake Flow 3D example](https://tum-pbs.github.io/PhiFlow/examples/grids/Wake_Flow.html) — 3D API dimension-agnostic
+- [pytest-kind v22.11.1 on PyPI](https://pypi.org/project/pytest-kind/) — `kind_cluster` fixture + `kubectl` helper
 
-### Tertiary (reference)
-- JIGSAWS dataset — surgical task definitions (suturing, knot-tying, needle passing)
-- rl-baselines3-zoo — benchmark runner pattern, rliable integration
-- AGENTS.md — Pydantic v2 quirks, simulator backend conventions, optional field guards
+### Tertiary (LOW confidence)
+- SurgToolLoc/EndoVis MICCAI license clause text — modality mismatch (tool-presence labels, not organ geometry) verified; exact legal terms need phase-1 citation artifact
 
 ---
-*Research completed: 2026-05-13*
+*Research completed: 2026-06-24*
 *Ready for roadmap: yes*
-*Conflicts resolved: STACK.md (authoritative) overrides ARCHITECTURE.md's tensorflow-cpu recommendation — DreamerV3 PyPI package uses JAX, not TF*

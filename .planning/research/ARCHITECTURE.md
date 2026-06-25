@@ -1,753 +1,652 @@
-# Architecture Research: v0.4.0 — Training Infrastructure & Realism
+# Architecture Patterns: v0.6.0 Carried-Forward Debt Closure
 
-**Domain:** Surgical-robotics RL training system — research platform upgrade
-**Researched:** 2026-05-13
-**Confidence:** HIGH
+**Domain:** Surgical-robotics RL training system — 4 tech-debt closure items integrating with an existing mature architecture
+**Researched:** 2026-06-24
+**Overall confidence:** HIGH (codebase-grounded integration points; DreamerV3 API at MEDIUM — official example.py unreachable, factory signatures from DeepWiki + PyPI docs)
 
-## Executive Summary
+## Scope
 
-The existing v0.3.2 architecture is a clean 5-layer monolith (scene_definition → simulators → dynamics → rl → cli) with dual-backend Strategy pattern and composite controllers. v0.4.0 adds five major subsystems that must integrate without breaking this structure. The key architectural challenge is that **DreamerV3 and PettingZoo use fundamentally different environment interfaces** than the existing Gymnasium contract. The solution is to keep `SurgicalEnv` as the canonical single-agent Gymnasium env, then build thin adapter wrappers (`PettingZooSurgicalEnv`, `DreamerEnvBridge`) that delegate to it. Real assets and task curriculum extend existing modules (schema + scene_builder + rl/rewards). Benchmarking is a new top-level module that wraps `TrainingManager`.
+This document maps **only** the 4 v0.6.0 closure items onto the existing Surg-RL architecture. It is NOT a greenfield architecture survey. The existing architecture (BaseSimulator ABC, SurgicalEnv, CurriculumScheduler, TaskRewardRouter, DreamerSubprocess, FluidSimulator, K8s Kustomize) is treated as fixed substrate; each item is located at a precise integration point with new-vs-modified components explicit.
 
-## Overall v0.4.0 Architecture (Target State)
+The 4 items:
+- (a) Real DreamerV3 integration — replace `_build_agent` stub
+- (b) TASK-02 per-level difficulty schema — DifficultyLevelConfig + discrete curriculum + scene blocks
+- (c) 3D fluid flag — `dim_3d=True` path in PhiFlow solver
+- (d) K8s PVC e2e — de-stub checkpoint-persistence test + organ-mesh licensing decision
 
-```
-                           ┌────────────────────────────────┐
-                           │            CLI Layer             │
-                           │  surg-rl benchmark, chain, marl │
-                           │  surg-rl dreamer (new subcmd)   │
-                           └──────────────┬─────────────────┘
-                                          │
-        ┌──────────────┬──────────────────┼──────────────────┬──────────────────┐
-        ▼              ▼                  ▼                  ▼                  ▼
-┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-│ benchmarking │ │    marl/     │ │   dreamer/   │ │    task/     │ │   assets/    │
-│ (NEW module) │ │ (NEW module) │ │ (NEW module) │ │ (NEW module) │ │ (NEW module) │
-│              │ │              │ │              │ │              │ │              │
-│ Experiment   │ │ PettingZoo   │ │ DreamerEnv   │ │ TaskCurric   │ │ MeshPipeline │
-│ Runner       │ │ Env Wrapper  │ │ Bridge       │ │ TaskChain    │ │ AssetLoader  │
-│ MetricColl   │ │ MultiAgent   │ │ TrainingLoop │ │ Executor     │ │ URDF/MJCF    │
-│ ReportGen    │ │ ObsRouter     │ │ World Model  │ │ DiffProg     │ │  Generator   │
-└──────┬───────┘ └──────┬───────┘ └──────┬───────┘ └──────┬───────┘ └──────┬───────┘
-       │                │                │                │                │
-       ▼                ▼                ▼                ▼                ▼
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                        EXISTING LAYERS (v0.3.2, extended)                         │
-├──────────────────────────────────────────────────────────────────────────────────┤
-│  rl/                                                                             │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────────────────┐│
-│  │ SurgicalEnv      │  │ TrainingManager  │  │ ActionBuilder / ObsBuilder /     ││
-│  │ (gym.Env)        │  │ (SB3 wrapper)    │  │ RewardFn (extended per task)     ││
-│  └──────────────────┘  └──────────────────┘  └──────────────────────────────────┘│
-├──────────────────────────────────────────────────────────────────────────────────┤
-│  dynamics/    [extended: TaskCurric hooks + reward shaping per task]              │
-│  simulators/  [extended: real mesh loading in scene_builder, coll. geom gen]     │
-│  scene_definition/  [extended: MeshAsset → real mesh refs, TaskChainConfig]      │
-│  cutting/ + fluids/  [unchanged]                                                 │
-└──────────────────────────────────────────────────────────────────────────────────┘
-```
-
-## Feature 1: Real Surgical Assets
-
-### New Module: `src/surg_rl/assets/`
+## Existing Architecture Substrate (fixed)
 
 ```
-src/surg_rl/assets/
-├── __init__.py
-├── mesh_pipeline.py        # MeshAssetPipeline: load → validate → simplify → export
-├── mesh_validator.py        # Watertightness, manifold, non-degenerate checks
-├── collision_generator.py   # Convex decomposition, VHACD, primitives from mesh
-├── mjcf_generator.py        # Generate <body>/<geom>/<mesh> from real mesh
-├── urdf_generator.py        # URDF <link>/<visual>/<collision> from real mesh
-├── texture_mapper.py        # UV mapping, texture atlas for organ meshes
-└── instrument_registry.py   # Pre-defined instrument mesh catalog
+┌─────────────────────────────────────────────────────────────────────┐
+│  CLI (Typer) → training.py / dreamer training.py / marl-train       │
+├─────────────────────────────────────────────────────────────────────┤
+│  SurgicalEnv (Gymnasium) ── MultiAgentSurgicalEnv (PettingZoo)      │
+│   ├─ BaseSimulator (ABC: MuJoCoSimulator | PyBulletSimulator)       │
+│   ├─ TaskRewardRouter → 6 task reward classes                       │
+│   │    └─ get_params_for_difficulty() / apply_difficulty()          │
+│   ├─ CurriculumScheduler (additive; difficulty: float|DifficultyLevel) │
+│   ├─ EnvironmentController / ParameterRandomizer / AdaptiveDifficulty│
+│   ├─ FluidSimulator (PhiFlow 2D) — env-driven via env.step()        │
+│   └─ BaseSimulator.fluid_step(dt) hook — no-op for MuJoCo/PyBullet  │
+├─────────────────────────────────────────────────────────────────────┤
+│  DreamerSubprocess (multiprocessing.Process, spawn ctx)             │
+│   ├─ Parent: DreamerSubprocess (Pipe JSON protocol)                 │
+│   └─ Child:  _subprocess_main → _run_subprocess_loop (JAX)          │
+│        ├─ _build_agent(config)  ← STUB returns None  [CLOSURE (a)]  │
+│        ├─ _train_loop / _evaluate / _save_checkpoint  ← STUBS       │
+│        └─ _JsonStdout wrapper (PyTorch Pipe compatibility)          │
+├─────────────────────────────────────────────────────────────────────┤
+│  SceneDefinition (Pydantic v2, single source of truth)              │
+│   ├─ TaskConfig.difficulty_level: DifficultyLevel | None  (v0.4.2)  │
+│   ├─ FluidConfig (2D: Box(x,y), resolution (nx,ny))  [CLOSURE (c)]  │
+│   └─ DreamerConfig (obs_type, pixel_resolution, mem_fraction)       │
+├─────────────────────────────────────────────────────────────────────┤
+│  K8s Kustomize: base/ (pvc.yaml, training-job.yaml, ...)            │
+│   ├─ overlays/cpu/  ── overlays/gpu/                                │
+│   └─ tests/k8s/test_pvc_e2e.py  ← STUB  [CLOSURE (d)]              │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Integration Points
+## Invariants That MUST Be Preserved
 
-**Schema extension (`scene_definition/schema.py`)** — add `RealMeshAsset` model:
+These are non-negotiable architectural rules established in prior milestones. Every closure item must respect them.
 
-```python
-class RealMeshAsset(BaseModel):
-    """Reference to a real (non-procedural) mesh file."""
-    path: str                           # Relative to assets/
-    mesh_type: Literal["obj", "stl", "ply", "glb"] = "obj"
-    scale: tuple[float, float, float] = (1.0, 1.0, 1.0)
-    collision_mesh_path: str | None = None  # Simplified collision proxy
-    convex_decomp: bool = False             # VHACD for concave shapes
-    texture_path: str | None = None
-```
-
-The existing `MeshAsset` model in schema.py (line ~280) is extended with an optional `type` discriminator: `"procedural"` vs `"real"`. When `type="real"`, the `RealMeshAsset` sub-model is populated.
-
-**SceneBuilder extension (`simulators/scene_builder.py`)** — the `_build_robot_geoms()` and `_build_tissue_geoms()` methods gain a branch:
-
-```python
-if mesh_asset.type == "real":
-    # Load via assets.mesh_pipeline
-    pipeline = MeshAssetPipeline(assets_dir)
-    result = pipeline.load(mesh_asset.path)
-    # Write processed mesh to temp file for MJCF/URDF
-    # Generate collision geometry via assets.collision_generator
-```
-
-**Data Flow:**
-
-```
-SceneDefinition (with RealMeshAsset)
-    ↓
-SceneBuilder._build_entity_geoms()
-    ↓
-assets.MeshAssetPipeline.load(path)
-    → trimesh.load() → validate → normalize → decimate (if needed)
-    ↓
-assets.CollisionGenerator.from_mesh()
-    → convex_decomp (VHACD) or simplified hull
-    ↓
-Write processed .obj/.stl to tempfile
-    ↓
-MJCF <mesh file="tempfile"/> or URDF <geometry><mesh filename="tempfile"/>
-    ↓
-Simulator renders real mesh; collisions use simplified proxy
-```
-
-### Key Libraries
-
-| Library | Version | Purpose |
-|---------|---------|---------|
-| trimesh | >=4.0 | Mesh I/O, validation, simplification, convex hull |
-| pyhocon / vhacdx | latest | Optional: concave→convex decomposition (VHACD) |
-| numpy-stl | >=3.0 | STL binary read/write (some organ datasets use STL) |
-
-**Primitive fallback preserved:** If `RealMeshAsset.path` doesn't resolve, `MeshAssetPipeline.load()` raises `AssetMissingError`, and `SceneBuilder` falls back to existing procedural primitives. This maintains the v0.3.2 contract: "primitive fallbacks when assets are missing."
-
-### Confidence: HIGH
-Pattern is well-established (trimesh is the standard Python mesh library). Integration into existing SceneBuilder is additive, not modifying fallback paths.
+| # | Invariant | Source | Threat from closures |
+|---|-----------|--------|----------------------|
+| INV-1 | **CurriculumScheduler extension is additive — never replaces Phase 3 fix** | D-v0.4.0, STATE.md | (b) discrete progression must extend, not rewrite, sample_parameters/advance_stage |
+| INV-2 | **DreamerV3 process isolation via JAX subprocess (XLA_PYTHON_CLIENT_MEM_FRACTION=0.4)** | D-v0.4.0 Phase 24 | (a) real agent must live inside subprocess; no JAX in parent |
+| INV-3 | **`_JsonStdout` wrapper replaces `os.fdopen` on PyTorch's non-blocking Pipe** | Phase 26 fix | (a) real `_train_loop` must still `print(json.dumps(...), flush=True)` through `_JsonStdout` |
+| INV-4 | **Pydantic v2 + cross-package cycle-resolution pattern** (forward-ref + late import + model_rebuild) | Phase 29 D-SCHEMA-01 | (b) DifficultyLevelConfig must reuse this pattern if it references DifficultyLevel |
+| INV-5 | **DifficultyLevel is `_FloatMixin(float, Enum)` — scalar `.value` is canonical downstream** | Phase 29 | (b) DifficultyLevelConfig keys/indexes use DifficultyLevel but downstream reads float |
+| INV-6 | **Schema-first: new Pydantic v2 models with `None` defaults; existing models unchanged** | D-v0.4.0 | (b)(c) new fields optional with None defaults; no breaking changes |
+| INV-7 | **PhiFlow CPU-first; env-driven fluid (env.step calls `self._fluid_simulator.step()`)** | Phase 31 DEBT-03 | (c) 3D path extends FluidSimulator; `fluid_step()` hook stays no-op for MuJoCo/PyBullet |
+| INV-8 | **Phase 30 E2E test sentinel: asserts EXPECTED `RuntimeError("Agent not configured")` — STARTS FAILING when real dreamerv3 integrated** | Phase 30 D-30-01..05 | (a) test must FLIP to positive assertions (this is the closure signal) |
+| INV-9 | **`difficulty` is the single source of truth — no separate `task_difficulty` field** | D-08 Phase 21 | (b) discrete levels feed into the same `difficulty` scalar path |
+| INV-10 | **Benchmarking treats MuJoCo and PyBullet as separate targets — never cross-backend aggregate** | D-v0.4.0 | (a) DreamerV3 comparison reports stay per-backend |
 
 ---
 
-## Feature 2: Task Curriculum
+## (a) Real DreamerV3 Integration
 
-### New Module: `src/surg_rl/task/`
+### Integration Point
 
-```
-src/surg_rl/task/
-├── __init__.py
-├── task_config.py           # SurgicalTaskConfig: difficulty params per task
-├── task_registry.py         # Pre-defined task suite (suturing, knot-tying, etc.)
-├── task_progression.py      # DifficultyProgression model (linear, exponential, adaptive)
-├── task_chain.py            # TaskChain: sequence of subtasks with transition rules
-├── task_chain_executor.py   # Executor: orchestrates chain at runtime
-└── reward_shaper.py         # Per-task reward shaping (extends rl/rewards.py)
-```
-
-### Integration Points
-
-**Schema extension** — `TaskConfig` (schema.py line 1047) is currently single-task. It is extended:
+`src/surg_rl/dreamer/subprocess.py:125-129` — the `_build_agent(config)` stub:
 
 ```python
-class TaskDifficulty(BaseModel):
-    """Difficulty progression parameters."""
-    level: int = Field(ge=1, le=10)
-    tolerance_mm: float = 5.0          # Position tolerance in mm
-    time_multiplier: float = 1.0       # Time limit multiplier
-    randomization_scale: float = 0.0   # Domain rand intensity
-    prerequisite_success_rate: float = 0.7
-
-class TaskChainStep(BaseModel):
-    """A single step in a surgical task chain."""
-    task_name: str
-    instrument: str                     # Which instrument(s) required
-    difficulty_progression: list[TaskDifficulty]
-    transition_on: Literal["success", "timeout", "manual"] = "success"
-    timeout_steps: int = 500
-
-class TaskChainConfig(BaseModel):
-    """Sequence of tasks forming a surgical procedure."""
-    name: str
-    steps: list[TaskChainStep]
-    loop: bool = False                  # Repeat chain after completion
-    global_time_limit: float = 300.0    # Total procedure time
+def _build_agent(config: dict[str, Any]) -> Any:
+    """Build DreamerV3 agent from config."""
+    # This will be implemented when dreamerv3 is available
+    # For now, return a mock that can be replaced
+    return None
 ```
 
-**Execution flow** — `TaskChainExecutor` is a state machine owned by `SurgicalEnv`:
+This is the single seam. The subprocess JSON protocol (CONFIG → CONFIG_ACK → TRAIN → METRICS → TRAIN_COMPLETE → EVAL → CHECKPOINT → SHUTDOWN) is already correct and stays unchanged. The `_JsonStdout` wrapper (INV-3) stays. Only the 5 stub functions get real implementations:
 
-```
-SurgicalEnv.reset()
-    ↓
-TaskChainExecutor.reset(chain_config)
-    → select current_step based on difficulty progression
-    → set _target_pos, _target_quat, reward_fn from current step's task
-    ↓
-SurgicalEnv.step()
-    ↓
-TaskChainExecutor.check_transition(obs, reward, success)
-    → if transition condition met: advance to next step
-    → update reward_fn, reset target
-    ↓
-(repeat until chain exhausted or global timeout)
-```
+| Stub function | Line | Current | Real implementation |
+|---------------|------|---------|---------------------|
+| `_build_agent(config)` | 125-129 | `return None` | Construct dreamerv3 agent + env + replay + stream + logger from config |
+| `_train_loop(agent, total_steps, eval_every)` | 132-134 | yields 1 zero-metric | Run dreamerv3 train driver, yield METRICS dicts |
+| `_evaluate(agent, checkpoint, n_episodes)` | 137-139 | returns zeroed dict | Load checkpoint, run eval driver, return real metrics |
+| `_save_checkpoint(agent, path)` | 142-144 | `pass` | `agent.save(path)` + write `final.pt` sentinel |
+| `_load_checkpoint(agent, path)` | 147-149 | `pass` | `agent.load(path)` |
 
-**Integration with existing `dynamics/curriculum.py`** — the existing `CurriculumScheduler` adjusts physical difficulty (mass ranges, friction, action noise). The new task curriculum adjusts **task difficulty** (tolerance, time limits, procedural complexity). They compose:
+### Real `_build_agent` Wiring (inside JAX subprocess)
+
+The subprocess is a JAX-only process (INV-2). `SurgicalEnv` itself does NOT import torch — torch is only for SB3, and `surg_rl.rl.__init__` uses PEP-562 lazy `__getattr__` so importing `SurgicalEnv` does not pull `stable_baselines3`/`torch`. This means the subprocess can safely construct a `SurgicalEnv` + `GymToEmbodiedWrapper` without GPU memory conflict, as long as `XLA_PYTHON_CLIENT_MEM_FRACTION=0.4` is set (already done at subprocess.py:19-21).
+
+**New vs modified components:**
+
+| Component | Status | Change |
+|-----------|--------|--------|
+| `subprocess.py::_build_agent` | **Modified** | Real dreamerv3 factory composition (see below) |
+| `subprocess.py::_train_loop` | **Modified** | Real training driver loop |
+| `subprocess.py::_evaluate` | **Modified** | Real eval driver |
+| `subprocess.py::_save_checkpoint` / `_load_checkpoint` | **Modified** | Real checkpoint I/O |
+| `wrapper.py::GymToEmbodiedWrapper` | **Unchanged** (reuse) | Already implements embodied.Env protocol; subprocess constructs its own instance |
+| `training.py::run_dreamer_training` | **Unchanged** (parent orchestrator) | Already sends CONFIG + TRAIN + handles METRICS; the pipe protocol is correct |
+| `tests/dreamer/test_dreamerv3_subprocess_e2e.py` | **Modified — FLIP sentinel** | INV-8: negative assertions → positive assertions |
+| `DreamerConfig` (schema.py:1222) | **Modified — additive** | Add `encoder_keys`/`decoder_keys` fields for custom obs key config |
+
+**`_build_agent` internal structure (recommended):**
 
 ```python
-# In SurgicalEnv.reset():
-if self._chain_executor is not None:
-    task_params = self._chain_executor.get_current_task()
-    self.set_target(task_params.target_pos, task_params.target_quat)
-    self._reward_fn = task_params.reward_fn
-    
-if self._curriculum is not None:
-    sim_params = self._curriculum.reset(seed)
-    self._curriculum.apply_parameters(sim_params, self._simulator)
+def _build_agent(config: dict[str, Any]) -> Any:
+    """Build DreamerV3 agent + env bundle from config dict.
+
+    Runs entirely inside the JAX subprocess. Constructs its own SurgicalEnv
+    + GymToEmbodiedWrapper from the scene JSON passed via config, so no
+    cross-process env interaction is needed (preserves INV-2).
+    """
+    import dreamerv3.main as d3_main
+    from embodied.envs.from_gym import FromGym
+
+    from surg_rl.dreamer.wrapper import GymToEmbodiedWrapper
+    from surg_rl.rl.environment import SurgicalEnv, SurgicalEnvConfig
+    from surg_rl.scene_definition.loader import load_scene
+
+    # 1. Construct env inside subprocess (no torch import — safe)
+    scene = load_scene(config["scene_path"])
+    env = SurgicalEnv(SurgicalEnvConfig(...), scene=scene)
+    embodied_env = GymToEmbodiedWrapper(
+        env, obs_type=config.get("obs_type", "state"),
+        pixel_resolution=config.get("pixel_resolution", (64, 64)),
+    )
+    # 2. Wrap in FromGym for dreamerv3's embodied.Env contract
+    wrapped = FromGym(
+        embodied_env,
+        obs_key="state" if config.get("obs_type") == "state" else "image",
+    )
+    # 3. Apply standard dreamerv3 wrappers (NormalizeAction, ClipAction, etc.)
+    wrapped = d3_main.wrap_env(wrapped, **config.get("env_wrappers", {}))
+    # 4. Build agent via factory: make_agent(obs_space, act_space, config.agent)
+    agent = d3_main.make_agent(wrapped.obs_space, wrapped.act_space, ...)
+    # 5. Build replay + stream + logger (needed by train driver)
+    replay = d3_main.make_replay(...)
+    stream = d3_main.make_stream(...)
+    logger = d3_main.make_logger(...)
+    return {"agent": agent, "env": wrapped, "replay": replay,
+            "stream": stream, "logger": logger}
 ```
 
-**Reward shaping per task** — the existing `create_default_reward(task_name=...)` factory is extended with task-specific reward functions: `SuturingReward`, `KnotTyingReward`, `NeedleInsertionReward`, `GraspingReward`, `CuttingReward`, `DissectionReward`. Each adds task-specific observations (needle pose, thread tension, cut depth, grasp force) from the `Observation.custom` dict.
+**Critical detail — `encoder.mlp_keys` / `encoder.cnn_keys`:** DreamerV3 requires explicit observation key configuration for custom envs (per PyPI docs + DeepWiki). The config dict must set `encoder.mlp_keys=["state"]` (state obs) or `encoder.cnn_keys=["image"]` (pixel obs), plus matching `decoder.mlp_keys`/`decoder.cnn_keys`. The existing `GymToEmbodiedWrapper` already produces `{"state": ...}` or `{"image": ...}` keys (wrapper.py:188-193, 259-264), so the key names are stable. This config must flow from `DreamerConfig` (schema.py:1222-1240) through `training.py::run_dreamer_training` → `DreamerSubprocess.send_config` → subprocess CONFIG message.
 
-### Confidence: HIGH
-Clean extension of existing TaskConfig + CurriculumScheduler patterns. TaskChainExecutor is a straightforward state machine. The reward shaper builds on the existing `BaseRewardFunction` ABC.
+### Phase 30 Sentinel Test Flip (INV-8)
+
+`tests/dreamer/test_dreamerv3_subprocess_e2e.py` currently asserts the **stub failure** (lines 61-104):
+
+```python
+# CURRENT (stub state):
+with pytest.raises(RuntimeError, match="Agent not configured"):
+    run_dreamer_training(task="suturing", obs_type="state", ...)
+assert not (ckpt_dir / "final.pt").exists()
+assert not (ckpt_dir / "training_metrics.json").exists()
+```
+
+**After real integration, FLIP to positive assertions:**
+
+```python
+# AFTER (real agent state):
+metrics = run_dreamer_training(task="suturing", obs_type="state",
+                               total_steps=1000, eval_every=500,
+                               checkpoint_dir=str(tmp_path / "checkpoints"))
+assert metrics is not None
+assert (ckpt_dir / "final.pt").exists()  # checkpoint written
+assert (ckpt_dir / "training_metrics.json").exists()
+assert "reconstruction_mse" in metrics  # real eval metrics returned
+```
+
+The `pytestmark` skipif gate (lines 42-49: GPU + dreamerv3 + jax) stays unchanged — macOS local still skips, CI GPU host now runs the positive path. The docstrings that say "will START FAILING when real dreamerv3 is integrated" must be rewritten to describe the positive contract.
+
+### Data Flow (unchanged pipe protocol, real agent)
+
+```
+Parent (training.py)                    Subprocess (JAX)
+  │                                       │
+  ├─ DreamerSubprocess(config) ──────────►│ _subprocess_main: set XLA mem fraction
+  │                                       │ import jax; print READY
+  │◄─── {"type":"READY"} ─────────────────┤
+  ├─ send_config({scene_path, obs_type,   │
+  │               encoder_keys, ...}) ───►│ _build_agent: load_scene → SurgicalEnv
+  │                                       │ → GymToEmbodiedWrapper → FromGym
+  │                                       │ → make_agent/make_replay/make_stream
+  │◄─── {"type":"CONFIG_ACK"} ────────────┤
+  ├─ train(total_steps=1000) ───────────►│ _train_loop: dreamerv3 driver
+  │                                       │   for metrics in driver: print METRICS
+  │◄─── {"type":"METRICS", step, loss,…}──┤  (via _JsonStdout → pipe.send)
+  │◄─── {"type":"TRAIN_COMPLETE"} ────────┤
+  ├─ save_checkpoint(path) ─────────────►│ _save_checkpoint: agent.save → final.pt
+  │◄─── {"type":"CHECKPOINT_SAVED"} ──────┤
+  ├─ shutdown() ───────────────────────►│ agent.close(); print SHUTDOWN_ACK
+  │                                       │ exit
+```
+
+**Key invariant preserved:** every `print(json.dumps(...), flush=True)` inside the subprocess still routes through `_JsonStdout.write()` → `pipe.send(payload)` (INV-3). The real dreamerv3 driver's logging must be redirected to stderr or captured, NOT printed to stdout (which would corrupt the JSON pipe). This is the highest-risk pitfall (see PITFALLS).
 
 ---
 
-## Feature 3: Benchmarking
+## (b) TASK-02 Per-Level Difficulty Schema + Discrete Curriculum + Scene Blocks
 
-### New Module: `src/surg_rl/benchmarking/`
+This is a 3-part chain with strict internal dependency: schema → curriculum → scene blocks.
 
-```
-src/surg_rl/benchmarking/
-├── __init__.py
-├── experiment_config.py     # BenchmarkConfig: algorithm matrix, seeds, scenes
-├── experiment_runner.py     # ExperimentRunner: orchestrates TrainingManager instances
-├── metrics.py               # MetricsCollector: episode returns, success rate, wall time
-├── compare.py               # Algorithm comparator (t-tests, learning curves)
-├── report.py                # ReportGenerator: markdown, JSON, HTML
-├── plots.py                 # PlotRenderer: matplotlib learning curves, radar charts
-└── reproducibility.py       # Seed matrix, env hash, dependency freeze
-```
+### Part 1: DifficultyLevelConfig (Pydantic v2 schema)
 
-### Integration Points
+**Integration point:** `src/surg_rl/scene_definition/schema.py` — new model + new field on `TaskConfig` (lines 1087-1121).
 
-**`ExperimentRunner` wraps `TrainingManager`:**
+**New component:**
 
 ```python
-class ExperimentRunner:
-    """Run a matrix of (algorithm × scene × seed) experiments."""
-    
-    def __init__(self, config: BenchmarkConfig):
+class DifficultyLevelConfig(BaseModel):
+    """Per-difficulty-level parameter overrides (TASK-02 closure).
+
+    None fields = inherit defaults from the task reward class's
+    PARAM_BOUNDS + interpolate_params(level.value). Non-None fields
+    override the interpolated value for this level.
+    """
+    tissue_stiffness: float | None = Field(default=None, ge=0.0, description="Override tissue stiffness (Pa)")
+    target_precision_tolerance: float | None = Field(default=None, ge=0.0, description="Override target tolerance (m)")
+    tool_position_noise: float | None = Field(default=None, ge=0.0, description="Override tool position noise std (m)")
+    time_limit: float | None = Field(default=None, ge=0.1, description="Override episode time limit (s)")
+```
+
+**Modified component — `TaskConfig` gets a new optional field (INV-6: None default, existing fields unchanged):**
+
+```python
+class TaskConfig(BaseModel):
+    # ... existing fields unchanged ...
+    difficulty_level: "DifficultyLevel | None" = Field(default=None, ...)  # existing v0.4.2
+    difficulty_overrides: dict["DifficultyLevel", DifficultyLevelConfig] | None = Field(
+        default=None,
+        description="Per-level parameter overrides. Keys are DifficultyLevel "
+                    "members (EASY/MEDIUM/HARD). None = use interpolated defaults.",
+    )
+```
+
+**Why `dict[DifficultyLevel, DifficultyLevelConfig]` not `list[3]`:** The milestone context says "scene-level `difficulty_blocks: list[3]`" but a dict keyed by enum is safer (no positional indexing errors, validates key membership via Pydantic, matches the `DifficultyLevel` scalar-is-canonical invariant INV-5). The scene JSON form is `{"EASY": {...}, "MEDIUM": {...}, "HARD": {...}}` — Pydantic v2 coerces string keys to the enum by float value (0.0/0.5/1.0) per the established v0.4.2 pattern. If the roadmap prefers `list[3]`, a `field_validator` can map `[easy_cfg, med_cfg, hard_cfg]` → dict internally; the dict is the recommended internal representation.
+
+**Cycle-resolution (INV-4):** `DifficultyLevelConfig` is a pure schema model with no `surg_rl.*` imports — no cycle. The `dict[DifficultyLevel, ...]` annotation reuses the already-resolved `DifficultyLevel` forward ref (schema.py:1501-1506). Add `TaskConfig.model_rebuild()` again at the bottom if the new annotation introduces a new forward ref (it does not, since `DifficultyLevelConfig` is defined above `TaskConfig` in the same file — but if ordering changes, follow the pattern).
+
+### Part 2: Discrete Curriculum Progression (additive — INV-1)
+
+**Integration point:** `src/surg_rl/dynamics/curriculum.py` — `CurriculumScheduler` (lines 89-617).
+
+The existing scheduler uses continuous `difficulty: float` (0.0→1.0) with 4 ordered stages (EASY/MEDIUM/HARD/EXPERT) and `advance_stage()`/`regress_stage()`. The discrete-level progression adds a **level-aware path** that maps `DifficultyLevel` enum members onto stages and consults `DifficultyLevelConfig` overrides during parameter sampling.
+
+**New vs modified components:**
+
+| Component | Status | Change |
+|-----------|--------|--------|
+| `CurriculumScheduler` | **Modified — additive** | New methods `set_difficulty_level(level)` / `advance_level()` / `current_level` property; `sample_parameters()` consults per-level overrides |
+| `CurriculumStageConfig` | **Unchanged** | Already accepts `difficulty: float \| DifficultyLevel` (v0.4.2) |
+| `CurriculumConfig` | **Modified — additive** | New optional `discrete_levels: bool = False` flag (opt-in; preserves existing continuous behavior) |
+| `EnvironmentController` | **Unchanged** | Already delegates to scheduler |
+
+**Additive methods (do NOT touch existing `advance_stage`/`sample_parameters`/`_should_advance`):**
+
+```python
+class CurriculumScheduler(BaseController):
+    # ... existing code unchanged ...
+
+    @property
+    def current_level(self) -> DifficultyLevel | None:
+        """Current discrete level, or None if continuous mode."""
+        if not self.curriculum_config.discrete_levels:
+            return None
+        return DifficultyLevel(self.current_difficulty)  # 0.0/0.5/1.0 → EASY/MEDIUM/HARD
+
+    def set_difficulty_level(self, level: DifficultyLevel) -> None:
+        """Set the discrete difficulty level (additive; does not replace set_stage).
+
+        Maps the 3-level enum onto the existing 4-stage machinery:
+        EASY→CurriculumStage.EASY, MEDIUM→CurriculumStage.MEDIUM,
+        HARD→CurriculumStage.HARD. EXPERT is unreachable via discrete levels
+        (by design — discrete progression is 3-level).
+        """
+        stage_map = {DifficultyLevel.EASY: CurriculumStage.EASY,
+                     DifficultyLevel.MEDIUM: CurriculumStage.MEDIUM,
+                     DifficultyLevel.HARD: CurriculumStage.HARD}
+        self.set_stage(stage_map[level])
+
+    def advance_level(self) -> bool:
+        """Advance to the next discrete level (EASY→MEDIUM→HARD). Returns False at HARD."""
+        if not self.curriculum_config.discrete_levels:
+            return False
+        order = [DifficultyLevel.EASY, DifficultyLevel.MEDIUM, DifficultyLevel.HARD]
+        current = self.current_level
+        if current is None or current == order[-1]:
+            return False
+        self.set_difficulty_level(order[order.index(current) + 1])
+        return True
+```
+
+**`sample_parameters` extension (additive — consult overrides when present):**
+
+The existing `sample_parameters()` (lines 260-312) samples from `stage_cfg.parameter_overrides` + `task_param_bounds`. The extension adds: after building `merged_overrides`, if a `DifficultyLevelConfig` is attached to the current stage/level, apply its non-None fields as overrides on top. This is a **post-processing step**, not a rewrite:
+
+```python
+# After existing merged_overrides construction (line 275):
+level_overrides = getattr(stage_cfg, "level_config", None)
+if level_overrides is not None:
+    if level_overrides.tissue_stiffness is not None:
+        physics_params["stiffness"] = level_overrides.tissue_stiffness
+    if level_overrides.tool_position_noise is not None:
+        dynamics_params["action_noise"] = level_overrides.tool_position_noise
+    # ... etc for target_precision_tolerance, time_limit
+```
+
+The `time_limit` override flows to `TaskConfig.time_limit` via the env-construction path (environment.py:498-514 already reads `task.difficulty_level` → this extends to read `task.difficulty_overrides[level].time_limit` when present).
+
+### Part 3: Scene-Level difficulty_blocks Parsing
+
+**Integration point:** `src/surg_rl/scene_definition/loader.py` — `SceneLoader` / `load_scene()`.
+
+No loader change needed — Pydantic v2 validates the new `TaskConfig.difficulty_overrides` field automatically when parsing scene JSON. The "scene-level difficulty_blocks" are just the `difficulty_overrides` dict on the task block:
+
+```json
+{
+  "task": {
+    "name": "suturing",
+    "task_type": "suturing",
+    "difficulty_level": "MEDIUM",
+    "difficulty_overrides": {
+      "EASY":   {"tissue_stiffness": 8000, "target_precision_tolerance": 0.01, "time_limit": 90.0},
+      "MEDIUM": {"tissue_stiffness": 12000, "target_precision_tolerance": 0.005, "time_limit": 60.0},
+      "HARD":   {"tissue_stiffness": 16000, "target_precision_tolerance": 0.002, "time_limit": 45.0}
+    }
+  }
+}
+```
+
+**New fixtures needed:** `tests/fixtures/scenes/suturing_difficulty_overrides.json` — a scene with all 3 levels of overrides, for end-to-end parsing + env-construction + curriculum-sampling tests.
+
+### Data Flow (difficulty overrides)
+
+```
+Scene JSON (difficulty_overrides dict)
+  │
+  ▼
+SceneLoader.load_scene() → Pydantic v2 validates → SceneDefinition.task.difficulty_overrides
+  │
+  ▼
+SurgicalEnv._setup_rewards() (environment.py:485-517)
+  ├─ reads task.difficulty_level → DifficultyLevel scalar
+  ├─ reads task.difficulty_overrides[level] → DifficultyLevelConfig
+  ├─ applies time_limit override to self._max_episode_time
+  └─ passes stiffness/tolerance/noise overrides to TaskRewardRouter → reward.apply_difficulty()
+  │
+  ▼
+CurriculumScheduler.sample_parameters() (additive post-processing)
+  └─ applies tissue_stiffness / tool_position_noise overrides on top of stage params
+  │
+  ▼
+ParameterRandomizer / EnvironmentController.apply_parameters(snapshot, simulator)
+```
+
+---
+
+## (c) 3D Fluid Flag (`dim_3d=True`)
+
+### Integration Point
+
+`src/surg_rl/fluids/fluid_simulator.py` — `FluidSimulator.__init__` (lines 66-87) and `step()` (lines 107-143), plus `src/surg_rl/scene_definition/schema.py` `FluidConfig` (lines 1463-1488).
+
+The `BaseSimulator.fluid_step(dt)` hook (base_simulator.py:336-357) and its MuJoCo/PyBullet no-op overrides stay **unchanged** (INV-7 — fluid is env-driven, not simulator-internal). The env wiring in `environment.py:723-736` already calls `self._fluid_simulator.step()` — no change needed there.
+
+### New vs Modified Components
+
+| Component | Status | Change |
+|-----------|--------|--------|
+| `FluidConfig` (schema.py:1463) | **Modified — additive** | New `dim_3d: bool = False` field; `resolution` accepts `tuple[int,int] \| tuple[int,int,int]` |
+| `FluidSimulator.__init__` (fluid_simulator.py:66) | **Modified — branch** | If `dim_3d`: 3D `Box(x,y,z)` + 3D `StaggeredGrid(x,y,z)`; else current 2D path |
+| `FluidSimulator.step` (fluid_simulator.py:107) | **Largely unchanged** | `make_incompressible` + `union(*geoms)` + `advect.mac_cormack` work for both 2D and 3D (verified — PhiFlow API is dimension-agnostic) |
+| `force_computation.py` | **Modified — 3D branch** | Pressure-gradient integration currently uses 2D bounding boxes; needs 3D bbox branch |
+| `BaseSimulator.fluid_step` | **Unchanged** | Stays no-op (INV-7) |
+| `MuJoCoSimulator.fluid_step` / `PyBulletSimulator.fluid_step` | **Unchanged** | Stays no-op |
+| `environment.py:723-736` | **Unchanged** | Already calls `self._fluid_simulator.step()` |
+
+### FluidConfig Schema Change (INV-6: additive, default preserves existing)
+
+```python
+class FluidConfig(BaseModel):
+    # ... existing fields unchanged ...
+    dim_3d: bool = Field(default=False, description="True = 3D Eulerian grid (x,y,z); False = 2D xz-slice")
+    resolution: tuple[int, int] | tuple[int, int, int] = Field(
+        default=(32, 32),
+        description="Grid resolution. 2D: (nx, ny). 3D: (nx, ny, nz).",
+    )
+
+    @field_validator("resolution")
+    @classmethod
+    def _validate_resolution(cls, v, info):
+        dim_3d = info.data.get("dim_3d", False)
+        if dim_3d and len(v) != 3:
+            raise ValueError("dim_3d=True requires 3-tuple resolution (nx, ny, nz)")
+        if not dim_3d and len(v) != 2:
+            raise ValueError("dim_3d=False requires 2-tuple resolution (nx, ny)")
+        if any(r < 4 for r in v):
+            raise ValueError("Resolution must be >= 4 in each dimension")
+        if any(r > 128 for r in v):
+            raise ValueError("Resolution capped at 128 per dimension")
+        return v
+```
+
+### FluidSimulator 3D Branch
+
+```python
+class FluidSimulator:
+    def __init__(self, config: FluidConfig):
+        from phi.flow import Box, StaggeredGrid, extrapolation
+        if not config.enabled:
+            raise ValueError("FluidConfig.enabled must be True")
         self.config = config
-        self._runs: list[TrainingManager] = []
-        self._collector = MetricsCollector()
-    
-    def run(self) -> dict[str, Any]:
-        """Execute all experiments and return aggregated results."""
-        for algo in self.config.algorithms:
-            for scene in self.config.scenes:
-                for seed in self.config.seeds:
-                    train_config = TrainingConfig(
-                        scene_path=scene,
-                        algorithm=AlgorithmConfig(name=algo),
-                        seed=seed,
-                        ...
-                    )
-                    mgr = TrainingManager(train_config)
-                    model = mgr.train()
-                    eval_results = mgr.evaluate(n_episodes=self.config.eval_episodes)
-                    self._collector.record(algo, scene, seed, eval_results)
-        return self._collector.aggregate()
-```
-
-**CLI additions:**
-
-```
-surg-rl benchmark       --config benchmark.yaml    (run full matrix)
-surg-rl compare         --results results.json     (statistical comparison)
-surg-rl report          --results results.json     (generate report)
-```
-
-**Data Flow:**
-
-```
-BenchmarkConfig (YAML)
-    ↓
-ExperimentRunner.run()
-    → for each (algo, scene, seed):
-        → TrainingManager(config) → .train() → .evaluate()
-        → MetricsCollector.record(run_results)
-    ↓
-MetricsCollector.aggregate()
-    → {algo: {scene: {mean_reward, std_reward, success_rate, wall_time}}}
-    ↓
-ReportGenerator.generate(markdown=True, html=True)
-    → .planning/benchmarks/{timestamp}/report.md
-PlotRenderer.render()
-    → .planning/benchmarks/{timestamp}/plots/learning_curve.png
-```
-
-### Confidence: HIGH
-The pattern is standard (wrap TrainingManager in a loop with metric aggregation). Matplotlib for plots, jinja2 for HTML reports. No new architectural complexity — benchmarking is a top-level consumer of existing modules.
-
----
-
-## Feature 4: Multi-Agent RL (MARL via PettingZoo)
-
-### New Module: `src/surg_rl/marl/`
-
-```
-src/surg_rl/marl/
-├── __init__.py
-├── parallel_env.py          # PettingZooSurgicalEnv: extends ParallelEnv
-├── agent_registry.py        # AgentConfig: observation/action per agent
-├── observation_router.py    # Split sim Observation → per-agent dicts
-├── action_aggregator.py     # Aggregate per-agent actions → sim action
-├── policy_config.py         # SharedPolicyConfig vs IndependentPolicyConfig
-├── reward_splitter.py       # Team reward → per-agent credit assignment
-└── dual_arm_env.py          # Pre-built dual-arm coordination environment
-```
-
-### Integration Points
-
-**Key architectural decision:** `PettingZooSurgicalEnv` is a **thin adapter** over `SurgicalEnv`, not a rewrite. It delegates simulation to the existing `BaseSimulator` stack.
-
-```python
-from pettingzoo import ParallelEnv
-
-class PettingZooSurgicalEnv(ParallelEnv):
-    """PettingZoo wrapper over SurgicalEnv for multi-agent training."""
-    
-    def __init__(self, config: MultiAgentConfig):
-        self._single_env = SurgicalEnv(config.to_single_agent_config())
-        self._router = ObservationRouter(config.agent_configs)
-        self._aggregator = ActionAggregator(config.agent_configs)
-        self.possible_agents = config.agent_names
-        self.agents = []
-    
-    def observation_space(self, agent):
-        return self._router.observation_space(agent)
-    
-    def action_space(self, agent):
-        return self._aggregator.action_space(agent)
-    
-    def reset(self, seed=None, options=None):
-        gym_obs, info = self._single_env.reset(seed=seed)
-        self.agents = self.possible_agents[:]
-        obs = self._router.split(gym_obs)
-        return obs, {a: {} for a in self.agents}
-    
-    def step(self, actions):
-        sim_action = self._aggregator.combine(actions)
-        gym_obs, reward, terminated, truncated, info = self._single_env.step(sim_action)
-        obs = self._router.split(gym_obs)
-        
-        # Per-agent rewards (from reward_splitter or shared)
-        rewards = self._reward_splitter.compute(gym_obs, reward, info)
-        terminations = {a: terminated for a in self.agents}
-        truncations = {a: truncated for a in self.agents}
-        
-        if terminated or truncated:
-            self.agents = []
-        
-        return obs, rewards, terminations, truncations, {a: {} for a in self.agents}
-```
-
-**Observation Router** — maps the flat `Observation` dataclass into per-agent views:
-
-```
-Simulator Observation (single flat dict)
-    ↓
-ObservationRouter.split()
-    ├── agent_0 (left arm):  [joint_positions[:7], end_effector_pos_left, target_pos, ...]
-    └── agent_1 (right arm): [joint_positions[7:14], end_effector_pos_right, target_pos, ...]
-```
-
-**Shared vs independent policies:**
-
-| Mode | Config | Training | Use Case |
-|------|--------|----------|----------|
-| Independent | Each agent has own policy network | Separate SB3 model per agent | Heterogeneous agents (camera arm ≠ tool arm) |
-| Shared | Single policy for all agents | One SB3 model, agents share weights | Homogeneous dual-arm, swarm instruments |
-| Centralized critic | Independent actors, shared critic | MADDPG-style with joint observation | Coordinated tasks (one holds tissue, other cuts) |
-
-**Integration with TrainingManager** — PettingZoo envs don't work directly with SB3 (SB3 is single-agent). Training uses either:
-1. SB3's `SubprocVecEnv` with independent envs per agent (for independent policies)
-2. RLlib's multi-agent API (for centralized critic)
-3. Custom training loop that iterates agents
-
-Since RLlib already has partial support in `src/surg_rl/rl/rllib/`, the MARL training path uses RLlib for centralized critic and SB3 for independent policies.
-
-**Data Flow:**
-
-```
-PettingZooSurgicalEnv.reset()
-    ↓
-SurgicalEnv.reset() → gym_obs
-    ↓
-ObservationRouter.split(gym_obs) → {agent_0: obs_0, agent_1: obs_1}
-    ↓
-Agent policies produce actions: {agent_0: act_0, agent_1: act_1}
-    ↓
-ActionAggregator.combine({agent_0: act_0, agent_1: act_1}) → sim_action (16D vector)
-    ↓
-SurgicalEnv.step(sim_action) → gym_obs, reward
-    ↓
-ObservationRouter.split(gym_obs) + RewardSplitter.compute() → per-agent rewards
-```
-
-### Confidence: MEDIUM
-PettingZoo `ParallelEnv` API is well-documented. The adapter pattern (wrapping SurgicalEnv) is clean. The MEDIUM confidence is because RLlib multi-agent training introduces complexity in the policy mapping and training orchestration. This is the riskiest feature to architect correctly.
-
----
-
-## Feature 5: DreamerV3 World Models
-
-### New Module: `src/surg_rl/dreamer/`
-
-```
-src/surg_rl/dreamer/
-├── __init__.py
-├── dreamer_config.py        # DreamerConfig: world model, policy, training params
-├── dreamer_env.py           # DreamerEnvBridge: SurgicalEnv → embodied env interface
-├── training_loop.py         # DreamerTrainingLoop: embodied driver + checkpoint
-├── world_model.py           # WorldModel wrapper: RSSM encoder/decoder/dynamics
-├── planning.py              # PlanningModule: MPPI/CEM planning in latent space
-├── pixel_path.py            # PixelObservationPath: CNN encoder for pixel inputs
-├── lowdim_path.py           # LowDimPath: MLP encoder for proprioceptive inputs
-└── report.py                # DreamerMetrics: imagination rollouts, open-loop preds
-```
-
-### Integration Points
-
-**Key architectural decision:** DreamerV3 uses the `embodied` and `elements` libraries (by Danijar), which have their own environment interface. `DreamerEnvBridge` bridges Gymnasium → embodied:
-
-```python
-import embodied
-import numpy as np
-
-class DreamerEnvBridge(embodied.Env):
-    """Bridge SurgeryEnv to DreamerV3's embodied environment interface."""
-    
-    def __init__(self, config: DreamerConfig):
-        self._gym_env = SurgicalEnv(config.to_surgical_env_config())
-        self._use_pixels = config.use_pixels
-        
-        # Define embodied obs_space
-        if self._use_pixels:
-            self._obs_space = {
-                'image': elements.Space(np.uint8, (64, 64, 3)),
-                'reward': elements.Space(np.float32),
-                'is_first': elements.Space(bool),
-                'is_last': elements.Space(bool),
-                'is_terminal': elements.Space(bool),
-            }
+        self.dim_3d = config.dim_3d
+        dims = config.bounds.get_dimensions()  # (width, height, depth)
+        if self.dim_3d:
+            domain = Box(x=float(dims[0]), y=float(dims[1]), z=float(dims[2]))
+            self._velocity = StaggeredGrid(
+                0.0, extrapolation.ZERO, domain,
+                x=config.resolution[0], y=config.resolution[1], z=config.resolution[2],
+            )
         else:
-            # Low-dim: add proprioceptive fields
-            obs_size = self._gym_env.observation_space.shape[0]
-            self._obs_space = {
-                'vector': elements.Space(np.float32, (obs_size,)),
-                'reward': elements.Space(np.float32),
-                'is_first': elements.Space(bool),
-                'is_last': elements.Space(bool),
-                'is_terminal': elements.Space(bool),
-            }
-        
-        # Define embodied act_space
-        self._act_space = {
-            'action': elements.Space(
-                np.float32, (self._gym_env.action_space.shape[0],),
-                self._gym_env.action_space.low[0],
-                self._gym_env.action_space.high[0],
-            ),
-            'reset': elements.Space(bool),
-        }
-    
-    @property
-    def obs_space(self):
-        return self._obs_space
-    
-    @property
-    def act_space(self):
-        return self._act_space
-    
-    def step(self, action):
-        """DreamerV3 step: dict action → dict observation."""
-        if action.get('reset', False):
-            gym_obs, _ = self._gym_env.reset()
-            return self._convert_obs(gym_obs, reward=0.0, is_first=True)
-        
-        gym_act = action['action']
-        gym_obs, reward, terminated, truncated, info = self._gym_env.step(gym_act)
-        done = terminated or truncated
-        
-        return self._convert_obs(
-            gym_obs,
-            reward=float(reward),
-            is_first=False,
-            is_last=done,
-            is_terminal=terminated,
-        )
-    
-    def _convert_obs(self, gym_obs, reward, is_first, is_last=False, is_terminal=False):
-        """Convert Gymnasium obs dict to embodied obs dict."""
-        if self._use_pixels:
-            rgb = self._gym_env.render()
-            return {
-                'image': rgb,
-                'reward': np.array(reward, np.float32),
-                'is_first': np.array(is_first, bool),
-                'is_last': np.array(is_last, bool),
-                'is_terminal': np.array(is_terminal, bool),
-            }
-        else:
-            flat_obs = self._gym_env._obs_builder.flatten_observation(gym_obs)
-            return {
-                'vector': flat_obs.astype(np.float32),
-                'reward': np.array(reward, np.float32),
-                'is_first': np.array(is_first, bool),
-                'is_last': np.array(is_last, bool),
-                'is_terminal': np.array(is_terminal, bool),
-            }
+            # Existing 2D path (xz-slice) — UNCHANGED
+            domain = Box(x=float(dims[0]), y=float(dims[2]))
+            self._velocity = StaggeredGrid(
+                0.0, extrapolation.ZERO, domain,
+                x=config.resolution[0], y=config.resolution[1],
+            )
+        # ... rest unchanged ...
 ```
 
-**Two observation paths:**
+**`step()` requires no structural change** — `advect.mac_cormack`, `fluid.make_incompressible`, and `union(*geoms)` are dimension-agnostic in PhiFlow (verified: the 3D Wake Flow example uses the identical API). The `Solve` tolerances may need tuning for 3D (larger Poisson system → may need higher `max_iterations`); expose `max_iterations` as a config field or bump to 1000 for 3D.
 
-| Path | Input | Encoder | Use Case |
-|------|-------|---------|----------|
-| Pixel path | `(H, W, 3)` rendered image | CNN encoder (4-layer, depth 64) | Vision-based surgical planning |
-| Low-dim path | Flat proprioceptive vector | MLP encoder (3-layer, 1024 units) | State-based policies (faster, more sample-efficient) |
+**`force_computation.py` needs a real 3D branch** — the current `compute_obstacle_forces` integrates pressure gradients around 2D bounding boxes. For 3D, the bounding box is 3D and the gradient integration axis set expands. This is the highest-complexity sub-task in this closure item.
 
-Both paths share the same RSSM and decoder. The `DreamerConfig` selects the path at construction time.
-
-**Training loop:**
+### Data Flow (3D fluid — unchanged from 2D except grid dimensionality)
 
 ```
-DreamerTrainingLoop.run()
-    ↓
-dreamerv3.agent.Agent(obs_space, act_space, config)
-    ↓
-embodied.driver.Driver([DreamerEnvBridge(config)])
-    ↓
-Loop:
-    driver(policy_fn, steps=10)           # collect experience
-    replay.add(transitions)
-    if should_train:
-        stream_train = agent.stream(replay)  # sample batches
-        agent.train(batch)                   # update world model + policy
-    if should_log:
-        logger.write(metrics)
-    if should_save:
-        checkpoint.save(agent, replay)
+FluidConfig(dim_3d=True, resolution=(32,32,32), bounds=BoundingBox(...))
+  │
+  ▼
+FluidSimulator.__init__ → 3D StaggeredGrid + Box(x,y,z)
+  │
+  ▼
+SurgicalEnv.step() (environment.py:723-736)
+  ├─ every fluid_interval steps: self._fluid_simulator.step()
+  │    ├─ advect.mac_cormack (3D velocity field)
+  │    ├─ union(*obstacle_geometries) → Obstacle(merged_sdf)
+  │    ├─ fluid.make_incompressible → (div-free velocity, pressure)
+  │    └─ compute_obstacle_forces (3D bounding boxes) → forces dict
+  └─ self._simulator.fluid_step(dt)  ← no-op (INV-7), unchanged
 ```
-
-**World model architecture (from DreamerV3, no customization):**
-
-```
-Observation → Encoder (CNN/MLP) → tokens
-    ↓
-RSSM: deter(8192) + stoch(32 classes × 64) → latent state
-    ↓
-Decoder (CNN/MLP): latent → reconstructed observation
-    ↓
-Reward head: latent → predicted reward
-    ↓
-Continue head: latent → predicted terminal
-    ↓
-Actor: latent → action (via imagination in latent space)
-    ↓
-Critic: latent → value (symexp_twohot, 255 bins)
-```
-
-**CLI additions:**
-
-```
-surg-rl dreamer train   --scene scenes/suturing.json --pixels --timesteps 1e6
-surg-rl dreamer eval     --model models/dreamer_model
-surg-rl dreamer imagine  --model models/dreamer_model --steps 50  (open-loop rollout)
-```
-
-### New Dependencies
-
-| Package | Version | Purpose |
-|---------|---------|---------|
-| dreamerv3 | latest (git) | World model algorithm (agent, RSSM, encoder, decoder) |
-| embodied | latest (git) | Environment driver, checkpoint, logger |
-| elements | latest (git) | Config system, spaces, checkpoint |
-| jax | >=0.4.20 | JIT compilation for RSSM forward/backward passes |
-| jaxlib | >=0.4.20 | JAX runtime (CPU/CUDA/Metal) |
-| optax | >=0.1.7 | Optimizer (AdamW for DreamerV3) |
-| tensorflow-cpu | >=2.15 | embodied uses TF for data pipelines (replay buffer streaming) |
-
-These go into a new `[dreamer]` optional dependency group.
-
-### Confidence: MEDIUM
-The `embodied` env interface is well-defined. The adapter pattern is clean. MEDIUM confidence because:
-1. DreamerV3 has heavy dependencies (JAX, TF) that may conflict with PyTorch-based training
-2. The pixel rendering path requires synchronous render in the env loop (performance concern)
-3. JAX on Apple Silicon (Metal) is not as mature as on CUDA — macOS testing will need xfails
 
 ---
 
-## Suggested Build Order (Phase Dependencies)
+## (d) K8s PVC e2e + Organ-Mesh Licensing Decision
 
-```
-Phase A (schema)
-│   scene_definition/schema.py
-│   ├── RealMeshAsset model
-│   ├── TaskChainConfig / TaskDifficulty models
-│   ├── MultiAgentConfig model
-│   └── DreamerConfig model
-│
-├── Phase B (assets)
-│   │   src/surg_rl/assets/
-│   │   scene_builder.py extension
-│   │   Depends on: Phase A (RealMeshAsset schema)
-│   │
-│   ├── Phase C (task curriculum)
-│   │   │   src/surg_rl/task/
-│   │   │   dynamics/curriculum.py extension
-│   │   │   rl/rewards.py extension (per-task reward fns)
-│   │   │   Depends on: Phase A (TaskChainConfig schema)
-│   │   │
-│   │   ├── Phase D (benchmarking)
-│   │   │   │   src/surg_rl/benchmarking/
-│   │   │   │   CLI: surg-rl benchmark/report/compare
-│   │   │   │   Depends on: Phase C (task curriculum provides runnable tasks)
-│   │   │   │              Phase B (optional: real assets for visual reports)
-│   │   │   │
-│   │   │   ├── Phase E (MARL)
-│   │   │   │   │   src/surg_rl/marl/
-│   │   │   │   │   Depends on: Phase A (MultiAgentConfig schema)
-│   │   │   │   │   Can run in parallel with Phase C+D
-│   │   │   │   │
-│   │   │   │   └── Phase F (DreamerV3)
-│   │   │   │       │   src/surg_rl/dreamer/
-│   │   │   │       │   Depends on: Phase D (benchmarking for comparison reports)
-│   │   │   │       │              Phase C (task curriculum for training scenarios)
-│   │   │   │       │   Can run in parallel with Phase E
-```
+### Part 1: PVC e2e Test De-Stub
 
-**Phase ordering rationale:**
+**Integration point:** `tests/k8s/test_pvc_e2e.py` (lines 35-50 — the stubbed `test_pvc_read_write_stub`).
 
-1. **Schema first** (Phase A) — all five features need new models in `schema.py`. Pydantic v2 single source of truth is the existing pattern; no feature can start before its schema is defined.
+**Recommended approach: kubectl subprocess (not python-client).** The kubernetes python-client adds a heavy dependency and requires kube-config wiring; `kubectl` is already the natural K8s interaction tool and the test is already gated on `kind` availability (lines 17-29). The test uses `subprocess.run(["kubectl", ...])` directly.
 
-2. **Assets + Task Curriculum** (Phase B+C) — the core surgical realism work. These are independent of each other (assets don't need curriculum, curriculum works with primitive meshes). They can run in parallel.
+**New vs modified components:**
 
-3. **Benchmarking** (Phase D) — wraps the training pipeline. Needs task curriculum to have meaningful tasks to benchmark against. Optionally uses real assets for report visuals.
+| Component | Status | Change |
+|-----------|--------|--------|
+| `tests/k8s/test_pvc_e2e.py::test_pvc_read_write_stub` | **Modified — de-stub** | Rename to `test_pvc_read_write_e2e`; implement 4-step cycle |
+| `k8s/overlays/e2e/` | **New (optional)** | E2e overlay with small PVC (1Gi) + test Job manifests; or reuse `base/pvc.yaml` with a patched storage request |
+| `k8s/base/pvc.yaml` | **Unchanged** | 50Gi PVC for production; e2e overlay patches to 1Gi for fast teardown |
+| `pyproject.toml` | **Unchanged** | No `kubernetes` python-client dependency (kubectl subprocess approach) |
 
-4. **MARL** (Phase E) — PettingZoo adapter is architecturally clean but adds RLlib complexity. Can start as early as Phase A is done (ParallelEnv wraps SurgicalEnv, which doesn't need assets or curriculum). Best parallelized with C+D.
-
-5. **DreamerV3** (Phase F) — highest risk (heavy deps, JAX, new training paradigm). Placed last so it can benchmark against established SB3 baselines from Phase D and train on task curriculum tasks from Phase C.
-
----
-
-## Cross-Cutting Concerns
-
-### Dependency Management
-
-The `[dreamer]` extra must be isolated from the PyTorch-based stack to avoid JAX+TF vs PyTorch conflicts:
-
-```ini
-# pyproject.toml
-[project.optional-dependencies]
-dreamer = [
-    "dreamerv3 @ git+https://github.com/danijar/dreamerv3",
-    "embodied @ git+https://github.com/danijar/embodied",
-    "elements @ git+https://github.com/danijar/elements",
-    "jax>=0.4.20",
-    "jaxlib>=0.4.20",
-    "optax>=0.1.7",
-    "tensorflow-cpu>=2.15",
-]
-```
-
-Lazy imports in `dreamer/__init__.py` mirror the existing pattern:
+**Test body (replaces the TODO at line 44):**
 
 ```python
-try:
-    import dreamerv3
-    HAS_DREAMER = True
-except ImportError:
-    HAS_DREAMER = False
+@pytest.mark.k8s
+@pytest.mark.integration
+@pytest.mark.slow
+def test_pvc_read_write_e2e(self) -> None:
+    """PVC create → write checkpoint → read checkpoint → verify → cleanup."""
+    if not _kind_cluster_available():
+        pytest.skip("No local kind cluster available")
+
+    # 1. Apply PVC (e2e overlay with 1Gi)
+    subprocess.run(["kubectl", "apply", "-k", "k8s/overlays/e2e/"], check=True)
+    _wait_for("pvc", "surg-rl-checkpoints", "Bound", timeout=60)
+
+    # 2. Launch writer Job — writes sentinel checkpoint to PVC
+    subprocess.run(["kubectl", "apply", "-f", "k8s/e2e/writer-job.yaml"], check=True)
+    _wait_for("job", "pvc-writer", "Complete", timeout=120)
+
+    # 3. Launch reader Job — reads sentinel back, exits 0 if content matches
+    subprocess.run(["kubectl", "apply", "-f", "k8s/e2e/reader-job.yaml"], check=True)
+    _wait_for("job", "pvc-reader", "Complete", timeout=120)
+
+    # 4. Cleanup
+    subprocess.run(["kubectl", "delete", "-k", "k8s/overlays/e2e/"], check=False)
+    subprocess.run(["kubectl", "delete", "job", "pvc-writer", "pvc-reader"], check=False)
 ```
 
-### Threading / Process Model
+**`_wait_for` helper** — polls `kubectl get <resource> -o jsonpath='{.status.phase}'` until desired state or timeout. This is the standard e2e polling pattern; no new dependency.
 
-| Module | Thread/Process Owner | Notes |
-|--------|---------------------|-------|
-| SurgicalEnv | Single process | Existing: owns simulator lifecycle |
-| PettingZooSurgicalEnv | Single process | Delegates to SurgicalEnv |
-| DreamerTrainingLoop | Single process + JAX GPU | embodied driver runs in-process; JAX allocates GPU memory separately |
-| ExperimentRunner | Single process (sequential) | Serializes TrainingManager runs |
+**New e2e manifests (small, focused):**
+- `k8s/overlays/e2e/kustomization.yaml` — references `../../base`, patches PVC to 1Gi
+- `k8s/e2e/writer-job.yaml` — Job that mounts `surg-rl-checkpoints` PVC, writes `/mnt/checkpoints/sentinel.txt` with known content, exits 0
+- `k8s/e2e/reader-job.yaml` — Job that mounts PVC, reads `/mnt/checkpoints/sentinel.txt`, asserts content matches, exits 0 (or non-zero on mismatch — test checks Job status)
 
-No distributed MARL or DreamerV3 training in v0.4.0 — single-machine scope.
+**Skipif gate stays:** the `@pytest.mark.k8s` + `@pytest.mark.integration` + `@pytest.mark.slow` marks + `_kind_cluster_available()` check (lines 32-42) ensure this only runs when a local `kind` cluster is present. CI without K8s skips; CI with `kind` runs the real cycle.
 
-### Configuration Hierarchy
+### Part 2: Organ-Mesh Licensing Decision
 
-```
-.env (pydantic-settings)
-    ↓
-BenchmarkConfig / DreamerConfig / MultiAgentConfig (YAML/JSON)
-    ↓
-TrainingConfig / SurgicalEnvConfig (dataclass/Pydantic)
-    ↓
-Simulator constructor args
-```
+**This is a decision artifact, not code.** The research spike was already done in v0.5.0 Phase 35 (STATE.md: "Organ mesh licensing research spike (decision deferred to v0.6.0)"). The closure is the **decision** between:
 
-### Anti-Patterns to Avoid
+| Option | License | Pros | Cons |
+|--------|---------|------|------|
+| **Procedural generation** (tetgen primitives) | MIT (project-owned) | No license risk; already have fallback pipeline (scene_builder OBJ primitives); works offline | Less anatomically realistic; requires param tuning per organ |
+| **surgtoolloc dataset** | Research-only / CC-BY-NC? (must verify) | Real organ geometries; publication-quality | License may restrict redistribution; dataset download + conversion pipeline; network dependency |
 
-1. **Don't rewrite SurgicalEnv for PettingZoo** — the adapter pattern keeps the canonical single-agent env and adds a multi-agent view layer. Rewriting means maintaining two parallel environment implementations.
+**Recommended:** Procedural generation as default (ship in `assets/`), with surgtoolloc as an optional `[assets-surgtoolloc]` extra that downloads + converts at install time (lazy import pattern, INV-consistent). This keeps the core package MIT-clean and lets researchers opt into the dataset.
 
-2. **Don't put DreamerV3 training state in SurgicalEnv** — DreamerV3 has its own replay buffer and RSSM state. These live in `dreamer/` only. The env bridge is a stateless translator.
-
-3. **Don't hardcode task curriculum in the simulator** — task progression is an RL layer concern. The simulator doesn't know about difficulty levels; it receives physical parameters from the controller.
-
-4. **Don't bake benchmark report formatting into ExperimentRunner** — separate `MetricsCollector` (data) from `ReportGenerator` (presentation). This lets reports evolve independently of the experiment protocol.
+**Deliverable:** A `.planning/decisions/organ-mesh-licensing.md` ADR (Architecture Decision Record) documenting the choice, license verification, and the optional-extra integration plan. No `src/` code change required for the decision itself; if procedural generation is chosen, the existing `scene_builder.py` fallback path becomes the default and the `assets/` README documents it.
 
 ---
 
-## State of Architecture Changes
+## Suggested Build Order (Considering Dependencies)
 
-### Existing Modules — Extensions
+### Dependency Graph
 
-| Module | Change | Impact |
-|--------|--------|--------|
-| `scene_definition/schema.py` | New models: RealMeshAsset, TaskChainConfig, MultiAgentConfig, DreamerConfig | Additive — existing models unchanged |
-| `simulators/scene_builder.py` | Branch for real mesh loading via assets/ | Moderate — new code path alongside existing primitives |
-| `rl/rewards.py` | New task-specific reward functions | Additive — new subclasses of BaseRewardFunction |
-| `rl/training.py` | Expose TrainingManager to benchmarking | Minor — TrainingManager is already public API |
-| `dynamics/curriculum.py` | Task difficulty awareness | Minor — add `get_task_difficulty()` method |
-| `cli.py` | New subcommands: benchmark, compare, report, chain, marl, dreamer | Moderate — additive subcommands |
+```
+(b1) DifficultyLevelConfig schema ──► (b2) discrete curriculum ──► (b3) scene blocks + fixtures
+                                         │
+                                         └─ (b2) depends on (b1) for DifficultyLevelConfig type
+                                              (b3) depends on (b2) for scheduler.advance_level()
 
-### Existing Modules — Unchanged
+(c) 3D fluid flag — INDEPENDENT (no deps on b or d)
 
-| Module | Reason |
-|--------|--------|
-| `cutting/` | No changes — cutting engine is feature-complete for v0.4.0 |
-| `fluids/` | No changes — PhiFlow integration is stable |
-| `utils/mesh_generation.py` | No changes — procedural mesh gen remains the fallback path |
-| `utils/vtk_io.py` | No changes — VTK writing unchanged |
-| `scene_generation/` | No changes — LLM parsers don't need asset awareness yet |
-| `simulators/base_simulator.py` | No changes — Observation dataclass already has enough fields |
-| `simulators/mujoco_simulator.py` | Minor — load_scene handles real meshes via scene_builder |
-| `simulators/pybullet_simulator.py` | Minor — load_scene handles real meshes via scene_builder |
+(d1) PVC e2e — INDEPENDENT
+(d2) organ-mesh licensing decision — INDEPENDENT (documentation only)
+
+(a) Real DreamerV3 — INDEPENDENT but GPU-gated, highest risk, do LAST
+      └─ benefits from clean baseline (b)(c)(d) landed first
+      └─ GPU-gated: CI GPU host required; macOS local skips (INV-8 sentinel flips)
+```
+
+### Recommended Phase Ordering
+
+| Order | Item | Rationale | Can parallelize with |
+|-------|------|-----------|----------------------|
+| 1 | **(b1) DifficultyLevelConfig schema** | Pure schema, no deps, unblocks (b2)+(b3). Fastest to land. | (c), (d1), (d2) |
+| 2 | **(c) 3D fluid flag** | Independent, well-scoped, PhiFlow API verified (HIGH confidence). Medium complexity (force_computation 3D branch). | (d1), (d2) |
+| 3 | **(b2) Discrete curriculum progression** | Depends on (b1). Additive methods on CurriculumScheduler (INV-1). | (d1), (d2) |
+| 4 | **(b3) Scene-level difficulty_blocks + fixtures** | Depends on (b2). Loader is unchanged (Pydantic validates); work is fixtures + env-construction wiring + tests. | (d1), (d2) |
+| 5 | **(d1) PVC e2e + (d2) licensing decision** | Independent; can run any time but low-risk-landing before (a) is good. (d2) is documentation; (d1) is test+manifests. | — |
+| 6 | **(a) Real DreamerV3 integration** | LAST. GPU-gated (CI GPU host), highest risk, requires `dreamerv3` + `jax` install. Sentinel test flip (INV-8) is the closure signal. Benefits from clean baseline. | — |
+
+**Parallelization note:** Items (c), (d1), (d2) are fully independent and can run in parallel worktrees with (b1)→(b2)→(b3). The (b) chain is sequential internally. Item (a) is sequential-last due to GPU-gating and risk.
+
+**Phase numbering:** continues from 36 (v0.5.0 ended at Phase 35). Suggested:
+- Phase 36: (b1) DifficultyLevelConfig schema + (b2) discrete curriculum (combine — both touch curriculum.py, single worktree)
+- Phase 37: (b3) scene blocks + fixtures + env-construction wiring
+- Phase 38: (c) 3D fluid flag
+- Phase 39: (d1) PVC e2e + (d2) organ-mesh licensing decision (combine — both K8s/asset-adjacent)
+- Phase 40: (a) Real DreamerV3 integration + sentinel flip
+
+Or if parallel worktrees are used: 36=(b1+b2), 37=(c)‖(d1+d2)‖(b3), 38=(a).
+
+---
+
+## Component Impact Summary
+
+### New Components
+
+| Component | Location | Closure item |
+|-----------|----------|--------------|
+| `DifficultyLevelConfig` model | `src/surg_rl/scene_definition/schema.py` | (b1) |
+| `k8s/overlays/e2e/` kustomization | `k8s/overlays/e2e/` | (d1) |
+| `k8s/e2e/writer-job.yaml` + `reader-job.yaml` | `k8s/e2e/` | (d1) |
+| `tests/fixtures/scenes/suturing_difficulty_overrides.json` | `tests/fixtures/scenes/` | (b3) |
+| `.planning/decisions/organ-mesh-licensing.md` ADR | `.planning/decisions/` | (d2) |
+
+### Modified Components
+
+| Component | Location | Closure item | Nature |
+|-----------|----------|--------------|--------|
+| `TaskConfig` | `schema.py:1087` | (b1) | Add `difficulty_overrides` field (None default) |
+| `FluidConfig` | `schema.py:1463` | (c) | Add `dim_3d` field + resolution validator |
+| `FluidSimulator.__init__` | `fluid_simulator.py:66` | (c) | 3D branch on `dim_3d` |
+| `force_computation.py` | `src/surg_rl/fluids/` | (c) | 3D bounding-box branch |
+| `CurriculumScheduler` | `curriculum.py:89` | (b2) | Additive: `set_difficulty_level`/`advance_level`/`current_level` + override post-processing |
+| `CurriculumConfig` | `curriculum.py:65` | (b2) | Additive: `discrete_levels` flag |
+| `SurgicalEnv._setup_rewards` | `environment.py:485-517` | (b3) | Read `difficulty_overrides[level]` for time_limit + reward params |
+| `_build_agent` + 4 stubs | `subprocess.py:125-149` | (a) | Real dreamerv3 factory composition |
+| `test_dreamerv3_subprocess_e2e.py` | `tests/dreamer/` | (a) | FLIP sentinel: negative → positive assertions |
+| `test_pvc_e2e.py` | `tests/k8s/` | (d1) | De-stub: implement 4-step PVC cycle |
+| `DreamerConfig` | `schema.py:1222` | (a) | Add `encoder_keys`/`decoder_keys` fields for custom obs key config |
+
+### Unchanged Components (invariants preserved)
+
+| Component | Why unchanged |
+|-----------|---------------|
+| `BaseSimulator.fluid_step` + MuJoCo/PyBullet overrides | INV-7: fluid is env-driven, hook stays no-op |
+| `_JsonStdout` wrapper | INV-3: pipe protocol unchanged |
+| `GymToEmbodiedWrapper` | Already implements embodied.Env protocol; subprocess constructs its own |
+| `DreamerSubprocess` parent class + pipe protocol | INV-2: process isolation unchanged |
+| `TaskRewardRouter` + 6 reward classes | Already have `apply_difficulty()`; (b) feeds overrides through existing path |
+| `EnvironmentController` / `ParameterRandomizer` | Delegates to scheduler; scheduler's additive methods handle the rest |
+| `k8s/base/pvc.yaml` | Production 50Gi PVC; e2e overlay patches to 1Gi |
+
+---
+
+## Anti-Patterns to Avoid
+
+### Anti-Pattern 1: Replacing CurriculumScheduler methods instead of adding
+**What:** Rewriting `sample_parameters` or `advance_stage` to be level-aware.
+**Why bad:** Violates INV-1 (additive — never replaces Phase 3 fix). Breaks existing continuous-difficulty users.
+**Instead:** Add `set_difficulty_level`/`advance_level`/`current_level` as new methods; `sample_parameters` gets a post-processing step for overrides, not a rewrite.
+
+### Anti-Pattern 2: Importing torch inside the DreamerV3 subprocess
+**What:** Letting `_build_agent` pull in `stable_baselines3` or `torch` via `surg_rl.rl.__init__`.
+**Why bad:** Violates INV-2 (JAX+PyTorch GPU memory conflict). Even with XLA_PYTHON_CLIENT_MEM_FRACTION=0.4, torch's CUDA context initialization in the subprocess can fragment GPU memory.
+**Instead:** Import `SurgicalEnv` + `GymToEmbodiedWrapper` directly (not via `surg_rl.rl.__init__`); these do not import torch. The PEP-562 lazy `__getattr__` in `surg_rl.rl.__init__` means `from surg_rl.rl.environment import SurgicalEnv` is torch-free.
+
+### Anti-Pattern 3: Letting dreamerv3 driver logs go to stdout in the subprocess
+**What:** dreamerv3's `make_logger` writing to stdout.
+**Why bad:** Corrupts the JSON pipe protocol (INV-3) — `_JsonStdout` sends every `print` as a pipe message; non-JSON log lines crash `json.loads` in the parent's `_read_message`.
+**Instead:** Configure dreamerv3 logger to write to stderr (`sys.stderr` is already `os.fdopen(2, "w")` per subprocess.py:25) or to a log file. Only `print(json.dumps(...), flush=True)` goes to stdout.
+
+### Anti-Pattern 4: Making `difficulty_overrides` a `list[3]` with positional indexing
+**What:** `difficulty_overrides: list[DifficultyLevelConfig]` indexed 0/1/2.
+**Why bad:** Positional indexing is error-prone (which index is HARD?); no Pydantic key validation; breaks INV-5 (enum is canonical).
+**Instead:** `dict[DifficultyLevel, DifficultyLevelConfig]` with enum keys; Pydantic validates key membership; scene JSON uses `{"EASY": {...}, "HARD": {...}}`.
+
+### Anti-Pattern 5: Changing `fluid_step()` hook to do real 3D fluid work
+**What:** Implementing 3D fluid inside `MuJoCoSimulator.fluid_step` / `PyBulletSimulator.fluid_step`.
+**Why bad:** Violates INV-7 (fluid is env-driven via `FluidSimulator`; hook is no-op for backends without native fluid).
+**Instead:** 3D fluid lives in `FluidSimulator` (PhiFlow); the hook stays no-op; `env.step()` calls `self._fluid_simulator.step()` unchanged.
 
 ---
 
 ## Sources
 
-- **Context7 /danijar/dreamerv3** — embodied env interface, spaces API, training loop pattern (CONFIRMED: uses elements.Space for obs/act definitions, embodied.Env for env interface)
-- **Context7 /farama-foundation/pettingzoo** — ParallelEnv API, AEC/Parallel conversion (CONFIRMED: ParallelEnv with reset/step/observation_space/action_space contract)
-- **Context7 /mikedh/trimesh** — mesh loading, validation, convex hull (CONFIRMED: trimesh.load() supports .obj, .stl, .ply, .glb)
-- Existing codebase:
-  - `base_simulator.py` — Observation/State/StepResult dataclasses, BaseSimulator ABC
-  - `environment.py` — SurgicalEnv (gym.Env), env config, env factory
-  - `training.py` — TrainingManager, TrainingConfig, AlgorithmConfig
-  - `curriculum.py` — CurriculumScheduler, CurriculumStage
-  - `rewards.py` — BaseRewardFunction ABC, RewardConfig, RewardResult
-  - `schema.py` — SceneDefinition, TaskConfig, MeshAsset (existing)
-  - `scene_builder.py` — SceneBuilder with primitive fallback pattern
-- `.planning/PROJECT.md` — v0.4.0 milestone goals and deferred items
-- `.planning/research/PITFALLS.md` — known anti-patterns (backend leakage, monolithic controllers)
-
----
-
-*Architecture research for: surg-rl v0.4.0 Training Infrastructure & Realism*
-*Researched: 2026-05-13*
-*Ready for roadmap: yes*
+- Codebase inspection (HIGH confidence): `src/surg_rl/dreamer/subprocess.py`, `wrapper.py`, `training.py`, `rl/difficulty.py`, `dynamics/curriculum.py`, `scene_definition/schema.py`, `fluids/fluid_simulator.py`, `simulators/base_simulator.py`, `rl/environment.py`, `k8s/base/pvc.yaml`, `tests/k8s/test_pvc_e2e.py`, `tests/dreamer/test_dreamerv3_subprocess_e2e.py`
+- `.planning/PROJECT.md` Key Architecture Decisions + `.planning/STATE.md` Decisions/Deferred Items (HIGH — primary context)
+- DreamerV3 API (MEDIUM): [danijar/dreamerv3 GitHub](https://github.com/danijar/dreamerv3), [PyPI dreamerv3 v1.5.0](https://pypi.org/project/dreamerv3/), [DeepWiki Getting Started](https://deepwiki.com/danijar/dreamerv3/3-getting-started), [DeepWiki Environment Integration](https://deepwiki.com/danijar/dreamerv3/8-environment-integration) — factory functions `make_agent(obs_space, act_space, config.agent)`, `embodied.envs.from_gym:FromGym`, `encoder.mlp_keys`/`cnn_keys` requirement. Official `example.py` unreachable (404) so exact instantiation code inferred from factory signatures + DeepWiki descriptions.
+- PhiFlow 3D API (HIGH): [PhiFlow StaggeredGrids](https://tum-pbs.github.io/PhiFlow/Staggered_Grids.html), [PhiFlow fluid API](https://tum-pbs.github.io/PhiFlow/phi/physics/fluid.html), [Wake Flow 3D example](https://tum-pbs.github.io/PhiFlow/examples/grids/Wake_Flow.html) — confirms `StaggeredGrid(x,y,z, bounds=Box(x,y,z))` + `make_incompressible` dimension-agnostic.
