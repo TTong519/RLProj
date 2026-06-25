@@ -43,9 +43,15 @@ class TestDiscreteProgression:
         assert scheduler.current_difficulty == 1.0
 
     def test_advance_level_transitions(self):
-        """advance_level walks EASY->MEDIUM->HARD->False (D-12 terminal)."""
+        """advance_level walks EASY->MEDIUM->HARD->False (D-12 terminal).
+
+        advance_level carries the shared success-rate gate (corrected D-11),
+        so the test primes a passing performance window first.
+        """
         cfg = CurriculumConfig(progression_mode="discrete")
         scheduler = CurriculumScheduler(curriculum_config=cfg)
+        # Prime the success-rate gate (min_success_rate default 0.7).
+        scheduler._performance_history = [{"success": 1, "reward": 100}] * 10
 
         # EASY -> MEDIUM
         assert scheduler.advance_level() is True

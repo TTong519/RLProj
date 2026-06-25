@@ -5,11 +5,13 @@ training, allowing tasks to start easy and progressively increase in
 difficulty as the agent improves.
 """
 
+from __future__ import annotations
+
 import contextlib
 import copy
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from surg_rl.rl.difficulty import DifficultyLevel
 from surg_rl.utils.logging import get_logger
@@ -84,6 +86,14 @@ class CurriculumConfig:
     min_success_rate: float = 0.7
     difficulty_hysteresis: float = 0.05
     stage_configs: dict[CurriculumStage, CurriculumStageConfig] = field(default_factory=dict)
+    # D-09: additive progression axis. Default "continuous" keeps the v0.5.0
+    # advance_stage path byte-identical (SC#4). "discrete" walks
+    # DifficultyLevel EASY->MEDIUM->HARD via set_difficulty_level / advance_level.
+    progression_mode: Literal["continuous", "discrete"] = "continuous"
+    # Forward ref resolved via PEP 563 + late bottom-of-file import (Pattern 1).
+    # CurriculumConfig is a stdlib dataclass, NOT a Pydantic model -- no rebuild
+    # call is needed or valid here (Pitfall 4).
+    discrete_config: DiscreteCurriculumConfig | None = None
 
 
 class CurriculumScheduler(BaseController):
@@ -185,6 +195,17 @@ class CurriculumScheduler(BaseController):
         self._performance_history: list[dict[str, float]] = []
         self._stage_entry_episode: int = 0
 
+        # D-10: discrete progression state (separate from _current_stage).
+        # EASY/MEDIUM/HARD axis controlled by set_difficulty_level / advance_level.
+        self._current_level: DifficultyLevel = DifficultyLevel.EASY
+        self._level_entry_episode: int = 0
+        # D-12: EASY -> MEDIUM -> HARD ordering (HARD is terminal).
+        self._level_order = [
+            DifficultyLevel.EASY,
+            DifficultyLevel.MEDIUM,
+            DifficultyLevel.HARD,
+        ]
+
         # Active dynamics parameters (stored for downstream consumption)
         self._active_action_noise: float | None = None
         self._active_joint_noise: float | None = None
@@ -205,7 +226,16 @@ class CurriculumScheduler(BaseController):
 
     @property
     def current_difficulty(self) -> float:
-        """Current difficulty level (0.0 to 1.0)."""
+        """Current difficulty level (0.0 to 1.0).
+
+        Branches on ``progression_mode`` (D-09 additive):
+        - ``"discrete"``: returns ``float(self._current_level.value)`` (the
+          EASY=0.0 / MEDIUM=0.5 / HARD=1.0 scalar from DifficultyLevel).
+        - ``"continuous"`` (default): returns the existing v0.5.0 stage scalar
+          (unchanged -- SC#4).
+        """
+        if self.curriculum_config.progression_mode == "discrete":
+            return float(self._current_level.value)
         d = self._stages[self._current_stage].difficulty
         return float(d.value) if isinstance(d, DifficultyLevel) else float(d)
 
@@ -256,6 +286,49 @@ class CurriculumScheduler(BaseController):
             self._stage_history.append(self._current_stage)
             return True
         return False
+
+    def set_difficulty_level(self, level: DifficultyLevel) -> None:
+        """Manually override the discrete difficulty level (D-12).
+
+        Sets ``_current_level`` directly without consulting the success-rate
+        gate. This is a researcher-facing manual override; ``level`` is a
+        ``DifficultyLevel`` enum (validated upstream at the schema boundary
+        in Phase 37). Callers are in-phase and pass the enum directly.
+
+        Args:
+            level: The DifficultyLevel to set (EASY/MEDIUM/HARD).
+        """
+        if level != self._current_level:
+            self._level_entry_episode = self._episode
+        self._current_level = level
+
+    def advance_level(self) -> bool:
+        """Advance to the next discrete difficulty level (D-10 / D-12).
+
+        Walks ``EASY -> MEDIUM -> HARD``. Reuses the shared
+        ``_meets_success_threshold`` gate (corrected D-11) with
+        ``curriculum_config.min_success_rate`` -- it does NOT inherit the
+        continuous stage's ``episode_threshold`` / ``success_threshold``
+        (Pitfall 3). HARD is terminal: returns ``False`` (D-12).
+
+        Returns:
+            True if advanced to the next level, False if at HARD or the
+            success-rate gate was not met or auto_advance is disabled.
+        """
+        if self._current_level not in self._level_order:
+            return False
+        current_idx = self._level_order.index(self._current_level)
+        # D-12: HARD is terminal.
+        if current_idx >= len(self._level_order) - 1:
+            return False
+        if not self.curriculum_config.auto_advance:
+            return False
+        # Corrected D-11: shared success-rate gate, min_success_rate threshold.
+        if not self._meets_success_threshold(self.curriculum_config.min_success_rate):
+            return False
+        self._level_entry_episode = self._episode
+        self._current_level = self._level_order[current_idx + 1]
+        return True
 
     def sample_parameters(self) -> ParameterSnapshot:
         """Sample parameters for current curriculum stage.
@@ -450,6 +523,24 @@ class CurriculumScheduler(BaseController):
                 -self.curriculum_config.advancement_window :
             ]
 
+        # D-09 additive branch: discrete progression axis routes to advance_level
+        # (which carries its own success-rate gate, corrected D-11). The continuous
+        # path below is byte-identical to v0.5.0 (SC#4).
+        if self.curriculum_config.progression_mode == "discrete":
+            curriculum_info: dict[str, Any] = {
+                "episode": episode,
+                "level": self._current_level.name,
+                "difficulty": self.current_difficulty,
+                "advanced": False,
+            }
+            if self.curriculum_config.auto_advance:
+                advanced = self.advance_level()
+                curriculum_info["advanced"] = advanced
+                if advanced:
+                    curriculum_info["new_level"] = self._current_level.name
+                    curriculum_info["new_difficulty"] = self.current_difficulty
+            return curriculum_info
+
         curriculum_info = {
             "episode": episode,
             "stage": self._current_stage.value,
@@ -487,25 +578,42 @@ class CurriculumScheduler(BaseController):
         if current_idx >= len(self._stage_order) - 1:
             return False
 
-        # Calculate performance metrics
-        recent_metrics = self._performance_history[-self.curriculum_config.advancement_window :]
-
-        if not recent_metrics:
-            return False
-
-        # Check success rate
-        success_rate = sum(m.get("success", 0) for m in recent_metrics) / len(recent_metrics)
-
-        if success_rate >= stage_cfg.success_threshold:
+        # Check success rate via the shared helper (pure refactor, Pitfall 3).
+        # Observable output is byte-identical to the inline computation.
+        if self._meets_success_threshold(stage_cfg.success_threshold):
             return True
 
         # Check reward threshold if set
         if stage_cfg.reward_threshold > 0:
-            avg_reward = sum(m.get("reward", 0) for m in recent_metrics) / len(recent_metrics)
-            if avg_reward >= stage_cfg.reward_threshold:
-                return True
+            recent_metrics = self._performance_history[-self.curriculum_config.advancement_window :]
+            if recent_metrics:
+                avg_reward = sum(m.get("reward", 0) for m in recent_metrics) / len(recent_metrics)
+                if avg_reward >= stage_cfg.reward_threshold:
+                    return True
 
         return False
+
+    def _meets_success_threshold(self, threshold: float) -> bool:
+        """Shared success-rate gate (corrected D-11, Pitfall 3 extraction).
+
+        Pure helper: returns ``True`` iff the recent performance window is
+        non-empty and its mean success rate is ``>= threshold``. Decoupled
+        from any stage/level config so both the continuous ``_should_advance``
+        (called with ``stage_cfg.success_threshold``) and the discrete
+        ``advance_level`` (called with ``curriculum_config.min_success_rate``)
+        can reuse it without inheriting each other's coupling.
+
+        Args:
+            threshold: Success-rate threshold to compare against.
+
+        Returns:
+            True if the recent window's mean success rate meets the threshold.
+        """
+        recent_metrics = self._performance_history[-self.curriculum_config.advancement_window :]
+        if not recent_metrics:
+            return False
+        success_rate = sum(m.get("success", 0) for m in recent_metrics) / len(recent_metrics)
+        return success_rate >= threshold
 
     def episode_end_with_task_result(
         self,
@@ -614,3 +722,15 @@ class CurriculumScheduler(BaseController):
         self._stages = copy.deepcopy(self.DEFAULT_STAGES)
         if self.curriculum_config.stage_configs:
             self._stages.update(self.curriculum_config.stage_configs)
+        # D-10: reset discrete axis state too.
+        self._current_level = DifficultyLevel.EASY
+        self._level_entry_episode = 0
+
+
+# Late import to bind the forward ref on CurriculumConfig.discrete_config
+# (PEP 563 + Pattern 1). CurriculumConfig is a stdlib dataclass, NOT a Pydantic
+# model -- no rebuild call is needed or valid here (Pitfall 4). The edge is
+# one-directional: curriculum -> difficulty_wiring -> rl.difficulty (leaf).
+# difficulty_wiring does NOT import curriculum (verified in Wave 2), so no
+# cycle is introduced.
+from surg_rl.dynamics.difficulty_wiring import DiscreteCurriculumConfig  # noqa: E402, F401
