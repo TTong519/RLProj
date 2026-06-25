@@ -183,6 +183,35 @@ class BaseRewardFunction(ABC):
         # while preserving the safe default for the 4 generic ones.
         return None  # noqa: B027
 
+    def apply_params(self, params: dict[str, float]) -> None:
+        """Apply a composed params dict to this reward instance.
+
+        Default implementation is a no-op for generic rewards (DistanceReward,
+        ActionPenalty, TimePenalty, CollisionPenalty, OrientationReward,
+        SuccessReward, CompositeReward). Task-specific subclasses
+        (SuturingReward, DissectionReward, NeedlePassingReward,
+        KnotTyingReward, GraspingReward, CuttingReward) override this
+        method to map composed params to their own ctor fields. Called by
+        SurgicalEnv._setup_rewards when difficulty_blocks are present (P37),
+        and by apply_difficulty (which delegates
+        ``apply_params(interpolate_params(difficulty))``).
+
+        The empty body is INTENTIONAL — see D-PLUMB-06: generic rewards
+        must NOT be modified to consume difficulty in either form. The
+        override pattern in subclasses keeps this method load-bearing for
+        the 6 task rewards while preserving the safe default for the 4
+        generic ones (Q1 MINIMAL Option a: each task reward maps ONLY the
+        single PARAM_BOUNDS key apply_difficulty already maps).
+
+        Args:
+            params: Composed params dict (concrete PARAM_BOUNDS keys ->
+                float values). Unmapped keys are skipped (D-PLUMB-02).
+        """
+        # Intentional no-op default per D-PLUMB-06. The override pattern in
+        # the 6 task-specific subclasses keeps this method load-bearing
+        # while preserving the safe default for the 4 generic ones.
+        return None  # noqa: B027
+
 
 class DistanceReward(BaseRewardFunction):
     """Distance-based reward function.
@@ -696,10 +725,22 @@ class SuturingReward(BaseRewardFunction):
     def apply_difficulty(self, difficulty: float) -> None:
         """Apply interpolated difficulty parameters to this reward instance.
 
+        Refactored to delegate to ``apply_params`` (P37). Observable output
+        unchanged.
+
         Maps a subset of PARAM_BOUNDS keys to ctor fields (D-PLUMB-02:
         partial mapping is acceptable). Unmapped keys are skipped.
         """
-        params = self.interpolate_params(difficulty)
+        self.apply_params(self.interpolate_params(difficulty))
+
+    def apply_params(self, params: dict[str, float]) -> None:
+        """Map composed params to ctor fields (Q1 MINIMAL Option a).
+
+        Maps ONLY the single ``needle_position_tolerance`` key to
+        ``position_threshold``. Other keys (e.g. ``time_limit``,
+        ``thread_tension_threshold``) are INERT on the ctor surface
+        (Pitfall 2 — documented in TestPrecedenceTruthTable).
+        """
         if "needle_position_tolerance" in params and hasattr(self, "position_threshold"):
             self.position_threshold = params["needle_position_tolerance"]
 
@@ -852,9 +893,15 @@ class DissectionReward(BaseRewardFunction):
     def apply_difficulty(self, difficulty: float) -> None:
         """Apply interpolated difficulty parameters to this reward instance.
 
+        Refactored to delegate to ``apply_params`` (P37). Observable output
+        unchanged.
+
         Maps a subset of PARAM_BOUNDS keys to ctor fields (D-PLUMB-02).
         """
-        params = self.interpolate_params(difficulty)
+        self.apply_params(self.interpolate_params(difficulty))
+
+    def apply_params(self, params: dict[str, float]) -> None:
+        """Map composed params to ctor fields (Q1 MINIMAL Option a)."""
         if "force_precision" in params and hasattr(self, "force_threshold"):
             self.force_threshold = params["force_precision"]
 
@@ -999,9 +1046,15 @@ class NeedlePassingReward(BaseRewardFunction):
     def apply_difficulty(self, difficulty: float) -> None:
         """Apply interpolated difficulty parameters to this reward instance.
 
+        Refactored to delegate to ``apply_params`` (P37). Observable output
+        unchanged.
+
         Maps a subset of PARAM_BOUNDS keys to ctor fields (D-PLUMB-02).
         """
-        params = self.interpolate_params(difficulty)
+        self.apply_params(self.interpolate_params(difficulty))
+
+    def apply_params(self, params: dict[str, float]) -> None:
+        """Map composed params to ctor fields (Q1 MINIMAL Option a)."""
         if "handoff_proximity_tolerance" in params and hasattr(self, "handoff_threshold"):
             self.handoff_threshold = params["handoff_proximity_tolerance"]
 
@@ -1163,9 +1216,15 @@ class KnotTyingReward(BaseRewardFunction):
     def apply_difficulty(self, difficulty: float) -> None:
         """Apply interpolated difficulty parameters to this reward instance.
 
+        Refactored to delegate to ``apply_params`` (P37). Observable output
+        unchanged.
+
         Maps a subset of PARAM_BOUNDS keys to ctor fields (D-PLUMB-02).
         """
-        params = self.interpolate_params(difficulty)
+        self.apply_params(self.interpolate_params(difficulty))
+
+    def apply_params(self, params: dict[str, float]) -> None:
+        """Map composed params to ctor fields (Q1 MINIMAL Option a)."""
         if "loop_deviation_tolerance" in params and hasattr(self, "loop_deviation_threshold"):
             self.loop_deviation_threshold = params["loop_deviation_tolerance"]
 
@@ -1329,9 +1388,15 @@ class GraspingReward(BaseRewardFunction):
     def apply_difficulty(self, difficulty: float) -> None:
         """Apply interpolated difficulty parameters to this reward instance.
 
+        Refactored to delegate to ``apply_params`` (P37). Observable output
+        unchanged.
+
         Maps a subset of PARAM_BOUNDS keys to ctor fields (D-PLUMB-02).
         """
-        params = self.interpolate_params(difficulty)
+        self.apply_params(self.interpolate_params(difficulty))
+
+    def apply_params(self, params: dict[str, float]) -> None:
+        """Map composed params to ctor fields (Q1 MINIMAL Option a)."""
         if "approach_tolerance" in params and hasattr(self, "grasp_threshold"):
             self.grasp_threshold = params["approach_tolerance"]
 
@@ -1491,9 +1556,15 @@ class CuttingReward(BaseRewardFunction):
     def apply_difficulty(self, difficulty: float) -> None:
         """Apply interpolated difficulty parameters to this reward instance.
 
+        Refactored to delegate to ``apply_params`` (P37). Observable output
+        unchanged.
+
         Maps a subset of PARAM_BOUNDS keys to ctor fields (D-PLUMB-02).
         """
-        params = self.interpolate_params(difficulty)
+        self.apply_params(self.interpolate_params(difficulty))
+
+    def apply_params(self, params: dict[str, float]) -> None:
+        """Map composed params to ctor fields (Q1 MINIMAL Option a)."""
         if "force_precision" in params and hasattr(self, "force_threshold"):
             self.force_threshold = params["force_precision"]
 
