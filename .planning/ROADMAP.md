@@ -49,7 +49,7 @@ Full phase goals, success criteria, and plan lists: see
 ### Phases
 
 - [x] **Phase 36: Difficulty Schema + Discrete Curriculum** - DifficultyLevelConfig leaf model + additive CurriculumScheduler level progression (non-GPU, lowest risk, unblocks 37) (completed 2026-06-25)
-- [ ] **Phase 37: Scene-Level difficulty_blocks + Env Wiring** - Scene JSON difficulty_blocks + SurgicalEnv precedence truth-table + load-all-6-scenes regression
+- [x] **Phase 37: Scene-Level difficulty_blocks + Env Wiring** - Scene JSON difficulty_blocks + SurgicalEnv precedence truth-table + load-all-6-scenes regression (completed 2026-06-24)
 - [ ] **Phase 38: 3D Fluid Flag (dim_3d=True)** - 3D Eulerian grid fluids via PhiFlow 3D Box/StaggeredGrid; additive, 2D path stays green; independent of 36/37/39
 - [ ] **Phase 39: K8s PVC e2e + Organ-Mesh Licensing ADR** - De-stub checkpoint-persistence e2e via pytest-kind + record procedural-vs-surgtoolloc ADR; independent, low-risk before GPU-gated 40
 - [ ] **Phase 40: Real DreamerV3 Integration + Sentinel Flip** - Replace 5 stub functions with real dreamerv3.Agent; flip Phase 30 sentinel negative→positive; GPU-gated LAST phase
@@ -95,18 +95,18 @@ Full phase goals, success criteria, and plan lists: see
   4. Existing v0.4.2 fixture `suturing_difficulty_hard.json` still loads and produces the same difficulty scalar it did before this phase (back-compat gate)
   5. Naming drift reconciled: `difficulty_blocks` is the canonical field name across PROJECT.md, schema, and STATE.md (the prior `difficulty_levels` spelling is gone)
 
-**Plans**: 3 plans
+**Plans**: 3/3 plans complete
 **Wave 1**
 
-- [ ] 37-01-PLAN.md — TaskConfig.difficulty_blocks schema field + SC#1 round-trip + SC#5 naming-drift reconciliation (TDD, Wave 1)
+- [x] 37-01-PLAN.md — TaskConfig.difficulty_blocks schema field + SC#1 round-trip + SC#5 naming-drift reconciliation (TDD, Wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 37-02-PLAN.md — apply_params refactor on 6 task rewards + SurgicalEnvConfig.difficulty + _setup_rewards 4-level precedence branch + SC#2 truth table (TDD, Wave 2)
+- [x] 37-02-PLAN.md — apply_params refactor on 6 task rewards + SurgicalEnvConfig.difficulty + _setup_rewards 4-level precedence branch + SC#2 truth table (TDD, Wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 37-03-PLAN.md — SC#3 6×3 scene regression gate + SC#4 hard-fixture back-compat scalar gate (Wave 3)
+- [x] 37-03-PLAN.md — SC#3 6×3 scene regression gate + SC#4 hard-fixture back-compat scalar gate (Wave 3)
 
 #### Phase 38: 3D Fluid Flag (dim_3d=True)
 
@@ -170,7 +170,7 @@ Phases execute in numeric order: 36 → 37 → 38 → 39 → 40. Phases 38 and 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 36. Difficulty Schema + Discrete Curriculum | 3/3 | Complete    | 2026-06-25 |
-| 37. Scene-Level difficulty_blocks + Env Wiring | 0/3 | Not started | - |
+| 37. Scene-Level difficulty_blocks + Env Wiring | 3/3 | Complete    | 2026-06-25 |
 | 38. 3D Fluid Flag (dim_3d=True) | 0/TBD | Not started | - |
 | 39. K8s PVC e2e + Organ-Mesh Licensing ADR | 0/TBD | Not started | - |
 | 40. Real DreamerV3 Integration + Sentinel Flip | 0/TBD | Not started | - |

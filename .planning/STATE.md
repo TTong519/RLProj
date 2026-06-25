@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v0.6.0
 milestone_name: Carried-Forward Debt Closure
-current_phase: 37
-current_phase_name: scene-level-difficulty-blocks-env-wiring
-status: executing
-stopped_at: Completed 36-01-PLAN.md
-last_updated: "2026-06-25T05:29:43.450Z"
+current_phase: 38
+current_phase_name: dim_3d=True
+status: completed
+stopped_at: Phase 36 complete (UAT 10/10 passed), ready to execute Phase 37
+last_updated: "2026-06-25T06:21:25.941Z"
 last_activity: 2026-06-25
-last_activity_desc: Phase 37 execution started
+last_activity_desc: Phase 37 complete, transitioned to Phase 38
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 3
-  percent: 20
+  completed_plans: 6
+  percent: 40
 ---
 
 # Project State
@@ -28,12 +28,12 @@ See: .planning/PROJECT.md (updated 2026-06-25 — Phase 36 complete)
 
 ## Current Position
 
-Phase: 37 (scene-level-difficulty-blocks-env-wiring) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 37
-Last activity: 2026-06-25 — Phase 37 execution started
+Phase: 38 — 3D Fluid Flag (dim_3d=True)
+Plan: Not started
+Status: 37-03 complete (SC#3 6x3 regression + SC#4 hard-fixture back-compat gates); Phase 37 done
+Last activity: 2026-06-25 — Phase 37 complete, transitioned to Phase 38
 
-Progress: [██░░░░░░░░] 20% (1/5 phases, 0/13 requirements closed)
+Progress: [████░░░░░░] 40% (2/5 phases, 0/13 requirements closed)
 
 ## Performance Metrics
 
@@ -66,6 +66,7 @@ Progress: [██░░░░░░░░] 20% (1/5 phases, 0/13 requirements cl
 | Phase 36 P01 | 6m | 2 tasks | 2 files |
 | Phase 36 P02 | 8m | 2 tasks | 2 files |
 | Phase 36 P03 | 15m | 2 tasks | 2 files |
+| Phase 37 P01 | 25m | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,12 @@ Decisions are logged in PROJECT.md Key Architecture Decisions. Recent decisions 
 - [Phase ?]: Phase 36-03: CurriculumScheduler additive progression_mode (continuous/discrete, default continuous) + set_difficulty_level/advance_level (EASY->MEDIUM->HARD->False, D-12) on separate _current_level axis (D-10); advance_level carries shared _meets_success_threshold(min_success_rate) gate (corrected D-11)
 - [Phase ?]: Phase 36-03: _meets_success_threshold pure helper shared by continuous _should_advance (stage_cfg.success_threshold) and discrete advance_level (min_success_rate); _should_advance pure refactor (observable output unchanged, SC#4); update_curriculum discrete early-return branch (continuous path byte-identical)
 - [Phase ?]: Phase 36-03: discrete_config uses stdlib dataclass field DiscreteCurriculumConfig | None = None (PEP 563 + late bottom-of-file import); no model_rebuild (dataclass not Pydantic); one-way edge curriculum->difficulty_wiring->rl.difficulty (no cycle, SC#5)
+- [Phase ?]: Phase 37-01: TaskConfig.difficulty_blocks = dict[DifficultyLevel, DifficultyLevelConfig] | None = None — string forward-ref + extended late-import + single model_rebuild() (Pitfall 4 guarded)
+- [Phase ?]: Phase 37-01: field_validator(mode=before) coerces JSON enum-name string keys to DifficultyLevel members (float-enum value-based coercion rejects name strings; plan A6 corrected)
+- [Phase ?]: Phase 37-01: SC#5 naming drift reconciled — difficulty_blocks canonical across PROJECT.md + STATE.md; drift spelling removed
+- [Phase 37]: Plan 37-02: apply_params(params) extracted on BaseRewardFunction (no-op) + 6 task rewards (Q1 MINIMAL single-key mapping); apply_difficulty delegates — pure refactor, observable output unchanged
+- [Phase 37]: Plan 37-02: SurgicalEnvConfig.difficulty: float = 0.5 added (Q2 — makes config.difficulty precedence level real); _setup_rewards additive blocks branch with Q4 isinstance(difficulty, DifficultyLevel) guard (blocks inert under continuous curriculum — Pitfall 6); compose_difficulty_overrides lazy-local imported (Pitfall 4); 4-level precedence difficulty_blocks > task.difficulty_level > config.difficulty > default 0.5 (SC#2)
+- [Phase 37]: Plan 37-02: Pitfall 3 path (a) — env does NOT patch TaskConfig.time_limit or max_episode_steps from difficulty_blocks (deferred); documented in TestPrecedenceTruthTable blocks_time_limit_inert case
 
 ### Pending Todos
 
@@ -149,7 +156,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-25
+Last session: 2026-06-25T05:35:01.167Z
 Stopped at: Phase 36 complete (UAT 10/10 passed), ready to execute Phase 37
 Resume file: None
 

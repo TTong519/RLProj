@@ -23,7 +23,7 @@ Carried-forward tech-debt closure. Each maps to a roadmap phase (36–40). No ne
 
 - [x] **TASK-06**: Per-level difficulty overrides (`DifficultyLevelConfig`: tissue_stiffness / target_precision_tolerance / tool_position_noise / time_limit) apply additively over `interpolate_params()` — never replace it
 - [x] **TASK-07**: `CurriculumScheduler` advances through discrete EASY→MEDIUM→HARD levels via an additive `progression_mode` (the continuous float `advance_stage` path is preserved unchanged)
-- [ ] **TASK-08**: Scene JSON can specify `difficulty_blocks` per level and `SurgicalEnv` applies them at construction with a documented, tested override-precedence chain
+- [x] **TASK-08**: Scene JSON can specify `difficulty_blocks` per level and `SurgicalEnv` applies them at construction with a documented, tested override-precedence chain
 - [x] **TASK-09**: The existing v0.4.0 + v0.4.2 curriculum suite passes unchanged (additive-regression gate)
 
 ### Fluids
@@ -86,7 +86,7 @@ Which phases cover which requirements. Updated during roadmap creation (2026-06-
 | DMV3-10 | Phase 40 | Pending |
 | TASK-06 | Phase 36 | Complete |
 | TASK-07 | Phase 36 | Complete |
-| TASK-08 | Phase 37 | Pending |
+| TASK-08 | Phase 37 | Complete |
 | TASK-09 | Phase 36 | Complete |
 | FLUID-01 | Phase 38 | Pending |
 | FLUID-02 | Phase 38 | Pending |
