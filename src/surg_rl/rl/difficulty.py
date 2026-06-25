@@ -13,7 +13,6 @@ substring audit on the source.
 """
 
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, field_validator
 
@@ -64,39 +63,35 @@ class DifficultyLevelConfig(BaseModel):
     ValidationError at schema time (ASVS V5 input validation, T-36-01).
     """
 
-    tissue_stiffness: Optional[float] = None
-    target_precision_tolerance: Optional[float] = None
-    tool_position_noise: Optional[float] = None
-    time_limit: Optional[float] = None
+    tissue_stiffness: float | None = None
+    target_precision_tolerance: float | None = None
+    tool_position_noise: float | None = None
+    time_limit: float | None = None
 
     @field_validator("tissue_stiffness")
     @classmethod
-    def _check_tissue_stiffness(cls, v: Optional[float]) -> Optional[float]:
+    def _check_tissue_stiffness(cls, v: float | None) -> float | None:
         if v is not None and not (50.0 <= v <= 300.0):
             raise ValueError("tissue_stiffness out of global union bounds [50.0, 300.0]")
         return v
 
     @field_validator("target_precision_tolerance")
     @classmethod
-    def _check_target_precision_tolerance(cls, v: Optional[float]) -> Optional[float]:
+    def _check_target_precision_tolerance(cls, v: float | None) -> float | None:
         if v is not None and not (0.002 <= v <= 0.3):
-            raise ValueError(
-                "target_precision_tolerance out of global union bounds [0.002, 0.3]"
-            )
+            raise ValueError("target_precision_tolerance out of global union bounds [0.002, 0.3]")
         return v
 
     @field_validator("tool_position_noise")
     @classmethod
-    def _check_tool_position_noise(cls, v: Optional[float]) -> Optional[float]:
+    def _check_tool_position_noise(cls, v: float | None) -> float | None:
         if v is not None and not (0.01 <= v <= 0.08):
-            raise ValueError(
-                "tool_position_noise out of global union bounds [0.01, 0.08]"
-            )
+            raise ValueError("tool_position_noise out of global union bounds [0.01, 0.08]")
         return v
 
     @field_validator("time_limit")
     @classmethod
-    def _check_time_limit(cls, v: Optional[float]) -> Optional[float]:
+    def _check_time_limit(cls, v: float | None) -> float | None:
         if v is not None and not (30.0 <= v <= 180.0):
             raise ValueError("time_limit out of global union bounds [30.0, 180.0]")
         return v
