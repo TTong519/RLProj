@@ -1119,6 +1119,50 @@ class TaskConfig(BaseModel):
             "uses the scalar .value via interpolate_params(level.value).",
         )
     )
+    difficulty_blocks: "dict[DifficultyLevel, DifficultyLevelConfig] | None" = (  # noqa: UP037
+        Field(  # noqa: F821 — forward ref resolved at bottom of file
+            default=None,
+            description="Per-level difficulty override blocks keyed by DifficultyLevel "
+            "(EASY/MEDIUM/HARD). None = no overrides; use the float difficulty path. "
+            "Each value is a DifficultyLevelConfig carrying 0-4 SET override fields. "
+            "When present, SurgicalEnv._setup_rewards composes overrides additively "
+            "over interpolate_params(level.value) via compose_difficulty_overrides.",
+        )
+    )
+
+    @field_validator("difficulty_blocks", mode="before")
+    @classmethod
+    def _coerce_difficulty_blocks_keys(cls, v: Any) -> Any:
+        """Accept enum-name string keys (``"EASY"``/``"MEDIUM"``/``"HARD"``) from JSON.
+
+        ``DifficultyLevel`` is a float-enum (``_FloatMixin(float, Enum)`` with values
+        0.0/0.5/1.0). JSON dict keys arrive as strings, so a key ``"EASY"`` does not
+        match any enum *value* and Pydantic's default value-based coercion rejects it.
+        Scene authors author blocks by level name (RESEARCH.md:558-572), so we coerce
+        name-string keys to enum members before validation. Stringified float values
+        (``"0.0"``/``"0.5"``/``"1.0"``) and existing enum members pass through unchanged.
+        """
+        if v is None or not isinstance(v, dict):
+            return v
+        # Local import: surg_rl.rl.difficulty is a leaf (zero in-project imports,
+        # P36-01 SC#5) and the validator runs at validation time (after module load),
+        # so this is cycle-safe. Mirrors the function-body lazy local import canon.
+        from surg_rl.rl.difficulty import DifficultyLevel
+
+        coerced: dict[Any, Any] = {}
+        for key, value in v.items():
+            if isinstance(key, DifficultyLevel):
+                coerced[key] = value
+            elif isinstance(key, str):
+                try:
+                    coerced[DifficultyLevel[key]] = value
+                except KeyError:
+                    # Not an enum member name — let Pydantic attempt value-based
+                    # coercion (e.g. stringified float "0.0") downstream.
+                    coerced[key] = value
+            else:
+                coerced[key] = value
+        return coerced
 
 
 class BenchmarkConfig(BaseModel):
@@ -1500,7 +1544,10 @@ class FluidConfig(BaseModel):
 # forward reference in TaskConfig.
 from surg_rl.rl.difficulty import (  # noqa: E402
     DifficultyLevel,
+    DifficultyLevelConfig,
 )  # noqa: F401 — module-level binding for forward ref resolution
 
-# Resolve the forward reference in TaskConfig.difficulty_level.
+# Resolve the forward references in TaskConfig.difficulty_level and
+# TaskConfig.difficulty_blocks (P37/TASK-08). The single model_rebuild() call
+# resolves both string forward refs now that both names are bound at module scope.
 TaskConfig.model_rebuild()
