@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.6.0
 milestone_name: Carried-Forward Debt Closure
 current_phase: 37
-current_phase_name: Scene-Level difficulty_blocks + Env Wiring
+current_phase_name: scene-level-difficulty-blocks-env-wiring
 status: executing
 stopped_at: Completed 36-01-PLAN.md
-last_updated: "2026-06-25T05:21:53.291Z"
+last_updated: "2026-06-25T05:29:43.450Z"
 last_activity: 2026-06-25
-last_activity_desc: Phase 36 complete, transitioned to Phase 37
+last_activity_desc: Phase 37 execution started
 progress:
   total_phases: 5
   completed_phases: 1
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-25 — Phase 36 complete)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation — with automatic primitive fallbacks when real assets are missing, and a benchmarking framework for systematic RL research comparisons.
-**Current focus:** Phase 37 — Scene-Level difficulty_blocks + Env Wiring
+**Current focus:** Phase 37 — scene-level-difficulty-blocks-env-wiring
 
 ## Current Position
 
-Phase: 37 — Scene-Level difficulty_blocks + Env Wiring
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-06-25 — Phase 36 complete, transitioned to Phase 37
+Phase: 37 (scene-level-difficulty-blocks-env-wiring) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 37
+Last activity: 2026-06-25 — Phase 37 execution started
 
 Progress: [██░░░░░░░░] 20% (1/5 phases, 0/13 requirements closed)
 
@@ -79,7 +79,7 @@ Decisions are logged in PROJECT.md Key Architecture Decisions. Recent decisions 
 - [v0.6.0 research]: DreamerV3 dreamerv3 logger MUST go to stderr (not stdout) — stdout is the JSON-over-stdio pipe; logger output there corrupts the protocol.
 - [v0.6.0 research]: JAX must NEVER leak into the parent process — keep parent↔child on JSON-over-stdio; set `XLA_PYTHON_CLIENT_MEM_FRACTION` before JAX's first import in the subprocess only.
 - [v0.6.0 research]: 3D fluids — cubic NxNxN memory blow-up mitigated by a separate smaller 3D default `grid_size` + validator; thin-instrument coupling instability mitigated by `coupling_mode="one_way"` default in 3D, two-way opt-in.
-- [v0.6.0 research]: Naming drift — `difficulty_blocks` (PROJECT.md) vs `difficulty_levels` (STATE.md) → canonical = `difficulty_blocks`; reconcile in Phase 36.
+- [v0.6.0 research]: Naming drift — `difficulty_blocks` (PROJECT.md) vs prior plural-s spelling (STATE.md) → canonical = `difficulty_blocks`; reconciled in Phase 37 (TASK-08/SC#5). Drift spelling removed from PROJECT.md and STATE.md.
 - [v0.6.0 research]: CI smoke test asserts STRUCTURAL properties (finite/decreasing loss, checkpoint exists), NOT the v0.4.0 spike's converged `MSE<0.01` thresholds — smoke-vs-convergence split.
 - [v0.4.2 Phase 29]: DifficultyLevel uses `_FloatMixin(float, Enum)`; Pydantic v2 cycle-resolution pattern (`from __future__ import annotations` + string forward-ref + `model_rebuild()` + lazy local imports) — REUSE for DifficultyLevelConfig in Phase 36.
 - [v0.4.2 Phase 30]: E2E test asserts EXPECTED `RuntimeError("Agent not configured")` from the Phase 24 `_build_agent` stub — sentinel that will START FAILING when real dreamerv3 is integrated; Phase 40 must invert it.
@@ -128,7 +128,7 @@ Items acknowledged and carried forward from previous milestone close:
 | uat | Phase 24 DreamerV3 `24-UAT.md` partial | Phase 40 (DMV3-09/10) | GPU-gated; closed by the sentinel flip + CI GPU smoke test |
 | TASK-02 | Per-level override schema (DifficultyLevelConfig) | Phase 36 (TASK-06) | |
 | TASK-02 | CurriculumScheduler discrete level progression | Phase 36 (TASK-07) | |
-| TASK-02 | Scene-level `difficulty_blocks: list[3]` blocks | Phase 37 (TASK-08) | Naming reconciled to `difficulty_blocks` |
+| TASK-02 | Scene-level `difficulty_blocks: dict[DifficultyLevel, DifficultyLevelConfig] \| None` | Phase 37 (TASK-08) | Naming reconciled to `difficulty_blocks`; shape = dict-keyed (RESEARCH.md Open Q3) |
 | Phase 30 | Stub-state sentinel flip when real dreamerv3 is integrated | Phase 40 (DMV3-09) | Flip IS the closure signal |
 | Config | 2D fluids only (3D behind dim_3d=True flag) | Phase 38 (FLUID-01..03) | |
 | Config | Dockerfile.ros2 amd64 / K8S PVC e2e / KubeRay prerequisite | Phase 39 (DEPLOY-01, PVC only) | KubeRay + Dockerfile.ros2 amd64 still out of scope |

@@ -20,7 +20,7 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 
 **Target items:**
 - Real DreamerV3 integration — flip the Phase 24 `_build_agent` stub sentinel, wire a real DreamerV3 agent into the process-isolated JAX subprocess, validate end-to-end on GPU (CI GPU host; macOS local skips)
-- TASK-02 per-level schema — `DifficultyLevelConfig` (tissue_stiffness / target_precision_tolerance / tool_position_noise / time_limit overrides) + discrete `CurriculumScheduler` level progression + scene-level `difficulty_blocks: list[3]` in scene JSON
+- TASK-02 per-level schema — `DifficultyLevelConfig` (tissue_stiffness / target_precision_tolerance / tool_position_noise / time_limit overrides) + discrete `CurriculumScheduler` level progression + scene-level `difficulty_blocks: dict[DifficultyLevel, DifficultyLevelConfig] | None` in scene JSON
 - K8s PVC e2e — de-stub the checkpoint-persistence e2e test; organ-mesh licensing decision (procedural generation vs surgtoolloc dataset)
 - 3D fluid flag — implement the `dim_3d=True` path for Eulerian grid fluids (currently 2D xz-slice only)
 
@@ -79,7 +79,7 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 - REQUIREMENTS.md BENCH-02..05 body checkboxes (pre-existing v0.4.0 audit process gap)
 - TASK-02 per-level override schema (`DifficultyLevelConfig` with tissue_stiffness/target_precision_tolerance/tool_position_noise/time_limit) — D-29-03 explicit exclusion
 - TASK-02 `CurriculumScheduler` discrete level progression — D-29-03 explicit exclusion
-- TASK-02 scene-level `difficulty_levels: list[3]` blocks — D-29-03 explicit exclusion
+- TASK-02 scene-level `difficulty_blocks: dict[DifficultyLevel, DifficultyLevelConfig]` blocks — Phase 37 (TASK-08) ships; D-29-03 exclusion lifted
 - End-to-end `SurgicalEnv`-construction integration test for HARD fixture scene (Phase 29 code review WR-02)
 - `CurriculumStageConfig.difficulty` normalization at env-construction (Phase 29 code review WR-03)
 - Phase 30 stub-state sentinel flip when real dreamerv3 is integrated (replaces `_build_agent` at `subprocess.py:127-131`)
