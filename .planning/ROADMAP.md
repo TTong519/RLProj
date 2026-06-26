@@ -121,7 +121,13 @@ Full phase goals, success criteria, and plan lists: see
   4. The documented `union(*geoms)` multi-obstacle SDF workaround has a NaN-regression test covering BOTH the 2D and 3D paths
   5. `BaseSimulator.fluid_step(dt)` hook still fires for both `dim_3d` modes (the v0.5.0 5-test regression suite passes unchanged)
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 38-01-PLAN.md — FluidConfig 3D schema (dim_3d, grid_size, FluidCouplingMode, coupling_substeps, _cap_grid_size, _require_grid_size_when_dim_3d) — TDD
+- [ ] 38-02-PLAN.md — 3D FluidSimulator (init/step/add_instrument) + _compute_obstacle_forces_3d (obstacle-mask + per-axis clamp) — TDD
+- [ ] 38-03-PLAN.md — render_fluid_3d z-layer slice + _render_np_2d helper extraction (2D byte-identical guarded) — TDD
+- [ ] 38-04-PLAN.md — Regression gates: SC#1 2D byte-identical baseline + SC#2 3D coupling + SC#4 NaN parametrized + SC#5 confirmation
 
 #### Phase 39: K8s PVC e2e + Organ-Mesh Licensing ADR
 
