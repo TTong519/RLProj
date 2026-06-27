@@ -4,11 +4,11 @@ milestone: v0.6.0
 milestone_name: Carried-Forward Debt Closure
 current_phase: 38
 current_phase_name: dim_3d=True
-status: completed
-stopped_at: Phase 36 complete (UAT 10/10 passed), ready to execute Phase 37
-last_updated: "2026-06-25T06:21:25.941Z"
-last_activity: 2026-06-25
-last_activity_desc: Phase 37 complete, transitioned to Phase 38
+status: planned
+stopped_at: Phase 38 planned (4 plans, 3 waves; ready to execute)
+last_updated: "2026-06-26T18:55:17Z"
+last_activity: 2026-06-26
+last_activity_desc: Phase 38 planned (4 plans, 3 waves; plan-checker PASSED; decision coverage 22/22; ready to execute)
 progress:
   total_phases: 5
   completed_phases: 2
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-25 — Phase 36 complete)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation — with automatic primitive fallbacks when real assets are missing, and a benchmarking framework for systematic RL research comparisons.
-**Current focus:** Phase 37 — scene-level-difficulty-blocks-env-wiring
+**Current focus:** Phase 38 — 3d-fluid-flag-dim-3d-true (planned; 4 plans, 3 waves; ready to execute)
 
 ## Current Position
 
 Phase: 38 — 3D Fluid Flag (dim_3d=True)
-Plan: Not started
-Status: 37-03 complete (SC#3 6x3 regression + SC#4 hard-fixture back-compat gates); Phase 37 done
-Last activity: 2026-06-25 — Phase 37 complete, transitioned to Phase 38
+Plan: 4 plans across 3 waves (38-01 schema → 38-02/38-03 simulator+render → 38-04 regression gates) — ready to execute
+Status: Phase 38 PLANNED (plan-checker PASSED, 0 blockers; decision coverage 22/22; FLUID-01/02/03 covered); Phase 37 complete
+Last activity: 2026-06-26 — Phase 38 planned (research + 4 PLAN.md + plan-checker PASSED)
 
 Progress: [████░░░░░░] 40% (2/5 phases, 0/13 requirements closed)
 
@@ -156,14 +156,14 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-25T05:35:01.167Z
-Stopped at: Phase 36 complete (UAT 10/10 passed), ready to execute Phase 37
-Resume file: None
+Last session: 2026-06-26T18:55:17Z
+Stopped at: Phase 38 planned (4 plans, 3 waves; ready to execute)
+Resume file: .planning/phases/38-3d-fluid-flag-dim-3d-true/38-CONTEXT.md (plans: 38-01..04-PLAN.md)
 
 *Updated: 2026-06-24 — v0.6.0 roadmap created (5 phases, 13/13 requirements mapped); ready to plan Phase 36*
 
 ## Operator Next Steps
 
-- `/gsd-plan-phase 36` — Difficulty Schema + Discrete Curriculum (non-GPU, lowest risk, unblocks 37)
-- Phases 38 and 39 are independent of the 36→37 chain and may be planned/parallelized via worktrees once 36 is underway
+- `/gsd-execute-phase 38` — execute the 4 planned plans (38-01 → 38-02/38-03 → 38-04) for the 3D Fluid Flag
+- Phase 39 (K8s PVC e2e + Organ-Mesh Licensing ADR) is independent and may be planned/parallelized via a worktree alongside 38 execution
 - Phase 40 (Real DreamerV3) is GPU-gated and runs LAST — schedule CI GPU host provisioning before planning 40
