@@ -106,3 +106,6 @@ results/
 MUJOCO_LOG.TXT
 _skipped.face
 _skipped.node
+
+# pytest-kind: auto-downloaded kind + kubectl binaries + ephemeral kubeconfig
+.pytest-kind/
