@@ -70,7 +70,7 @@ def _compute_obstacle_forces_3d(
 
     cap = 1e4
     forces: dict[str, np.ndarray] = {}
-    for obs, name in zip(obstacles, obstacle_names):
+    for obs, name in zip(obstacles, obstacle_names, strict=True):
         mask = field.sample(obs.geometry, pressure)
         mask_np = mask.numpy("x,y,z")
         fx = -float(np.sum(grad_x * mask_np)) * cell_vol
