@@ -142,6 +142,11 @@ gui = [
     "imageio>=2.31.0",
 ]
 
+# K8s PVC e2e testing — pytest-kind session fixture provisions a kind cluster in Docker
+k8s-test = [
+    "pytest-kind>=22.11.1",
+]
+
 # ros2: apt deps required (rclpy, sensor-msgs, geometry-msgs, std-msgs)
 # Install: sudo apt install ros-humble-rclpy ros-humble-sensor-msgs ros-humble-geometry-msgs ros-humble-std-msgs
 # Then: source /opt/ros/humble/setup.bash

@@ -1,0 +1,12 @@
+# Source: modeled on k8s/overlays/cpu/kustomization.yaml (existing pattern)
+# e2e overlay applies ONLY the PVC under test + a fresh CPU-only write-Job.
+# read-job.yaml lives in this directory but is applied STANDALONE via
+# `kubectl apply -f k8s/overlays/e2e/read-job.yaml` in the test body AFTER
+# the write-Job completes -- it is deliberately NOT listed in `resources:`
+# (listing it here would race the write-Job for /checkpoints/ckpt.bin).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base/pvc.yaml      # the PVC under test (storageClassName: standard -- matches kind)
+  - e2e-write-job.yaml       # CPU-only Job that writes a checkpoint to the PVC

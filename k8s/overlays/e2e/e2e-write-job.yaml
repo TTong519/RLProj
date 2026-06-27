@@ -1,0 +1,36 @@
+# Source: new file -- tiny CPU-only Job for PVC write/read persistence assertion.
+# Uses busybox (public, ~2MB) -- the test verifies PVC persistence, not the surg-rl stack.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: surg-rl-e2e-write
+  labels:
+    app: surg-rl
+    component: e2e
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: surg-rl
+        component: e2e
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: writer
+          image: busybox:1.36
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              ckpt=/checkpoints/ckpt.bin
+              head -c 4096 /dev/urandom > "$ckpt"
+              sha256sum "$ckpt" | awk '{print $1}'
+          volumeMounts:
+            - name: checkpoints
+              mountPath: /checkpoints
+      volumes:
+        - name: checkpoints
+          persistentVolumeClaim:
+            claimName: surg-rl-checkpoints
