@@ -24,7 +24,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-25 — Phase 36 complete)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation — with automatic primitive fallbacks when real assets are missing, and a benchmarking framework for systematic RL research comparisons.
-**Current focus:** Phase 38 — 3d-fluid-flag-dim-3d-true (planned; 4 plans, 3 waves; ready to execute)
+**Current focus:** Phase 38 — fluid-3d-flag-dim-3d-true (planned; 4 plans, 3 waves; ready to execute)
 
 ## Current Position
 
@@ -158,7 +158,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 Last session: 2026-06-26T18:55:17Z
 Stopped at: Phase 38 planned (4 plans, 3 waves; ready to execute)
-Resume file: .planning/phases/38-3d-fluid-flag-dim-3d-true/38-CONTEXT.md (plans: 38-01..04-PLAN.md)
+Resume file: .planning/phases/38-fluid-3d-flag-dim-3d-true/38-CONTEXT.md (plans: 38-01..04-PLAN.md)
 
 *Updated: 2026-06-24 — v0.6.0 roadmap created (5 phases, 13/13 requirements mapped); ready to plan Phase 36*
 

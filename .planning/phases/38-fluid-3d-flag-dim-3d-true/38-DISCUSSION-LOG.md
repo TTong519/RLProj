@@ -4,7 +4,7 @@
 > Decisions are captured in CONTEXT.md — this log preserves the alternatives considered.
 
 **Date:** 2026-06-26
-**Phase:** 38-3d-fluid-flag-dim-3d-true
+**Phase:** 38-fluid-3d-flag-dim-3d-true
 **Areas discussed:** Schema (dim_3d + grid_size), 3D default + memory guard, coupling_mode semantics, 3D forces + obstacle SDF, 3D visualizer scope, 3D obstacle construction API, Substepping config
 
 **Research pulled before questions (research_before_questions enabled):**

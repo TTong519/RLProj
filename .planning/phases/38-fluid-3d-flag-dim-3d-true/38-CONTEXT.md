@@ -409,5 +409,5 @@ schema work; non-GPU; independent of the 36→37 difficulty chain and of Phase 3
 
 ---
 
-*Phase: 38-3d-fluid-flag-dim-3d-true*
+*Phase: 38-fluid-3d-flag-dim-3d-true*
 *Context gathered: 2026-06-26 via roadmap + requirements + prior phase artifacts + codebase scout + PhiFlow 3D/coupling research + user discussion*

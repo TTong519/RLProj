@@ -1,6 +1,6 @@
 ---
 phase: 38
-slug: 3d-fluid-flag-dim-3d-true
+slug: fluid-3d-flag-dim-3d-true
 status: ready
 nyquist_compliant: true
 wave_0_complete: true

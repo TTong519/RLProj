@@ -605,7 +605,7 @@ The instability mode of interest is NaN/blow-up in velocity/pressure over steps.
 
 ### Secondary (MEDIUM confidence)
 - CLAUDE.md (Pydantic v2 `model_validator(mode="after")` mutation rule, testing rules, no-sed/echo rule).
-- `.planning/phases/38-3d-fluid-flag-dim-3d-true/38-CONTEXT.md` (D-01..D-22 locked decisions).
+- `.planning/phases/38-fluid-3d-flag-dim-3d-true/38-CONTEXT.md` (D-01..D-22 locked decisions).
 - PhiFlow `Wake_Flow` 3D example (canonical_refs) — `infinite_cylinder` + `Box(x,y,z)` + `StaggeredGrid(x,y,z)` pattern. `[CITED: https://tum-pbs.github.io/PhiFlow/examples/grids/Wake_Flow.html]`
 
 ### Tertiary (LOW confidence)
