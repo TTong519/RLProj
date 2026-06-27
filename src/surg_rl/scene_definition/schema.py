@@ -1579,12 +1579,26 @@ class FluidConfig(BaseModel):
 
     @model_validator(mode="after")
     def _require_grid_size_when_dim_3d(self) -> "FluidConfig":
-        """SC#3 memory-blow-up guard: grid_size is hard-required when dim_3d=True."""
+        """SC#3 memory-blow-up guard: grid_size is hard-required when dim_3d=True.
+
+        Also rejects degenerate 3D domains: any bounding-box axis with zero (or
+        near-zero) extent would make the per-axis cell spacing `d{axis}=extent/n`
+        equal to zero, silently zeroing all 3D coupling forces (WR-04). The 2D
+        path is unaffected (it uses `bounds.y` only as a placeholder and never
+        samples a 3D grid over y).
+        """
         if self.dim_3d and self.grid_size is None:
             raise ValueError(
                 "grid_size is required when dim_3d=True "
                 "(set grid_size explicitly; recommended 24^3)"
             )
+        if self.dim_3d:
+            dims = self.bounds.get_dimensions()
+            if any(abs(d) < 1e-12 for d in dims):
+                raise ValueError(
+                    "bounds must have non-zero extent in all 3 axes when "
+                    f"dim_3d=True (got dims={dims})"
+                )
         return self
 
 
