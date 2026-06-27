@@ -148,6 +148,15 @@ class FluidSimulator:
 
         Raises:
             ValueError: if ``not self.config.dim_3d`` or ``pose is None``.
+
+        Note (WR-03): the shaft is ``infinite_cylinder(..., inf_dim="z")`` (full
+        z coverage), so the finite tip ``Box`` only extends the union when
+        ``tip_half > shaft_radius`` (a wider flange at one z-slice). For the
+        common equal-half case ``tip_half == shaft_radius`` (used by every
+        Phase 38 fixture), the tip is geometrically absorbed by the shaft disc
+        and ``union(shaft, tip) == shaft``. Callers that need a genuinely
+        distinct tip must pass ``tip_half > shaft_radius``; that case has no
+        test coverage today.
         """
         from phi.geom import infinite_cylinder
         from phi.flow import Box, union, vec
@@ -180,6 +189,28 @@ class FluidSimulator:
         self.add_obstacle(merged, name)
 
     def step(self, dt: float | None = None) -> dict[str, np.ndarray]:
+        """Advance the fluid by ``dt`` and return per-obstacle coupling forces.
+
+        Inert 3D config surface (WR-01/WR-02, documented honestly rather than
+        implemented to avoid destabilizing the verified 3D path):
+
+        - ``config.coupling_mode`` (ONE_WAY / TWO_WAY) is **not** branched on here.
+          TWO_WAY currently aliases ONE_WAY — the obstacle-velocity feedback
+          required for true added-mass two-way coupling (RESEARCH Pitfall 8) is
+          deferred. The ``test_two_way_opt_in_documented_unstable`` xfail
+          therefore exercises the same stable ONE_WAY code path; an xpass is the
+          expected outcome, not a guarantee of TWO_WAY behavior. Do not read
+          ``coupling_mode == TWO_WAY`` as enabling real two-way coupling.
+        - ``config.coupling_substeps`` is **not** consumed here — ``step`` does a
+          single advection + pressure solve + force integration per call. The
+          field is reserved for a future substep loop
+          (``sub_dt = dt / coupling_substeps``) and is validated/bounded by the
+          schema so callers can pin it without effect today.
+
+        Both knobs are intentionally kept inert (vs. removed) so the validated
+        3D path is not perturbed by post-hoc new coupling behavior. The 2D
+        branch below is byte-identical to v0.5.0 (SC#1) and must not change.
+        """
         from phi.flow import Obstacle, Solve, advect, fluid, union
 
         if dt is None:
