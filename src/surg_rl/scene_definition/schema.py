@@ -1504,6 +1504,13 @@ class FluidBoundaryType(str, Enum):
     WALL = "wall"
 
 
+class FluidCouplingMode(str, Enum):
+    """3D fluid/solid coupling modes (Phase 38)."""
+
+    ONE_WAY = "one_way"
+    TWO_WAY = "two_way"
+
+
 class FluidConfig(BaseModel):
     """Eulerian grid-based fluid simulation configuration (PhiFlow backend)."""
 
@@ -1519,6 +1526,30 @@ class FluidConfig(BaseModel):
     initial_velocity: Position = Field(
         default_factory=Position, description="Initial uniform velocity field (m/s)"
     )
+    dim_3d: bool = Field(default=False, description="Enable 3D Eulerian grid fluids")
+    grid_size: tuple[int, int, int] | None = Field(
+        default=None,
+        description=(
+            "3D grid resolution (Nx, Ny, Nz); REQUIRED when dim_3d=True. "
+            "Recommended 24^3=(24,24,24). Each dim capped at 64."
+        ),
+    )
+    coupling_mode: FluidCouplingMode = Field(
+        default=FluidCouplingMode.ONE_WAY,
+        description=(
+            "3D fluid/solid coupling mode (ONE_WAY stable default; "
+            "TWO_WAY opt-in, unstable on thin instruments)"
+        ),
+    )
+    coupling_substeps: int = Field(
+        default=4,
+        ge=1,
+        le=16,
+        description=(
+            "Internal coupling substeps per env step on the 3D obstacle path; "
+            "reuses substep_dt as per-substep dt."
+        ),
+    )
 
     @field_validator("resolution")
     @classmethod
@@ -1530,6 +1561,31 @@ class FluidConfig(BaseModel):
         if v[0] > 128 or v[1] > 128:
             raise ValueError("Resolution capped at 128 per dimension")
         return v
+
+    @field_validator("grid_size")
+    @classmethod
+    def _cap_grid_size(
+        cls, v: tuple[int, int, int] | None
+    ) -> tuple[int, int, int] | None:
+        if v is None:
+            return None
+        if len(v) != 3:
+            raise ValueError("grid_size must be (nx, ny, nz)")
+        if any(dim < 4 for dim in v):
+            raise ValueError("grid_size must be at least 4 in each dimension")
+        if any(dim > 64 for dim in v):
+            raise ValueError("grid_size capped at 64 per dimension")
+        return v
+
+    @model_validator(mode="after")
+    def _require_grid_size_when_dim_3d(self) -> "FluidConfig":
+        """SC#3 memory-blow-up guard: grid_size is hard-required when dim_3d=True."""
+        if self.dim_3d and self.grid_size is None:
+            raise ValueError(
+                "grid_size is required when dim_3d=True "
+                "(set grid_size explicitly; recommended 24^3)"
+            )
+        return self
 
 
 # Phase 29 (D-SCHEMA-01): Late import of DifficultyLevel to break the
