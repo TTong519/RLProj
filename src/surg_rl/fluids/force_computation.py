@@ -9,6 +9,74 @@ import numpy as np
 from surg_rl.scene_definition.schema import FluidConfig
 
 
+def _compute_obstacle_forces_3d(
+    velocity: Any,
+    pressure: Any,
+    obstacles: list[Any],
+    obstacle_names: list[str],
+    config: FluidConfig,
+) -> dict[str, np.ndarray]:
+    """3D obstacle-mask force integration -> per-obstacle (fx, fy, fz).
+
+    Deliberately distinct from the 2D global-sum path (D-16): the 3D path
+    integrates the pressure gradient over each obstacle's mask cells via
+    ``phi.field.sample`` per obstacle, rather than summing the global pressure
+    gradient. Do NOT unify the two paths.
+
+    Per-axis INDEPENDENT clamp (D-17): each of fx, fy, fz is clamped to
+    ``[-1e4, 1e4]`` independently; a spike on one axis does not shrink the
+    others (unlike the 2D scalar-magnitude clamp).
+
+    Args:
+        velocity: 3D StaggeredGrid velocity (unused for the force computation;
+            accepted for symmetry with the 2D helper).
+        pressure: 3D pressure Field (CenteredGrid) from ``make_incompressible``.
+        obstacles: list of PhiFlow ``Obstacle`` objects (their ``.geometry`` is
+            sampled onto the pressure grid to obtain the per-obstacle mask).
+        obstacle_names: parallel list of obstacle name strings.
+        config: FluidConfig with ``dim_3d=True``, ``grid_size`` set, and
+            ``bounds`` defining the 3D domain.
+
+    Returns:
+        dict mapping obstacle name -> ``np.array([fx, fy, fz], dtype=float64)``.
+    """
+    if pressure is None or not obstacle_names:
+        return {}
+
+    import phi.field as field
+
+    try:
+        p_np = pressure.values.numpy("x,y,z")
+    except Exception as exc:  # pragma: no cover - defensive guard
+        return {name: np.zeros(3) for name in obstacle_names}
+
+    grad_x = np.gradient(p_np, axis=0)
+    grad_y = np.gradient(p_np, axis=1)
+    grad_z = np.gradient(p_np, axis=2)
+
+    dims = config.bounds.get_dimensions()
+    nx, ny, nz = config.grid_size
+    dx = dims[0] / nx
+    dy = dims[1] / ny
+    dz = dims[2] / nz
+    cell_vol = dx * dy * dz
+
+    cap = 1e4
+    forces: dict[str, np.ndarray] = {}
+    for obs, name in zip(obstacles, obstacle_names):
+        mask = field.sample(obs.geometry, pressure)
+        mask_np = mask.numpy("x,y,z")
+        fx = -float(np.sum(grad_x * mask_np)) * cell_vol
+        fy = -float(np.sum(grad_y * mask_np)) * cell_vol
+        fz = -float(np.sum(grad_z * mask_np)) * cell_vol
+        # Per-axis INDEPENDENT clamp (D-17).
+        fx = max(-cap, min(cap, fx))
+        fy = max(-cap, min(cap, fy))
+        fz = max(-cap, min(cap, fz))
+        forces[name] = np.array([fx, fy, fz], dtype=np.float64)
+    return forces
+
+
 def compute_obstacle_forces(
     velocity: Any,
     pressure: Any,

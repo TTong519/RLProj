@@ -71,15 +71,31 @@ class FluidSimulator:
 
         self.config = config
         dims = config.bounds.get_dimensions()
-        domain = Box(x=float(dims[0]), y=float(dims[2]))
+        if config.dim_3d:
+            # 3D branch (NEW, D-06/D-07) — direct (x,y,z)->(x,y,z) mapping.
+            domain = Box(
+                x=float(dims[0]), y=float(dims[1]), z=float(dims[2])
+            )
+            nx, ny, nz = config.grid_size  # guaranteed non-None by schema (D-03)
+            self._velocity = StaggeredGrid(
+                0.0,
+                extrapolation.ZERO,
+                domain,
+                x=nx,
+                y=ny,
+                z=nz,
+            )
+        else:
+            # 2D branch (BYTE-IDENTICAL to v0.5.0)
+            domain = Box(x=float(dims[0]), y=float(dims[2]))
 
-        self._velocity = StaggeredGrid(
-            0.0,
-            extrapolation.ZERO,
-            domain,
-            x=config.resolution[0],
-            y=config.resolution[1],
-        )
+            self._velocity = StaggeredGrid(
+                0.0,
+                extrapolation.ZERO,
+                domain,
+                x=config.resolution[0],
+                y=config.resolution[1],
+            )
 
         self._pressure: Any | None = None
         self._obstacles: list[Any] = []
@@ -103,6 +119,65 @@ class FluidSimulator:
     def clear_obstacles(self) -> None:
         self._obstacles.clear()
         self._obstacle_names.clear()
+
+    def add_instrument(
+        self,
+        pose: Any,
+        dims: tuple[float, float, float],
+        name: str = "instrument",
+    ) -> None:
+        """Construct a thin-instrument SDF (cylinder shaft + box tip) and register it.
+
+        3D-only (raises ``ValueError`` when ``config.dim_3d`` is False). The
+        shaft is modeled as an ``infinite_cylinder`` aligned along the z-axis
+        at the instrument position (mirrors the PhiFlow ``Wake_Flow`` 3D
+        pattern, D-14); the tip is a small ``Box`` placed at the shaft end
+        (``pose.position.z + shaft_length``). The two geometries are merged
+        via ``union(shaft, tip)`` (DEBT-05 workaround) and handed to
+        ``add_obstacle`` (the raw 2D API is unchanged, D-15).
+
+        Args:
+            pose: ``Pose`` (``InstrumentConfig.pose``, ``Optional[Pose]`` per
+                CLAUDE.md — must not be ``None``). Only ``pose.position`` is
+                consumed; orientation is ignored (shaft is axis-aligned to z).
+            dims: ``(shaft_radius, shaft_length, tip_half_size)``:
+                - ``dims[0]``: shaft cylinder radius (m).
+                - ``dims[1]``: shaft length along +z used to place the tip (m).
+                - ``dims[2]``: half-size of the cubic box tip (m).
+            name: obstacle name registered with ``add_obstacle``.
+
+        Raises:
+            ValueError: if ``not self.config.dim_3d`` or ``pose is None``.
+        """
+        from phi.geom import infinite_cylinder
+        from phi.flow import Box, union, vec
+
+        if not self.config.dim_3d:
+            raise ValueError(
+                "add_instrument requires dim_3d=True "
+                "(enable FluidConfig.dim_3d to use instrument SDFs)"
+            )
+        if pose is None:
+            raise ValueError(
+                "pose required for add_instrument (InstrumentConfig.pose is None)"
+            )
+
+        shaft_radius = float(dims[0])
+        shaft_length = float(dims[1])
+        tip_half = float(dims[2])
+        px = float(pose.position.x)
+        py = float(pose.position.y)
+        pz = float(pose.position.z)
+
+        shaft = infinite_cylinder(
+            x=px, y=py, radius=shaft_radius, inf_dim="z"
+        )
+        tip = Box(
+            vec(x=px, y=py, z=pz + shaft_length),
+            vec(x=2.0 * tip_half, y=2.0 * tip_half, z=2.0 * tip_half),
+        )
+        merged = union(shaft, tip)
+        self.add_obstacle(merged, name)
 
     def step(self, dt: float | None = None) -> dict[str, np.ndarray]:
         from phi.flow import Obstacle, Solve, advect, fluid, union
@@ -130,14 +205,31 @@ class FluidSimulator:
 
         forces: dict[str, np.ndarray] = {}
         if self._pressure is not None and self._obstacles:
-            from surg_rl.fluids.force_computation import compute_obstacle_forces
+            if self.config.dim_3d:
+                # 3D branch (NEW, D-08/D-16) — per-obstacle mask path.
+                from surg_rl.fluids.force_computation import (
+                    _compute_obstacle_forces_3d,
+                )
 
-            forces = compute_obstacle_forces(
-                self._velocity,
-                self._pressure,
-                self._obstacle_names,
-                self.config,
-            )
+                forces = _compute_obstacle_forces_3d(
+                    self._velocity,
+                    self._pressure,
+                    self._obstacles,
+                    self._obstacle_names,
+                    self.config,
+                )
+            else:
+                # 2D branch (BYTE-IDENTICAL to v0.5.0)
+                from surg_rl.fluids.force_computation import (
+                    compute_obstacle_forces,
+                )
+
+                forces = compute_obstacle_forces(
+                    self._velocity,
+                    self._pressure,
+                    self._obstacle_names,
+                    self.config,
+                )
 
         self._sim_time += dt
         return forces
