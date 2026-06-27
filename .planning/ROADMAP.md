@@ -50,7 +50,7 @@ Full phase goals, success criteria, and plan lists: see
 
 - [x] **Phase 36: Difficulty Schema + Discrete Curriculum** - DifficultyLevelConfig leaf model + additive CurriculumScheduler level progression (non-GPU, lowest risk, unblocks 37) (completed 2026-06-25)
 - [x] **Phase 37: Scene-Level difficulty_blocks + Env Wiring** - Scene JSON difficulty_blocks + SurgicalEnv precedence truth-table + load-all-6-scenes regression (completed 2026-06-24)
-- [ ] **Phase 38: 3D Fluid Flag (dim_3d=True)** - 3D Eulerian grid fluids via PhiFlow 3D Box/StaggeredGrid; additive, 2D path stays green; independent of 36/37/39
+- [x] **Phase 38: 3D Fluid Flag (dim_3d=True)** - 3D Eulerian grid fluids via PhiFlow 3D Box/StaggeredGrid; additive, 2D path stays green; independent of 36/37/39 (completed 2026-06-27)
 - [ ] **Phase 39: K8s PVC e2e + Organ-Mesh Licensing ADR** - De-stub checkpoint-persistence e2e via pytest-kind + record procedural-vs-surgtoolloc ADR; independent, low-risk before GPU-gated 40
 - [ ] **Phase 40: Real DreamerV3 Integration + Sentinel Flip** - Replace 5 stub functions with real dreamerv3.Agent; flip Phase 30 sentinel negative→positive; GPU-gated LAST phase
 
@@ -121,20 +121,24 @@ Full phase goals, success criteria, and plan lists: see
   4. The documented `union(*geoms)` multi-obstacle SDF workaround has a NaN-regression test covering BOTH the 2D and 3D paths
   5. `BaseSimulator.fluid_step(dt)` hook still fires for both `dim_3d` modes (the v0.5.0 5-test regression suite passes unchanged)
 
-**Plans**: 4 plans in 3 waves
+**Plans**: 4/4 plans complete
 
 Plans:
 **Wave 1**
-- [ ] 38-01-PLAN.md — FluidConfig 3D schema (dim_3d, grid_size, FluidCouplingMode, coupling_substeps, _cap_grid_size, _require_grid_size_when_dim_3d) — TDD
+
+- [x] 38-01-PLAN.md — FluidConfig 3D schema (dim_3d, grid_size, FluidCouplingMode, coupling_substeps, _cap_grid_size, _require_grid_size_when_dim_3d) — TDD
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 38-02-PLAN.md — 3D FluidSimulator (init/step/add_instrument) + _compute_obstacle_forces_3d (obstacle-mask + per-axis clamp) — TDD [depends_on: 38-01]
-- [ ] 38-03-PLAN.md — render_fluid_3d z-layer slice + _render_np_2d helper extraction (2D byte-identical guarded) — TDD [depends_on: 38-01]
+
+- [x] 38-02-PLAN.md — 3D FluidSimulator (init/step/add_instrument) + _compute_obstacle_forces_3d (obstacle-mask + per-axis clamp) — TDD [depends_on: 38-01]
+- [x] 38-03-PLAN.md — render_fluid_3d z-layer slice + _render_np_2d helper extraction (2D byte-identical guarded) — TDD [depends_on: 38-01]
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 38-04-PLAN.md — Regression gates: SC#1 2D byte-identical baseline + SC#2 3D coupling + SC#4 NaN parametrized + SC#5 confirmation [depends_on: 38-01, 38-02, 38-03]
+
+- [x] 38-04-PLAN.md — Regression gates: SC#1 2D byte-identical baseline + SC#2 3D coupling + SC#4 NaN parametrized + SC#5 confirmation [depends_on: 38-01, 38-02, 38-03]
 
 **Cross-cutting constraints** (must_haves truths enforced by ≥2 plans):
+
 - 2D byte-identical preservation (SC#1/SC#5) — Plans 01, 02, 03, 04: every plan's `must_not` requires the existing 2D path (`_cap_resolution`/`resolution`, `compute_obstacle_forces`/`FluidSimulator`, `render_fluid_2d`, `test_fluid_step.py` 5-test suite) to stay byte-identical.
 - Additive-only — Plans 01-04: no plan edits existing 2D production code or existing 2D tests; new 3D code lives in `if config.dim_3d:` / `else:` branches or new functions/classes.
 - PhiFlow 3.4.0 solver settings — Plans 02, 04: `fluid.make_incompressible(..., solve=Solve(rel_tol=1e-4, abs_tol=1e-4, max_iterations=500))` reused for both dims (production in 02, test fixtures in 04).
@@ -152,7 +156,11 @@ Plans:
   4. An ADR document records the organ-mesh licensing decision: procedural generation is the default; surgtoolloc is rejected with cited rationale (endoscopic video with tool-presence labels, not organ geometry; MICCAI/EndoVis challenge guidelines prohibit commercial use)
   5. The ADR cites the specific SurgToolLoc/EndoVis MICCAI license clause text (or the public challenge terms URL) so the rejection is auditable
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 39-01-PLAN.md — De-stub K8s PVC e2e (pytest-kind + e2e overlay + [k8s-test] extra + CPU-only CI job) [DEPLOY-01]
+- [ ] 39-02-PLAN.md — Organ-mesh licensing ADR (procedural default, SurgToolLoc rejected, verbatim clause citation) [ASET-06]
 
 #### Phase 40: Real DreamerV3 Integration + Sentinel Flip
 
@@ -187,7 +195,7 @@ Phases execute in numeric order: 36 → 37 → 38 → 39 → 40. Phases 38 and 3
 |-------|----------------|--------|-----------|
 | 36. Difficulty Schema + Discrete Curriculum | 3/3 | Complete    | 2026-06-25 |
 | 37. Scene-Level difficulty_blocks + Env Wiring | 3/3 | Complete    | 2026-06-25 |
-| 38. 3D Fluid Flag (dim_3d=True) | 0/4 | Planned | - |
+| 38. 3D Fluid Flag (dim_3d=True) | 4/4 | Complete    | 2026-06-27 |
 | 39. K8s PVC e2e + Organ-Mesh Licensing ADR | 0/TBD | Not started | - |
 | 40. Real DreamerV3 Integration + Sentinel Flip | 0/TBD | Not started | - |
 
