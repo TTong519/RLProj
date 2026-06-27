@@ -50,16 +50,23 @@ def _compute_obstacle_forces_3d(
     except Exception as exc:  # pragma: no cover - defensive guard
         return {name: np.zeros(3) for name in obstacle_names}
 
-    grad_x = np.gradient(p_np, axis=0)
-    grad_y = np.gradient(p_np, axis=1)
-    grad_z = np.gradient(p_np, axis=2)
-
     dims = config.bounds.get_dimensions()
     nx, ny, nz = config.grid_size
     dx = dims[0] / nx
     dy = dims[1] / ny
     dz = dims[2] / nz
     cell_vol = dx * dy * dz
+
+    # Physical pressure gradient (per meter), NOT per cell-index. Passing the
+    # cell spacing to np.gradient is what makes the units Pa/m rather than
+    # Pa/cell; the 2D `compute_obstacle_forces` already divides by `dx`/`dz`
+    # explicitly. Without this the per-axis forces are off by `dx`, `dy`, `dz`
+    # respectively (3D-only regression — CR-01).
+    if dx == 0.0 or dy == 0.0 or dz == 0.0:
+        return {name: np.zeros(3) for name in obstacle_names}
+    grad_x = np.gradient(p_np, dx, axis=0)
+    grad_y = np.gradient(p_np, dy, axis=1)
+    grad_z = np.gradient(p_np, dz, axis=2)
 
     cap = 1e4
     forces: dict[str, np.ndarray] = {}
