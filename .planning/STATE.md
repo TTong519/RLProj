@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v0.6.0
 milestone_name: Carried-Forward Debt Closure
-current_phase: 38
-current_phase_name: dim_3d=True
-status: planned
+current_phase: 39
+current_phase_name: K8s PVC e2e + Organ-Mesh Licensing ADR
+status: executing
 stopped_at: Phase 38 planned (4 plans, 3 waves; ready to execute)
-last_updated: "2026-06-26T18:55:17Z"
-last_activity: 2026-06-26
-last_activity_desc: Phase 38 planned (4 plans, 3 waves; plan-checker PASSED; decision coverage 22/22; ready to execute)
+last_updated: "2026-06-27T19:41:51.961Z"
+last_activity: 2026-06-27
+last_activity_desc: Phase 38 complete, transitioned to Phase 39
 progress:
   total_phases: 5
-  completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
-  percent: 40
+  completed_phases: 3
+  total_plans: 10
+  completed_plans: 10
+  percent: 60
 ---
 
 # Project State
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-25 — Phase 36 complete)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation — with automatic primitive fallbacks when real assets are missing, and a benchmarking framework for systematic RL research comparisons.
-**Current focus:** Phase 38 — fluid-3d-flag-dim-3d-true (planned; 4 plans, 3 waves; ready to execute)
+**Current focus:** Phase 38 — fluid-3d-flag-dim-3d-true
 
 ## Current Position
 
-Phase: 38 — 3D Fluid Flag (dim_3d=True)
-Plan: 4 plans across 3 waves (38-01 schema → 38-02/38-03 simulator+render → 38-04 regression gates) — ready to execute
-Status: Phase 38 PLANNED (plan-checker PASSED, 0 blockers; decision coverage 22/22; FLUID-01/02/03 covered); Phase 37 complete
-Last activity: 2026-06-26 — Phase 38 planned (research + 4 PLAN.md + plan-checker PASSED)
+Phase: 39 — K8s PVC e2e + Organ-Mesh Licensing ADR
+Plan: Not started
+Status: Ready to execute
+Last activity: 2026-06-27 — Phase 38 complete, transitioned to Phase 39
 
 Progress: [████░░░░░░] 40% (2/5 phases, 0/13 requirements closed)
 
@@ -67,6 +67,10 @@ Progress: [████░░░░░░] 40% (2/5 phases, 0/13 requirements cl
 | Phase 36 P02 | 8m | 2 tasks | 2 files |
 | Phase 36 P03 | 15m | 2 tasks | 2 files |
 | Phase 37 P01 | 25m | 3 tasks | 4 files |
+| Phase 38 P01 | 1m | 2 tasks | 2 files |
+| Phase 38 P02 | 206s | 2 tasks | 4 files |
+| Phase 38 P03 | ~3m | 2 tasks | 3 files |
+| Phase 38 P04 | 13min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -98,6 +102,13 @@ Decisions are logged in PROJECT.md Key Architecture Decisions. Recent decisions 
 - [Phase 37]: Plan 37-02: apply_params(params) extracted on BaseRewardFunction (no-op) + 6 task rewards (Q1 MINIMAL single-key mapping); apply_difficulty delegates — pure refactor, observable output unchanged
 - [Phase 37]: Plan 37-02: SurgicalEnvConfig.difficulty: float = 0.5 added (Q2 — makes config.difficulty precedence level real); _setup_rewards additive blocks branch with Q4 isinstance(difficulty, DifficultyLevel) guard (blocks inert under continuous curriculum — Pitfall 6); compose_difficulty_overrides lazy-local imported (Pitfall 4); 4-level precedence difficulty_blocks > task.difficulty_level > config.difficulty > default 0.5 (SC#2)
 - [Phase 37]: Plan 37-02: Pitfall 3 path (a) — env does NOT patch TaskConfig.time_limit or max_episode_steps from difficulty_blocks (deferred); documented in TestPrecedenceTruthTable blocks_time_limit_inert case
+- [Phase ?]: Phase 38-01: FluidCouplingMode str-Enum placed after FluidBoundaryType (no model_rebuild); grid_size hard-error when dim_3d=True is the SC#3 guard
+- [Phase 38]: 3D force path uses separate _compute_obstacle_forces_3d helper (keeps 2D compute_obstacle_forces signature byte-identical; D-16)
+- [Phase 38]: add_instrument dims=(shaft_radius, shaft_length, tip_half_size); Box tip uses 2-arg Box(center,size) form (half_size kwarg unsupported in phi 3.4.0)
+- [Phase ?]: render_fluid_3d is a slice-of-3D fallback (D-18), NOT a true volume renderer (deferred per CONTEXT.md)
+- [Phase ?]: _render_np_2d extracted from render_fluid_2d; 2D byte-identical guard pins pre-refactor output array (SC#1)
+- [Phase ?]: SC#1 2D baseline uses SHA256 hash-pin for byte-identical regression
+- [Phase ?]: SC#4 overlapping: pressure finite-or-None (union(*geoms) graceful degradation; NaN contract preserved)
 
 ### Pending Todos
 
@@ -156,7 +167,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-26T18:55:17Z
+Last session: 2026-06-27T05:36:00.353Z
 Stopped at: Phase 38 planned (4 plans, 3 waves; ready to execute)
 Resume file: .planning/phases/38-fluid-3d-flag-dim-3d-true/38-CONTEXT.md (plans: 38-01..04-PLAN.md)
 

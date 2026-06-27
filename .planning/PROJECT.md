@@ -14,6 +14,8 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 
 **Next:** v0.6.0 — Carried-Forward Debt Closure (started 2026-06-24). Closes the four items deferred from v0.4.0–v0.5.0: real DreamerV3 integration, TASK-02 per-level difficulty schema, K8s PVC e2e + organ-mesh licensing decision, and the 3D fluid flag. GUI editor depth and scene-generation features are deferred to v0.7.0.
 
+**v0.6.0 progress:** Phases 36 (difficulty schema), 37 (scene-level `difficulty_blocks` + env wiring), and 38 (3D fluid flag `dim_3d=True`) complete. Remaining: Phase 39 (K8s PVC e2e + organ-mesh licensing ADR) and Phase 40 (real DreamerV3 integration + sentinel flip, GPU-gated). Test baseline 1,513 passing.
+
 ## Current Milestone: v0.6.0 Carried-Forward Debt Closure
 
 **Goal:** Close the four carried-forward tech-debt items deferred from v0.4.0–v0.5.0 — real DreamerV3 integration, the TASK-02 per-level difficulty schema, K8s PVC e2e + organ-mesh licensing decision, and the 3D fluid flag. Pure closure: no new user-facing features (those are queued for v0.7.0).
@@ -134,7 +136,7 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 - Cut cooldown unit test (v0.3.2) — requires full env lifecycle, cooldown is simple arithmetic
 - Fluid step hook in base_simulator.py (v0.3.2) — env-level hook sufficient
 - PhiFlow multi-obstacle union() bug requires merged SDF workaround — documented pitfall
-- 2D fluids only (xz-plane); 3D behind dim_3d=True flag, not yet implemented
+- 3D Eulerian grid fluids now implemented behind `dim_3d=True` (Phase 38); 2D xz-slice remains the validated default path. **Known debt:** 3D obstacle-force magnitude bug (CR-01 — `np.gradient` in `_compute_obstacle_forces_3d` missing physical cell spacing, forces off by ~dx/dy/dz factors; tracked in `38-REVIEW.md`, fix via `/gsd-code-review 38 --fix`); `coupling_mode`/`coupling_substeps` declared-but-inert in `FluidSimulator.step`; `render_fluid_3d` is a z-slice fallback, not a true volume renderer (deferred per CONTEXT.md D-18)
 - Dockerfile.ros2 amd64 hardcode, K8S PVC e2e, KubeRay prerequisite (from v0.3.1)
 - Organ mesh source licensing (v0.4.0 Phase 20) — procedural generation or surgtoolloc dataset
 - Pre-existing lint issues in `src/surg_rl/dreamer/` (F841, B904, E402; 421 ruff issues total per Phase 24 Nyquist audit) — out of v0.4.1 scope
@@ -158,12 +160,15 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 - ✓ **User-Facing Docs Refresh** — README + CONTRIBUTING + CHANGELOG with embedded demo GIFs + GUI screenshots (DOC-01..05) — v0.5.0
 - ✓ **Tech Debt Cleanup** — 421→0 ruff in `dreamer/`, Dockerfile.ros2 multi-arch, fluid_step hook, cut cooldown test, PhiFlow union doc, HARD-fixture env-construction test, CurriculumStageConfig difficulty normalization (DEBT-01..06) — v0.5.0
 
+### Validated (v0.6.0 — in progress)
+
+- ✓ **3D Fluid Flag (`dim_3d=True`)** — 3D Eulerian grid fluids via PhiFlow 3D `Box`/`StaggeredGrid` + `make_incompressible` pressure projection; ONE_WAY coupling default (stable on thin instruments), TWO_WAY opt-in (documented unstable); `grid_size`-required memory-blow-up guard (SC#3); `union(*geoms)` NaN-regression covering both dims (SC#4); `fluid_step` hook unchanged (SC#5). 2D xz-slice path byte-identical to v0.5.0 (SC#1). (FLUID-01, FLUID-02, FLUID-03) — Phase 38
+
 ### Active (v0.6.0 — Carried-Forward Debt Closure)
 
 - [ ] **Real DreamerV3 integration** — flip the `_build_agent` stub, wire a real agent into the JAX subprocess, validate on GPU
 - [ ] **TASK-02 per-level difficulty schema** — `DifficultyLevelConfig` overrides + discrete curriculum progression + scene-level difficulty blocks
 - [ ] **K8s PVC e2e + organ-mesh licensing decision** — de-stub checkpoint-persistence e2e; choose procedural vs surgtoolloc organ meshes
-- [ ] **3D fluid flag (`dim_3d=True`)** — implement 3D Eulerian grid fluids (currently 2D xz-slice only)
 
 ### Out of Scope
 
@@ -175,7 +180,7 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 - Linux-only ROS2 subscriber e2e tests — Requires real ROS2 runtime; mock coverage is sufficient for macOS
 - Helm chart — Kustomize overlays sufficient; Helm can be added later
 - Real-time ROS2 DDS router for K8s multicast — DDS multicast issue is platform-level; document workaround
-- 3D fluid simulation — 2D xz-plane slice is sufficient for surgical bleeding/irrigation; 3D behind dim_3d=True flag
+- True 3D volume fluid rendering — 3D Eulerian grid solver is now available behind `dim_3d=True` (Phase 38, opt-in; `render_fluid_3d` is a z-slice fallback per D-18), but true volume rendering remains deferred; the validated default stays the 2D xz-slice
 - GPU fluid acceleration — PhiFlow CPU-first; GPU acceleration can be added when needed
 - Task chain system (grasp→cut→suture) — Deferred to v0.5.0; requires novel composite scheduling
 - RLlib MARL centralized critic — Independent SB3 policies via SuperSuit sufficient; centralized critic adds complexity
@@ -266,4 +271,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-06-25 — Phase 37 complete (scene-level difficulty_blocks + env wiring; TASK-08 verification 5/5 PASSED)*
+*Last updated: 2026-06-27 — Phase 38 complete (3D fluid flag `dim_3d=True`; FLUID-01/02/03 verification 5/5 PASSED; code-review BLOCKER CR-01 tracked as follow-up debt via `/gsd-code-review 38 --fix`)*

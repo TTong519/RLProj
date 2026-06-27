@@ -28,9 +28,9 @@ Carried-forward tech-debt closure. Each maps to a roadmap phase (36–40). No ne
 
 ### Fluids
 
-- [ ] **FLUID-01**: `FluidConfig.dim_3d=True` enables 3D Eulerian grid fluids (3D `Box`/`StaggeredGrid` + 3D pressure projection); `dim_3d=False` default preserves the validated 2D xz-slice behavior
-- [ ] **FLUID-02**: 3D fluid/solid coupling runs stably with one-way coupling as the default (two-way opt-in) on thin instruments
-- [ ] **FLUID-03**: The 3D solver is memory-bounded via a separate smaller 3D default `grid_size` + validator; the `union(*geoms)` multi-obstacle SDF NaN-regression test covers the 3D path
+- [x] **FLUID-01**: `FluidConfig.dim_3d=True` enables 3D Eulerian grid fluids (3D `Box`/`StaggeredGrid` + 3D pressure projection); `dim_3d=False` default preserves the validated 2D xz-slice behavior
+- [x] **FLUID-02**: 3D fluid/solid coupling runs stably with one-way coupling as the default (two-way opt-in) on thin instruments
+- [x] **FLUID-03**: The 3D solver is memory-bounded via a separate smaller 3D default `grid_size` + validator; the `union(*geoms)` multi-obstacle SDF NaN-regression test covers the 3D path
 
 ### Deploy & Assets
 
@@ -88,9 +88,9 @@ Which phases cover which requirements. Updated during roadmap creation (2026-06-
 | TASK-07 | Phase 36 | Complete |
 | TASK-08 | Phase 37 | Complete |
 | TASK-09 | Phase 36 | Complete |
-| FLUID-01 | Phase 38 | Pending |
-| FLUID-02 | Phase 38 | Pending |
-| FLUID-03 | Phase 38 | Pending |
+| FLUID-01 | Phase 38 | Complete |
+| FLUID-02 | Phase 38 | Complete |
+| FLUID-03 | Phase 38 | Complete |
 | DEPLOY-01 | Phase 39 | Pending |
 | ASET-06 | Phase 39 | Pending |
 
