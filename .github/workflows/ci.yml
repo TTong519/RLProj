@@ -132,3 +132,23 @@ jobs:
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  k8s-e2e:
+    name: K8s PVC e2e (kind)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,k8s-test]"
+
+      - name: Run PVC e2e test (CPU-only kind cluster)
+        run: pytest tests/k8s/test_pvc_e2e.py -m k8s -v --cluster-name=surg-rl-e2e
