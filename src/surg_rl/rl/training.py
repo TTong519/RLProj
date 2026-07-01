@@ -5,6 +5,7 @@ including training loop management, hyperparameter configuration,
 checkpoint management, and evaluation utilities.
 """
 
+import contextlib
 import json
 import time
 from dataclasses import dataclass, field
@@ -543,10 +544,8 @@ class TrainingManager:
             current_key = self._build_eval_env_key()
             if self._eval_env is not None and self._eval_env_key == current_key:
                 eval_env = self._eval_env
-                try:
+                with contextlib.suppress(Exception):
                     eval_env.reset()
-                except Exception:
-                    pass
             else:
                 # Cache mismatch — dispose old and create new
                 if self._eval_env is not None:

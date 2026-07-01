@@ -5,6 +5,7 @@ Per GUI-05 + CONTEXT.md D-06..D-08:
   - Debounced (150 ms) re-validation per D-08
   - Inline error labels below invalid fields
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any

@@ -3,6 +3,7 @@
 Tests use mocked rclpy imports to work on macOS without actual ROS2 apt deps.
 """
 
+import contextlib
 import queue
 import sys
 from unittest.mock import MagicMock, patch
@@ -221,10 +222,8 @@ class TestRos2BridgeNodeMocked:
         assert bridge._command_queue.full()
 
         # Second put overwrites (our _on_command does this, simulate it)
-        try:
+        with contextlib.suppress(queue.Empty):
             bridge._command_queue.get_nowait()
-        except queue.Empty:
-            pass
         bridge._command_queue.put_nowait(cmd2)
 
         result = bridge.get_latest_command()
@@ -233,7 +232,7 @@ class TestRos2BridgeNodeMocked:
     def test_publish_state_validates_finite(self, bridge):
         """publish_state validates no NaN/Inf (D-25, T-09-02)."""
         qpos = np.array([0.0, np.nan, 0.0])
-        qvel = np.array([0.0, 0.0, 0.0])
+        np.array([0.0, 0.0, 0.0])
 
         # The dummy node doesn't validate, but the real one does.
         # We test the validation logic directly:

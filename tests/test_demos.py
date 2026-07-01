@@ -19,10 +19,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 from surg_rl.scene_definition import load_scene
-
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEMOS_DIR = REPO_ROOT / "demos"
@@ -80,8 +77,7 @@ class TestDemoRegression:
         )
         combined = self._combined_output(result)
         assert "[Setup]" in combined, (
-            f"suturing_demo output missing [Setup] marker\n"
-            f"COMBINED: {combined[:1000]}"
+            f"suturing_demo output missing [Setup] marker\n" f"COMBINED: {combined[:1000]}"
         )
 
     def test_knot_tying_demo_runs(self) -> None:
@@ -93,8 +89,7 @@ class TestDemoRegression:
         )
         combined = self._combined_output(result)
         assert "[Setup]" in combined, (
-            f"knot_tying_demo output missing [Setup] marker\n"
-            f"COMBINED: {combined[:1000]}"
+            f"knot_tying_demo output missing [Setup] marker\n" f"COMBINED: {combined[:1000]}"
         )
 
     def test_needle_passing_demo_runs(self) -> None:
@@ -106,8 +101,7 @@ class TestDemoRegression:
         )
         combined = self._combined_output(result)
         assert "[Setup]" in combined, (
-            f"needle_passing_demo output missing [Setup] marker\n"
-            f"COMBINED: {combined[:1000]}"
+            f"needle_passing_demo output missing [Setup] marker\n" f"COMBINED: {combined[:1000]}"
         )
 
 
@@ -122,9 +116,7 @@ class TestNarrationTemplate:
 
     def test_template_has_5_stage_headings(self) -> None:
         """NARRATION_TEMPLATE.md exists with all 5 stage headings in order."""
-        assert TEMPLATE_PATH.exists(), (
-            f"NARRATION_TEMPLATE.md not found at {TEMPLATE_PATH}"
-        )
+        assert TEMPLATE_PATH.exists(), f"NARRATION_TEMPLATE.md not found at {TEMPLATE_PATH}"
         content = TEMPLATE_PATH.read_text(encoding="utf-8")
         expected_headings = [
             "## Setup",
@@ -179,16 +171,10 @@ class TestNeedlePassingFixture:
         scene_path = SCENES_DIR / "needle_passing.json"
         assert scene_path.exists(), f"Scene not found: {scene_path}"
         scene = load_scene(scene_path)
-        assert scene.multi_agent is not None, (
-            "Expected multi_agent field on SceneDefinition"
-        )
-        assert len(scene.multi_agent.arm_configs) >= 2, (
-            f"Expected at least 2 arm_configs, got {len(scene.multi_agent.arm_configs)}"
-        )
+        assert scene.multi_agent is not None, "Expected multi_agent field on SceneDefinition"
+        assert (
+            len(scene.multi_agent.arm_configs) >= 2
+        ), f"Expected at least 2 arm_configs, got {len(scene.multi_agent.arm_configs)}"
         roles = {arm.role.value for arm in scene.multi_agent.arm_configs}
-        assert "surgeon" in roles, (
-            f"Expected 'surgeon' role in arm_configs, got {roles}"
-        )
-        assert "assistant" in roles, (
-            f"Expected 'assistant' role in arm_configs, got {roles}"
-        )
+        assert "surgeon" in roles, f"Expected 'surgeon' role in arm_configs, got {roles}"
+        assert "assistant" in roles, f"Expected 'assistant' role in arm_configs, got {roles}"

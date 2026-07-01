@@ -80,7 +80,7 @@ class MetricCollectorCallback(BaseCallback):
 
         # Open CSV file and write header
         self.csv_path.parent.mkdir(parents=True, exist_ok=True)
-        self._csv_file = open(self.csv_path, "w", newline="")
+        self._csv_file = open(self.csv_path, "w", newline="")  # noqa: SIM115 — closed in close()
         self._csv_writer = csv.writer(self._csv_file)
         self._csv_writer.writerow(
             [

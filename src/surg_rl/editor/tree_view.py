@@ -6,6 +6,7 @@ Per GUI-04 + CONTEXT.md D-05, D-08, D-17:
   - Drag-reorder within a parent
   - Validation icon per node: red dot (invalid), green check (valid), gray dot (unvalidated)
 """
+
 from __future__ import annotations
 
 from enum import Enum
@@ -68,7 +69,9 @@ class SceneTreeView(QtWidgets.QTreeView):
         self.expandAll()
 
     def _build_tree(self) -> None:
-        root = QtGui.QStandardItem(self._scene.metadata.name if self._scene.metadata else "Untitled")
+        root = QtGui.QStandardItem(
+            self._scene.metadata.name if self._scene.metadata else "Untitled"
+        )
         root.setData(_ValidationState.UNVALIDATED, _DATA_ROLE_VALIDATION)
         root.setIcon(_icon_for_state(_ValidationState.UNVALIDATED))
         self._model.appendRow(root)
@@ -102,7 +105,9 @@ class SceneTreeView(QtWidgets.QTreeView):
         item.setData(is_collection, _DATA_ROLE_COLLECTION)
         return item
 
-    def _on_selection_changed(self, current: QtCore.QModelIndex, previous: QtCore.QModelIndex) -> None:
+    def _on_selection_changed(
+        self, current: QtCore.QModelIndex, previous: QtCore.QModelIndex
+    ) -> None:
         if not current.isValid():
             return
         item = self._model.itemFromIndex(current)
@@ -152,9 +157,7 @@ class SceneTreeView(QtWidgets.QTreeView):
         try:
             duplicate = original.model_copy(deep=True)
         except Exception as exc:
-            QtWidgets.QMessageBox.warning(
-                self, "Duplicate failed", safe_error_message(exc)
-            )
+            QtWidgets.QMessageBox.warning(self, "Duplicate failed", safe_error_message(exc))
             return
         new_item = self._make_node(item.text() + " (copy)", duplicate, is_collection=False)
         parent.appendRow(new_item)

@@ -1299,7 +1299,7 @@ class TestStateSaveRestore:
             sim.step(np.ones(n) * 0.1)
 
         state_before = sim.get_state()
-        obs_before = sim._get_observation()
+        sim._get_observation()
         assert state_before.qpos is not None and len(state_before.qpos) > 0
         assert not np.allclose(
             state_before.qpos, 0.0, atol=1e-3
@@ -1329,7 +1329,7 @@ class TestStateSaveRestore:
         # Restore
         sim.set_state(state_before)
         state_after = sim.get_state()
-        obs_after = sim._get_observation()
+        sim._get_observation()
 
         assert np.allclose(state_after.qpos, state_before.qpos, atol=1e-6)
         assert np.allclose(state_after.qvel, state_before.qvel, atol=1e-6)

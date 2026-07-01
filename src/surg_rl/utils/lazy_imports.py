@@ -37,6 +37,7 @@ class LazyImport:
         if self._import_attempted:
             return self._module is not None
         from importlib.util import find_spec
+
         top_level = self._module_name.split(".")[0]
         try:
             return find_spec(top_level) is not None

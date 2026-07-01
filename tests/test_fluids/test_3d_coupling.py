@@ -30,8 +30,8 @@ from surg_rl.scene_definition.schema import (
     BoundingBox,
     FluidConfig,
     FluidCouplingMode,
-    Position,
     Pose,
+    Position,
 )
 
 

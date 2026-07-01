@@ -280,7 +280,7 @@ class PlotRenderer:
         )
 
         # Add value labels on bars
-        for bar, rate in zip(bars, success_rates):
+        for bar, rate in zip(bars, success_rates, strict=True):
             height = bar.get_height()
             ax.annotate(
                 f"{rate:.0%}",
@@ -361,7 +361,7 @@ class PlotRenderer:
 
             # Annotate significantly different pairs
             # Using simple threshold for annotation (rliable would need per-seed data)
-            for i, (idx, algo) in enumerate(valid_algos):
+            for _i, (idx, _algo) in enumerate(valid_algos):
                 if idx == best_idx:
                     continue
                 if success_rates[best_idx] - success_rates[idx] > 0.15:  # 15% threshold

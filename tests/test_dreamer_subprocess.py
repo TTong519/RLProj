@@ -95,11 +95,11 @@ class FakeContext:
         pipe_b = FakePipe(shared_messages=encoded)
         return pipe_a, pipe_b
 
-    def Pipe(self):
+    def Pipe(self):  # noqa: N802 — mirrors multiprocessing ctx.Pipe API
         self._call_count += 1
         return self._make_pipe_pair()
 
-    def Process(self, target, args, daemon):
+    def Process(self, target, args, daemon):  # noqa: N802 — mirrors ctx.Process API
         return self.process
 
 
@@ -419,13 +419,13 @@ class TestSubprocessStdoutProtocol:
         """
         src = inspect.getsource(dreamer_subprocess_mod._subprocess_main)
         # The stdout line must use _JsonStdout
-        assert "_JsonStdout(child_stdout)" in src, (
-            f"_subprocess_main must wire stdout through _JsonStdout:\n{src}"
-        )
+        assert (
+            "_JsonStdout(child_stdout)" in src
+        ), f"_subprocess_main must wire stdout through _JsonStdout:\n{src}"
         # No os.fdopen on the Pipe connection (no child_stdout.fileno() call)
-        assert "child_stdout.fileno()" not in src, (
-            f"_subprocess_main still uses child_stdout.fileno() — fragile:\n{src}"
-        )
+        assert (
+            "child_stdout.fileno()" not in src
+        ), f"_subprocess_main still uses child_stdout.fileno() — fragile:\n{src}"
         # Stderr may use os.fdopen(2, ...) — that's allowed
         assert "os.fdopen(2" in src, "expected stderr to use os.fdopen(2, ...)"
 

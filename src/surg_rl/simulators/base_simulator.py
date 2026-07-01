@@ -7,9 +7,15 @@ providing a unified API for loading scenes, stepping simulation, and rendering.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+if TYPE_CHECKING:
+    # HardwareBackend is used only in a string annotation below
+    # (`backend: "HardwareBackend"`). Imported under TYPE_CHECKING to avoid a
+    # circular import: scene_definition.schema references simulators indirectly.
+    from surg_rl.scene_definition.schema import HardwareBackend
 
 
 class SimulationStatus(Enum):

@@ -58,17 +58,11 @@ def basic_config_2d() -> FluidConfig:
 # (Plan 02 preserved it byte-identical). N=10 steps, no obstacles, zero initial
 # velocity, default substep_dt=0.02. Any perturbation of the 2D path that
 # changes velocity/pressure output will fail these hashes (SC#1).
-_EXPECTED_PRESSURE_HASH = (
-    "9ae73c40d4b155b85a27613cb5fd1a046c35d7e5ff999e24d1afcd8299da048b"
-)
+_EXPECTED_PRESSURE_HASH = "9ae73c40d4b155b85a27613cb5fd1a046c35d7e5ff999e24d1afcd8299da048b"
 # Velocity is zero (fluid at rest, no forcing) — pinning the zero array still
 # guards the byte-identical 2D StaggeredGrid construction + advection + solve.
-_EXPECTED_VX_HASH = (
-    "12525d303b667ee3d0917d8257a21fa0ae80a706be72d4fe8fa4b06739bdbe38"
-)
-_EXPECTED_VY_HASH = (
-    "12525d303b667ee3d0917d8257a21fa0ae80a706be72d4fe8fa4b06739bdbe38"
-)
+_EXPECTED_VX_HASH = "12525d303b667ee3d0917d8257a21fa0ae80a706be72d4fe8fa4b06739bdbe38"
+_EXPECTED_VY_HASH = "12525d303b667ee3d0917d8257a21fa0ae80a706be72d4fe8fa4b06739bdbe38"
 
 # Expected array shapes (StaggeredGrid faces: x-face is (nx-1, ny), y-face is
 # (nx, ny-1) for resolution=(32,32); pressure is (nx, ny) CenteredGrid).
@@ -124,12 +118,10 @@ class Test2DBaselineByteIdentical:
         assert np.all(np.isfinite(vx)), "2D velocity x-face must be finite"
         assert np.all(np.isfinite(vy)), "2D velocity y-face must be finite"
         assert _sha256(vx) == _EXPECTED_VX_HASH, (
-            "2D velocity x-face hash drifted from the v0.5.0 baseline "
-            "(SC#1 regression)"
+            "2D velocity x-face hash drifted from the v0.5.0 baseline " "(SC#1 regression)"
         )
         assert _sha256(vy) == _EXPECTED_VY_HASH, (
-            "2D velocity y-face hash drifted from the v0.5.0 baseline "
-            "(SC#1 regression)"
+            "2D velocity y-face hash drifted from the v0.5.0 baseline " "(SC#1 regression)"
         )
 
     def test_2d_per_step_finite_n10(self, basic_config_2d):

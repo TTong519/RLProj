@@ -73,9 +73,7 @@ class FluidSimulator:
         dims = config.bounds.get_dimensions()
         if config.dim_3d:
             # 3D branch (NEW, D-06/D-07) — direct (x,y,z)->(x,y,z) mapping.
-            domain = Box(
-                x=float(dims[0]), y=float(dims[1]), z=float(dims[2])
-            )
+            domain = Box(x=float(dims[0]), y=float(dims[1]), z=float(dims[2]))
             nx, ny, nz = config.grid_size  # guaranteed non-None by schema (D-03)
             self._velocity = StaggeredGrid(
                 0.0,
@@ -158,8 +156,8 @@ class FluidSimulator:
         distinct tip must pass ``tip_half > shaft_radius``; that case has no
         test coverage today.
         """
-        from phi.geom import infinite_cylinder
         from phi.flow import Box, union, vec
+        from phi.geom import infinite_cylinder
 
         if not self.config.dim_3d:
             raise ValueError(
@@ -167,9 +165,7 @@ class FluidSimulator:
                 "(enable FluidConfig.dim_3d to use instrument SDFs)"
             )
         if pose is None:
-            raise ValueError(
-                "pose required for add_instrument (InstrumentConfig.pose is None)"
-            )
+            raise ValueError("pose required for add_instrument (InstrumentConfig.pose is None)")
 
         shaft_radius = float(dims[0])
         shaft_length = float(dims[1])
@@ -178,9 +174,7 @@ class FluidSimulator:
         py = float(pose.position.y)
         pz = float(pose.position.z)
 
-        shaft = infinite_cylinder(
-            x=px, y=py, radius=shaft_radius, inf_dim="z"
-        )
+        shaft = infinite_cylinder(x=px, y=py, radius=shaft_radius, inf_dim="z")
         tip = Box(
             vec(x=px, y=py, z=pz + shaft_length),
             vec(x=2.0 * tip_half, y=2.0 * tip_half, z=2.0 * tip_half),

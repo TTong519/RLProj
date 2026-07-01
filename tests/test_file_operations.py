@@ -1,11 +1,11 @@
 """TDD regression for Phase 33 file operations + undo/redo + LLM panel (GUI-01/02/06/07)."""
+
 from __future__ import annotations
 
 import json
 import os
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -33,8 +33,15 @@ class TestFileOperationsPurePython:
 
     def test_difficulty_level_enum_survives_round_trip(self, tmp_path) -> None:
         """Lock GUI-02: Pydantic v2 round-trip preserves _FloatMixin DifficultyLevel."""
-        from surg_rl.scene_definition import SceneDefinition, TaskConfig, SimulatorType, save_scene, load_scene
         from surg_rl.rl.difficulty import DifficultyLevel
+        from surg_rl.scene_definition import (
+            SceneDefinition,
+            SimulatorType,
+            TaskConfig,
+            load_scene,
+            save_scene,
+        )
+
         task = TaskConfig(name="x", description="y", difficulty_level=DifficultyLevel.HARD)
         scene = SceneDefinition(simulator=SimulatorType.MUJOCO, task=task)
         target = tmp_path / "out.json"
@@ -51,14 +58,13 @@ try:
 except ImportError:
     _HAVE_PYSIDE6 = False
 
-pytestmark_viewport = pytest.mark.skipif(
-    not _HAVE_PYSIDE6, reason="PySide6 not installed"
-)
+pytestmark_viewport = pytest.mark.skipif(not _HAVE_PYSIDE6, reason="PySide6 not installed")
 
 
 @pytest.fixture(scope="session")
 def qapp():
     from PySide6.QtWidgets import QApplication
+
     return QApplication.instance() or QApplication(sys.argv)
 
 
@@ -85,6 +91,7 @@ class TestSaveScene:
     def test_save_writes_valid_json(self, qapp, tmp_path) -> None:
         from surg_rl.editor.main_window import EditorWindow
         from surg_rl.scene_definition import SceneDefinition, SimulatorType
+
         w = EditorWindow()
         w._scene = SceneDefinition(simulator=SimulatorType.MUJOCO)
         target = tmp_path / "out.json"
@@ -103,6 +110,7 @@ class TestOpenScene:
         scene_path = tmp_path / "test.json"
         scene_path.write_text(json.dumps(_minimal_scene()))
         from surg_rl.editor.main_window import EditorWindow
+
         w = EditorWindow(scene_path=scene_path)
         assert w._scene is not None
         assert w._current_path == scene_path
@@ -113,6 +121,7 @@ class TestUndoStack:
     def test_push_snapshot_then_undo_restores_before(self, qapp) -> None:
         from surg_rl.editor.undo_stack import SceneUndoStack
         from surg_rl.scene_definition import SceneDefinition, SimulatorType
+
         before = SceneDefinition(simulator=SimulatorType.MUJOCO)
         after = SceneDefinition(simulator=SimulatorType.PYBULLET)
         stack = SceneUndoStack()
@@ -125,6 +134,7 @@ class TestUndoStack:
     def test_redo_after_undo_restores_after(self, qapp) -> None:
         from surg_rl.editor.undo_stack import SceneUndoStack
         from surg_rl.scene_definition import SceneDefinition, SimulatorType
+
         before = SceneDefinition(simulator=SimulatorType.MUJOCO)
         after = SceneDefinition(simulator=SimulatorType.PYBULLET)
         stack = SceneUndoStack()
@@ -142,9 +152,12 @@ class TestUndoStackCap:
     def test_stack_caps_at_100(self, qapp) -> None:
         from surg_rl.editor.undo_stack import SceneUndoStack
         from surg_rl.scene_definition import SceneDefinition, SimulatorType
+
         stack = SceneUndoStack()
         for _ in range(150):
-            stack.push_snapshot(SceneDefinition(), SceneDefinition(simulator=SimulatorType.PYBULLET))
+            stack.push_snapshot(
+                SceneDefinition(), SceneDefinition(simulator=SimulatorType.PYBULLET)
+            )
         undo_count = 0
         while stack.canUndo():
             stack.undo()

@@ -13,10 +13,17 @@ import os
 import platform  # noqa: F401 — imported at module level for test patching
 import queue
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import gymnasium as gym
 import numpy as np
+
+if TYPE_CHECKING:
+    # ControllerBridge is imported lazily inside _setup_controller_bridge to
+    # avoid importing ros2.hardware_bridge at module load. Position is a
+    # Pydantic model used only in annotations (future annotations enabled).
+    from surg_rl.ros2.hardware_bridge import ControllerBridge
+    from surg_rl.scene_definition.schema import Position
 
 from surg_rl.dynamics.environment_controller import (
     EnvironmentController,
@@ -515,7 +522,11 @@ class SurgicalEnv(gym.Env):
             difficulty = self._controller._curriculum.current_difficulty
 
         # Phase 29: coerce enum or float to a scalar float for all reward builders.
-        difficulty_float = float(difficulty.value) if isinstance(difficulty, DifficultyLevel) else float(difficulty)
+        difficulty_float = (
+            float(difficulty.value)
+            if isinstance(difficulty, DifficultyLevel)
+            else float(difficulty)
+        )
         self._task_difficulty = difficulty_float
 
         # P37 (TASK-08): scene-level difficulty_blocks override branch (additive
@@ -608,10 +619,8 @@ class SurgicalEnv(gym.Env):
 
         # Phase 21: Update task difficulty from curriculum
         if self._controller is not None:
-            try:
+            with contextlib.suppress(AttributeError, Exception):
                 self._task_difficulty = self._controller.get_difficulty() or 0.5
-            except (AttributeError, Exception):
-                pass
 
         # Reset simulator
         try:
@@ -679,9 +688,7 @@ class SurgicalEnv(gym.Env):
             Tuple of (observation, reward, terminated, truncated, info).
         """
         if self._simulator is None:
-            raise RuntimeError(
-                "SurgicalEnv.passthrough_step() called before simulator loaded"
-            )
+            raise RuntimeError("SurgicalEnv.passthrough_step() called before simulator loaded")
         num_controls = self._simulator.get_num_controls()
         no_op = np.zeros(num_controls, dtype=np.float32)
         return self._step_simulator_and_build_outputs(no_op, source_action=None)
@@ -903,10 +910,8 @@ class SurgicalEnv(gym.Env):
             self.close()
             raise KeyboardInterrupt
 
-        try:
+        with contextlib.suppress(ValueError):  # Not on main thread (e.g., SubprocVecEnv)
             signal.signal(signal.SIGINT, _handle_sigint)
-        except ValueError:
-            pass  # Not on main thread (e.g., SubprocVecEnv)
 
         atexit.register(self.close)
         self._handlers_registered = True

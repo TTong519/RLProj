@@ -90,7 +90,7 @@ def assets_download(
         downloaded = download_meshes(names, output_dir=output_dir)
     except ImportError as e:
         typer.echo(f"Error: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
     if downloaded:
         typer.echo(f"Downloaded {len(downloaded)}/{len(names)} file(s):")
@@ -706,7 +706,7 @@ def cli_tune(
         surg-rl tune --algorithm SAC --scheduler pbt
     """
     try:
-        from ray import tune
+        import ray  # noqa: F401 — availability guard; tune is used inside run_tune_experiment
 
         from surg_rl.rl.rllib.config import RllibConfig
         from surg_rl.rl.rllib.tune_integration import build_tune_search_space, run_tune_experiment
@@ -781,10 +781,7 @@ def cli_checkpoint_inspect(
             raise typer.Exit(1)
 
         # Sniff format
-        if path_obj.is_dir():
-            info = inspect_rllib_checkpoint(path)
-        else:
-            info = inspect_sb3_checkpoint(path)
+        info = inspect_rllib_checkpoint(path) if path_obj.is_dir() else inspect_sb3_checkpoint(path)
 
         console.print(f"[bold cyan]Checkpoint: {path}[/bold cyan]")
         console.print(f"  Format: {info['format'].upper()}")
@@ -981,7 +978,7 @@ def ros2_replay(
             f"  sudo apt install ros-humble-rclpy ros-humble-std-msgs\n"
             f"\nDetails: {exc}"
         )
-        raise typer.Exit(1)
+        raise typer.Exit(1) from exc
 
     typer.echo(f"Replaying {checkpoint} at {speed:.0%} speed on {command_topic}")
 
@@ -1398,7 +1395,7 @@ def dreamer_train(
         raise typer.Exit(1) from e
     except KeyboardInterrupt:
         console.print("[yellow]Training interrupted by user[/yellow]")
-        raise typer.Exit(130)
+        raise typer.Exit(130) from None
 
 
 @app.command(name="dreamer-spike")

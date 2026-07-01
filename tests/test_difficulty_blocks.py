@@ -22,24 +22,16 @@ import pytest
 from pydantic import ValidationError
 
 from surg_rl.dynamics.difficulty_wiring import (
-    ABSTRACT_TO_CONCRETE,
     compose_difficulty_overrides,
 )
 from surg_rl.rl import DifficultyLevel
 from surg_rl.rl.difficulty import DifficultyLevelConfig
 from surg_rl.rl.environment import SurgicalEnv, SurgicalEnvConfig
 from surg_rl.rl.rewards import (
-    CuttingReward,
-    DissectionReward,
-    GraspingReward,
-    KnotTyingReward,
-    NeedlePassingReward,
     SuturingReward,
 )
-from surg_rl.rl.task_reward_router import TASK_REWARD_REGISTRY, TaskRewardRouter
 from surg_rl.scene_definition.loader import SceneLoader, SceneValidationError
 from surg_rl.scene_definition.schema import TaskConfig
-
 
 # =============================================================================
 # SC#1 — scene JSON round-trip for TaskConfig.difficulty_blocks
@@ -161,8 +153,14 @@ class TestNamingAudit:
         historical record). ``grep`` exits 1 when no matches are found.
         """
         result = subprocess.run(
-            ["grep", "-rn", "difficulty_levels",
-             ".planning/PROJECT.md", ".planning/STATE.md", "src/surg_rl/"],
+            [
+                "grep",
+                "-rn",
+                "difficulty_levels",
+                ".planning/PROJECT.md",
+                ".planning/STATE.md",
+                "src/surg_rl/",
+            ],
             capture_output=True,
             text=True,
         )
@@ -222,9 +220,7 @@ class TestPrecedenceTruthTable:
             ("blocks_time_limit_inert", DifficultyLevel.HARD, 1.0, True),
         ],
     )
-    def test_precedence_resolution(
-        self, source, level, expected_scalar, blocks_present
-    ):
+    def test_precedence_resolution(self, source, level, expected_scalar, blocks_present):
         """SC#2 parametrized truth table: 4 precedence levels + inert surface."""
         scene = _load_suturing_scene()
         # Reset negotiable fields to a clean baseline per case.
@@ -247,9 +243,7 @@ class TestPrecedenceTruthTable:
             # and DISTINCT from the HARD interpolated baseline (0.002) so the
             # override is observable.
             scene.task.difficulty_blocks = {
-                DifficultyLevel.HARD: DifficultyLevelConfig(
-                    target_precision_tolerance=0.008
-                )
+                DifficultyLevel.HARD: DifficultyLevelConfig(target_precision_tolerance=0.008)
             }
         elif source == "config_difficulty":
             config_difficulty = 0.25
@@ -279,39 +273,29 @@ class TestPrecedenceTruthTable:
             # The reward fn is always a CompositeReward for a tasked scene.
             assert env._reward_fn is not None
             reward_list = [r for (r, _w) in env._reward_fn.components]
-            suturing = next(
-                (r for r in reward_list if isinstance(r, SuturingReward)), None
-            )
+            suturing = next((r for r in reward_list if isinstance(r, SuturingReward)), None)
             assert suturing is not None, "SuturingReward not in composite"
 
             if source == "blocks":
                 # Mapped override reached the ctor field (0.008, NOT 0.002).
-                assert suturing.position_threshold == pytest.approx(
-                    0.008, abs=1e-9
-                ), (
+                assert suturing.position_threshold == pytest.approx(0.008, abs=1e-9), (
                     "blocks override did not reach SuturingReward.position_threshold "
                     f"(got {suturing.position_threshold})"
                 )
             elif source == "task_difficulty_level":
                 # HARD interpolated baseline (no blocks) -> 0.002.
                 assert suturing.position_threshold == pytest.approx(
-                    SuturingReward.interpolate_params(1.0)[
-                        "needle_position_tolerance"
-                    ],
+                    SuturingReward.interpolate_params(1.0)["needle_position_tolerance"],
                     abs=1e-9,
                 )
             elif source == "config_difficulty":
                 assert suturing.position_threshold == pytest.approx(
-                    SuturingReward.interpolate_params(0.25)[
-                        "needle_position_tolerance"
-                    ],
+                    SuturingReward.interpolate_params(0.25)["needle_position_tolerance"],
                     abs=1e-9,
                 )
             elif source == "default":
                 assert suturing.position_threshold == pytest.approx(
-                    SuturingReward.interpolate_params(0.5)[
-                        "needle_position_tolerance"
-                    ],
+                    SuturingReward.interpolate_params(0.5)["needle_position_tolerance"],
                     abs=1e-9,
                 )
             elif source == "blocks_time_limit_inert":
@@ -319,9 +303,7 @@ class TestPrecedenceTruthTable:
                 # INERT on the reward ctor surface — position_threshold stays
                 # at the HARD interpolated baseline (0.002), NOT 90.0.
                 assert suturing.position_threshold == pytest.approx(
-                    SuturingReward.interpolate_params(1.0)[
-                        "needle_position_tolerance"
-                    ],
+                    SuturingReward.interpolate_params(1.0)["needle_position_tolerance"],
                     abs=1e-9,
                 ), (
                     "time_limit override leaked into position_threshold "
@@ -354,9 +336,7 @@ def test_blocks_inert_under_continuous_curriculum():
     """
     scene = _load_suturing_scene()
     scene.task.difficulty_blocks = {
-        DifficultyLevel.HARD: DifficultyLevelConfig(
-            target_precision_tolerance=0.008
-        )
+        DifficultyLevel.HARD: DifficultyLevelConfig(target_precision_tolerance=0.008)
     }
     config = SurgicalEnvConfig(
         scene=scene,
@@ -374,19 +354,15 @@ def test_blocks_inert_under_continuous_curriculum():
         env._controller._curriculum = SimpleNamespace(current_difficulty=0.37)
         env._setup_rewards()
 
-        assert env._task_difficulty == pytest.approx(0.37, abs=1e-9), (
-            f"expected continuous scalar 0.37, got {env._task_difficulty}"
-        )
+        assert env._task_difficulty == pytest.approx(
+            0.37, abs=1e-9
+        ), f"expected continuous scalar 0.37, got {env._task_difficulty}"
         # Blocks override value is 0.008; the interpolated value at 0.37 is
         # 0.02 + (0.002 - 0.02) * 0.37 = 0.0155 - must NOT equal 0.008.
-        expected_interpolated = SuturingReward.interpolate_params(0.37)[
-            "needle_position_tolerance"
-        ]
+        expected_interpolated = SuturingReward.interpolate_params(0.37)["needle_position_tolerance"]
         reward_list = [r for (r, _w) in env._reward_fn.components]
         suturing = next(r for r in reward_list if isinstance(r, SuturingReward))
-        assert suturing.position_threshold == pytest.approx(
-            expected_interpolated, abs=1e-9
-        ), (
+        assert suturing.position_threshold == pytest.approx(expected_interpolated, abs=1e-9), (
             "blocks override leaked through under continuous curriculum "
             f"(got {suturing.position_threshold}, expected {expected_interpolated})"
         )
@@ -408,9 +384,7 @@ def test_apply_params_delegates_on_suturing():
     """
     reward = SuturingReward()
     reward.apply_difficulty(1.0)
-    expected_hard = SuturingReward.interpolate_params(1.0)[
-        "needle_position_tolerance"
-    ]
+    expected_hard = SuturingReward.interpolate_params(1.0)["needle_position_tolerance"]
     assert reward.position_threshold == pytest.approx(expected_hard, abs=1e-9), (
         f"apply_difficulty(1.0) delegate broke: got {reward.position_threshold}, "
         f"expected {expected_hard}"
@@ -485,9 +459,7 @@ class TestSixSceneThreeLevelRegression:
     @pytest.mark.parametrize(
         ("scene_file", "level_name", "level", "scalar"),
         _six_by_three_cases(),
-        ids=[
-            f"{sf}-{ln}" for sf in _SIX_SCENE_FILES for (ln, _l, _s) in _THREE_LEVELS
-        ],
+        ids=[f"{sf}-{ln}" for sf in _SIX_SCENE_FILES for (ln, _l, _s) in _THREE_LEVELS],
     )
     def test_six_scenes_three_levels_construct_and_step(
         self, scene_file, level_name, level, scalar
@@ -509,9 +481,9 @@ class TestSixSceneThreeLevelRegression:
         env = SurgicalEnv(config)
         try:
             # Construct-only baseline: _setup_rewards ran.
-            assert env._reward_fn is not None, (
-                f"{scene_file}/{level_name}: _setup_rewards did not set _reward_fn"
-            )
+            assert (
+                env._reward_fn is not None
+            ), f"{scene_file}/{level_name}: _setup_rewards did not set _reward_fn"
             # Resolved difficulty matches the level's canonical scalar.
             assert env._task_difficulty == pytest.approx(scalar, abs=1e-9), (
                 f"{scene_file}/{level_name}: _task_difficulty="
@@ -582,8 +554,7 @@ class TestHardFixtureScalarEquivalence:
         try:
             # Byte-identical v0.4.2 scalar (literal 1.0 — not a computed value).
             assert env._task_difficulty == 1.0, (
-                "v0.4.2 hard-fixture scalar drifted: expected 1.0, got "
-                f"{env._task_difficulty}"
+                "v0.4.2 hard-fixture scalar drifted: expected 1.0, got " f"{env._task_difficulty}"
             )
             assert env._reward_fn is not None
         finally:

@@ -11,8 +11,6 @@ byte-identical. When ``progression_mode="discrete"`` the scheduler walks
 ``_meets_success_threshold`` helper (corrected D-11).
 """
 
-import pytest
-
 from surg_rl.dynamics.curriculum import (
     CurriculumConfig,
     CurriculumScheduler,

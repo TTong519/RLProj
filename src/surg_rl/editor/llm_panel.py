@@ -1,4 +1,5 @@
 """LLMPanel - the LLM-prompt-to-JSON dock widget (per GUI-07 + D-13..D-16)."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -26,6 +27,7 @@ class TextParserWorker(QtCore.QObject):
         self._provider = provider
         self._api_key = api_key
         from surg_rl.scene_generation.text_parser import TextParser
+
         self._parser = TextParser(provider=provider, api_key=api_key)
 
     @QtCore.Slot(str)
@@ -66,6 +68,7 @@ class LLMPanel(QtWidgets.QWidget):
         self._provider_combo.addItems(["openai", "anthropic", "ollama"])
         try:
             from surg_rl.editor._settings import EditorSettings
+
             last_provider = EditorSettings().last_provider()
             if last_provider:
                 idx = self._provider_combo.findText(last_provider)
@@ -102,6 +105,7 @@ class LLMPanel(QtWidgets.QWidget):
             return
         try:
             from surg_rl.utils.config import get_settings
+
             settings = get_settings()
         except Exception:
             settings = None
@@ -128,6 +132,7 @@ class LLMPanel(QtWidgets.QWidget):
 
     def _on_parse_finished(self, scene: SceneDefinition) -> None:
         import json
+
         self._current_scene = scene
         self._preview.setPlainText(json.dumps(scene.model_dump(mode="json"), indent=2))
         self._btn_generate.setEnabled(True)
@@ -151,6 +156,7 @@ class LLMPanel(QtWidgets.QWidget):
     def _on_provider_changed(self, provider: str) -> None:
         try:
             from surg_rl.editor._settings import EditorSettings
+
             EditorSettings().set_last_provider(provider)
         except ImportError:
             pass
