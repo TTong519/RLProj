@@ -536,7 +536,7 @@ class TestRos2BridgeGapFixes:
 
         with (
             patch("surg_rl.rl.environment.HAS_ROS2", True),
-            patch("surg_rl.ros2.__init__.HAS_ROS2", True),
+            patch("surg_rl.ros2.HAS_ROS2", True),
             patch("surg_rl.rl.environment.multiprocessing.Process") as mock_proc,
             patch.dict("sys.modules", {"rclpy": MagicMock()}),
         ):
@@ -569,7 +569,7 @@ class TestRos2BridgeGapFixes:
 
         with (
             patch("surg_rl.rl.environment.HAS_ROS2", True),
-            patch("surg_rl.ros2.__init__.HAS_ROS2", True),
+            patch("surg_rl.ros2.HAS_ROS2", True),
             patch("surg_rl.rl.environment.multiprocessing.Process") as mock_proc,
             patch.dict("sys.modules", {"rclpy": MagicMock()}),
         ):
