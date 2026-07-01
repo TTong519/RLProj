@@ -33,6 +33,11 @@ import hashlib
 import numpy as np
 import pytest
 
+# phi (phiflow) is an optional `simulation` extra; FluidSimulator methods import
+# it lazily. Skip the whole module when phi is absent so CI installs without the
+# simulation extra stay green. See debug session ci-failures-lint-pybullet (C1).
+pytest.importorskip("phi")
+
 from surg_rl.scene_definition.schema import (
     BoundingBox,
     FluidConfig,

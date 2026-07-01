@@ -10,6 +10,12 @@ extraction is byte-identical.
 from __future__ import annotations
 
 import numpy as np
+import pytest
+
+# phi (phiflow) is an optional `simulation` extra; the 3D fixtures below build
+# PhiFlow fields. Skip the whole module when phi is absent. See debug session
+# ci-failures-lint-pybullet (C1).
+pytest.importorskip("phi")
 
 from surg_rl.fluids.visualizer import render_fluid_2d, render_fluid_3d
 
