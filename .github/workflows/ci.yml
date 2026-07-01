@@ -73,7 +73,25 @@ jobs:
         if: runner.os == 'macOS'
         id: mjpython
         run: |
-          MJPYTHON=$(python -c "import mujoco; import os; print(os.path.join(os.path.dirname(mujoco.__path__[0]), 'bin', 'mjpython'))")
+          MJPYTHON=$(python -c '
+          import mujoco, os, shutil
+          # The mujoco package installs an mjpython console script under the
+          # interpreter bin dir (the prior os.path.dirname(mujoco.__path__[0]) +
+          # "/bin/mjpython" form resolved to <site-packages>/bin/mjpython which
+          # does NOT exist). Prefer the console script on PATH; fall back to the
+          # app-bundle binary shipped inside the mujoco package itself.
+          cand = shutil.which("mjpython")
+          if not cand or not os.path.exists(cand):
+              cand = os.path.join(
+                  mujoco.__path__[0],
+                  "MuJoCo_(mjpython).app", "Contents", "MacOS", "mjpython",
+              )
+          print(cand)
+          ')
+          if [ ! -x "$MJPYTHON" ]; then
+            echo "::error::mjpython not found (resolved to $MJPYTHON)"
+            exit 1
+          fi
           echo "path=$MJPYTHON" >> "$GITHUB_OUTPUT"
           echo "Found mjpython at: $MJPYTHON"
 
