@@ -1,5 +1,8 @@
 """Tests for SurgicalEnv environment wrapper."""
 
+import os
+import sys
+
 import numpy as np
 import pytest
 
@@ -262,6 +265,13 @@ class TestRos2BridgeEnvLifecycle:
         # rgb may be None if renderer unavailable
         env.close()
 
+    @pytest.mark.skipif(
+        sys.platform == "darwin" and bool(os.environ.get("CI")),
+        reason="render_mode='human' tries to create a Cocoa GL window under "
+        "mjpython; on headless macOS CI runners this segfaults the mjpython "
+        "process (hard crash, no traceback). Linux CI headless falls back to "
+        "None cleanly. See debug ci-failures-lint-pybullet (Class D follow-up).",
+    )
     def test_render_human_returns_none(self):
         config = SurgicalEnvConfig(
             scene_path="scenes/minimal_scene.json",
