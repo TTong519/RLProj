@@ -52,10 +52,10 @@ _E2E_WRITE_JOB_POD_LABELS = "app=surg-rl,component=e2e"
 def _dump_pvc_diagnostics(kind_cluster: KindCluster, *, label: str) -> None:
     """Print PVC + pod state to stderr for post-mortem root-cause analysis.
 
-    Called when `kubectl wait --for=condition=Bound pvc/...` times out. The
-    timeout alone tells us the PVC stayed Pending for 180s but NOT WHY --
-    kind's default `standard` StorageClass uses
-    `volumeBindingMode: WaitForFirstConsumer`, so a Pending PVC can mean:
+    Called when the PVC Bound wait times out. The timeout alone tells us the
+    PVC stayed Pending for 180s but NOT WHY -- kind's default `standard`
+    StorageClass uses `volumeBindingMode: WaitForFirstConsumer`, so a Pending
+    PVC can mean:
       (a) the write-Job pod never scheduled (FailedScheduling /
           no-available-topology),
       (b) the write-Job pod is in ImagePullBackOff (busybox:1.36 rate-limit
@@ -100,20 +100,32 @@ def _dump_pvc_diagnostics(kind_cluster: KindCluster, *, label: str) -> None:
 def _kubectl_wait_bound(kind_cluster: KindCluster, *, timeout: str = "180s") -> None:
     """Wait for PVC Bound, dumping diagnostics on timeout before re-raising.
 
-    Wraps `kubectl wait --for=condition=Bound pvc/surg-rl-checkpoints` so that
-    on the (currently-expected) timeout the test prints
-    `kubectl describe pvc` + `kubectl describe pod -l <e2e-labels>` + related
-    state to stderr BEFORE re-raising the original CalledProcessError. This
-    turns an opaque "timed out waiting for the condition" into a
-    root-cause-revealing Events section (FailedScheduling / ImagePullBackOff /
-    ProvisioningFailed / WaitForFirstConsumer timing) for the next CI run's
-    log, without changing the wait strategy or binding mode.
+    Uses `kubectl wait --for=jsonpath='{.status.phase}'=Bound pvc/...` -- the
+    CORRECT PVC-bound wait idiom. PVCs (v1 core API) do NOT populate
+    `.status.conditions` at all; they expose bound state via `.status.phase`
+    (Pending / Bound / Lost). The structurally-broken
+    `--for=condition=Bound` form polls `.status.conditions[].type == "Bound"`,
+    which can never exist on a PVC, so it ALWAYS times out at 180s regardless
+    of actual binding state (root cause of run 28606248332 k8s-e2e failure:
+    the PVC was Bound in ~14s but the wait timed out 180s later).
+
+    On a FUTURE timeout (for any NEW reason -- FailedScheduling /
+    ImagePullBackOff / ProvisioningFailed / WaitForFirstConsumer timing), the
+    wrapper prints `kubectl describe pvc` + `kubectl describe pod -l
+    <e2e-labels>` + related state to stderr BEFORE re-raising the original
+    CalledProcessError. This turns an opaque "timed out" into a
+    root-cause-revealing Events section for the next CI run's log. The
+    diagnostics are a regression tripwire: the wait idiom is now correct, so a
+    timeout here means a NEW failure class worth surfacing.
     """
     try:
-        # Keep single-line so the acceptance grep `kubectl("wait", "--for=condition=Bound"`
-        # matches; the full call is >100 chars, so `# fmt: skip` prevents black from wrapping
-        # it and breaking the grep.
-        kind_cluster.kubectl("wait", "--for=condition=Bound", "pvc/surg-rl-checkpoints", f"--timeout={timeout}")  # fmt: skip
+        # `--for=jsonpath='{.status.phase}'=Bound` polls the field PVCs
+        # actually populate. Single-quoted per kubectl's shell requirement
+        # (the jsonpath expression contains `{}` which the shell would
+        # otherwise glob). `# fmt: skip` keeps the call single-line so the
+        # regression guard in tests/test_pvc_wait_idiom.py can match the
+        # exact substring `--for=jsonpath='{.status.phase}'=Bound`.
+        kind_cluster.kubectl("wait", "--for=jsonpath='{.status.phase}'=Bound", "pvc/surg-rl-checkpoints", f"--timeout={timeout}")  # fmt: skip
     except subprocess.CalledProcessError:
         # Surface the real Pending cause BEFORE re-raising. Diagnostics are
         # best-effort; a failure inside _dump_pvc_diagnostics is swallowed so
@@ -176,16 +188,13 @@ def test_pvc_checkpoint_persistence(kind_cluster) -> None:
     kind_cluster.kubectl("apply", "-k", "k8s/overlays/e2e")
 
     # 2. Wait for the PVC to bind (consumer pod scheduling triggers binding).
-    # The wait is wrapped in `_kubectl_wait_bound` so that on the (currently-
-    # expected) timeout the test dumps `kubectl describe pvc/pod` + Events
-    # section to stderr BEFORE re-raising -- revealing the REAL Pending cause
-    # (FailedScheduling / ImagePullBackOff on busybox:1.36 / ProvisioningFailed
-    # / WaitForFirstConsumer timing) in the next CI run's log. Pure
-    # observability; no wait-strategy or binding-mode change.
-    # NOTE: the original `# fmt: skip` (kept single-line for the acceptance
-    # grep `kubectl("wait", "--for=condition=Bound"`) is no longer needed at
-    # the call site -- the grep target is the helper definition above, which
-    # IS single-line and contains the exact substring.
+    # The wait uses `--for=jsonpath='{.status.phase}'=Bound` -- the CORRECT
+    # PVC-bound idiom (PVCs expose bound state via .status.phase, NOT
+    # .status.conditions[]). The wrapper dumps `kubectl describe pvc/pod` +
+    # Events to stderr on timeout as a regression tripwire: the wait idiom is
+    # now correct, so a timeout here means a NEW failure class worth
+    # surfacing (FailedScheduling / ImagePullBackOff / ProvisioningFailed /
+    # WaitForFirstConsumer timing).
     _kubectl_wait_bound(kind_cluster, timeout="180s")
 
     # 3. Wait for the write Job to complete (writes 4096 random bytes to
