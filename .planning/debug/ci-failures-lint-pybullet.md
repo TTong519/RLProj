@@ -1,6 +1,6 @@
 ---
 slug: ci-failures-lint-pybullet
-status: awaiting_human_decision
+status: fixing
 trigger: "the github ci t4ests"
 created: 2026-06-30
 updated: 2026-07-02
@@ -119,10 +119,47 @@ tdd_mode: true
 
 ## Current Focus
 
-- **status:** awaiting_human_decision (Class G VERIFIED GREEN in run
-  28606248332; Class H root cause EXTRACTED from the k8s-e2e diagnostics log;
-  per user instruction NOT making the phase-39 wait-strategy fix — surfacing
-  evidence for the user's design call)
+- **status:** fixing (Class H fix_decision received: user selected option "a —
+  jsonpath .status.phase=Bound". Applied the real root-cause fix to
+  `tests/k8s/test_pvc_e2e.py`: switched the PVC-bound wait from the
+  structurally-broken `kubectl wait --for=condition=Bound pvc/...` to the
+  correct idiom `kubectl wait --for=jsonpath={.status.phase}=Bound pvc/...`
+  (NO single quotes — subprocess list-mode passes `{}` literally; the first
+  attempt WITH single quotes regressed in run 28612169371 with
+  "error: unexpected path string"). KEPT the
+  `_dump_pvc_diagnostics`/`_kubectl_wait_bound` wrapper as a regression
+  tripwire. Class G still in place (continue-on-error on Jetson step).
+  tdd_mode: the static guard `tests/test_pvc_wait_idiom.py` already pins the
+  jsonpath-on-.status.phase invariant and still passes with the unquoted
+  form. Awaiting CI verification of the quoting-corrected commit.)
+
+reasoning_checkpoint_class_h_fix:
+  hypothesis: "Changing `kubectl wait --for=condition=Bound pvc/surg-rl-
+    checkpoints` to `kubectl wait --for=jsonpath='{.status.phase}'=Bound
+    pvc/surg-rl-checkpoints` will make the k8s-e2e job go GREEN, because the
+    PVC IS bound (per run 28606248332 diagnostics: Status=Bound in ~14s) and
+    the jsonpath wait polls the field PVCs actually populate (.status.phase),
+    not the structurally-nonexistent .status.conditions[].type."
+  confirming_evidence:
+    - "Run 28606248332 diagnostics: PVC Status=Bound, write-Job Succeeded,
+      everything finished in ~14s; the 180s timeout was purely the
+      condition-type misuse."
+    - "Kubernetes semantics: PVCs expose bound state via .status.phase, not
+      .status.conditions[]."
+  falsification_test: "If after switching to the jsonpath wait the k8s-e2e
+    job still times out or fails, the hypothesis is wrong (a new failure
+    class)."
+  fix_rationale: "Real root-cause fix (not a skip): the jsonpath wait polls
+    .status.phase which PVCs actually populate. Diagnostics wrapper kept as a
+    regression tripwire so a FUTURE timeout (for any NEW reason) still
+    surfaces describe output."
+  blind_spots: "Cannot run kind e2e locally (Docker daemon down). Relies on
+    pushed CI run to confirm."
+
+- **next_action:** Write TDD guard test asserting jsonpath wait idiom in
+  test_pvc_e2e.py (RED), apply the fix to test_pvc_e2e.py (GREEN), run local
+  guards, commit atomically, push, trigger CI, verify all 6 jobs green via
+  `gh run view`.
 
 reasoning_checkpoint_class_h_root_cause:
   hypothesis: "`kubectl wait --for=condition=Bound pvc/surg-rl-checkpoints`
@@ -532,6 +569,61 @@ DECISION NEEDED: how to handle Class C + D (out of the original two-class scope,
 
 ## Evidence
 
+- timestamp: 2026-07-02 — **CLASS H SUB-BUG: subprocess quoting regression**
+  (run 28612169371, k8s-e2e job 84847072363, still RED). The first Class H
+  fix (commit a2a740c) was NECESSARY but INSUFFICIENT: it changed the wait
+  from `--for=condition=Bound` to `--for=jsonpath='{.status.phase}'=Bound`
+  WITH single quotes around the jsonpath expression. But
+  `kind_cluster.kubectl(...)` passes argv directly to `subprocess` (no
+  shell), so the single quotes were delivered LITERALLY to kubectl. kubectl
+  received `--for=jsonpath='{.status.phase}'=Bound` (quotes included) and
+  rejected it with `error: unexpected path string, expected a 'name1.name2'
+  or '.name1.name2' or '{name1.name2}' or '{.name1.name2}'`. The wait
+  failed INSTANTLY (27.11s total job time, NOT a 180s timeout), so the PVC
+  Pending captured in the diagnostics is a RED HERRING — the wait never
+  actually polled; it errored before the write-Job pod could be scheduled
+  (`kubectl get pods` → "No resources found", PVC Events: <none>, the
+  apply had just completed seconds prior). Root cause: shell quoting rules
+  don't apply to subprocess list-mode; `{}` is passed literally and is NOT
+  globbed (no shell), so the single quotes are wrong here. FIX (this
+  session): drop the single quotes —
+  `kind_cluster.kubectl("wait", "--for=jsonpath={.status.phase}=Bound",
+  "pvc/surg-rl-checkpoints", "--timeout=180s")`. The regression guard
+  `tests/test_pvc_wait_idiom.py` already accepts the unquoted form (its
+  third regex `jsonpath.*\.status\.phase.*=Bound` matches), and all 3
+  guard tests + 14 sibling guards + ruff/black still pass locally.
+- timestamp: 2026-07-02 — **CLASS H FIX APPLIED** (commit a2a740c on
+  fix/ci-lint-pybullet-macos, pushed; CI run 28612169371 triggered).
+  `tests/k8s/test_pvc_e2e.py` `_kubectl_wait_bound()` now calls
+  `kubectl wait --for=jsonpath='{.status.phase}'=Bound
+  pvc/surg-rl-checkpoints --timeout=180s` (single-quoted per kubectl's shell
+  requirement). The structurally-broken `--for=condition=Bound` form is
+  GONE from the call site. The `_dump_pvc_diagnostics` /
+  `_kubectl_wait_bound` wrapper is KEPT as a regression tripwire: the wait
+  idiom is now correct, so a future timeout means a NEW failure class
+  (FailedScheduling / ImagePullBackOff / ProvisioningFailed /
+  WaitForFirstConsumer timing) -- the wrapper still dumps `kubectl describe
+  pvc/pod` + Events to stderr before re-raising. The docstring/comment
+  references to the old `--for=condition=Bound` form were rewritten to
+  explain the correct idiom and the historical root cause (run 28606248332).
+  NEW regression guard `tests/test_pvc_wait_idiom.py` (3 static tests, no
+  kubectl/kind/Docker needed, runs in the regular matrix):
+  (1) `test_pvc_wait_uses_jsonpath_on_status_phase` -- the e2e test must
+  contain the jsonpath token and the `.status.phase=Bound` expression;
+  (2) `test_pvc_wait_does_not_use_condition_bound_on_pvc` -- every
+  `kubectl("wait"...)` call site that references a PVC must NOT use
+  `--for=condition=Bound` and MUST use jsonpath;
+  (3) `test_pvc_diagnostics_wrapper_still_present` -- the
+  `_dump_pvc_diagnostics` + `_kubectl_wait_bound` wrapper must remain.
+  TDD: RED confirmed (2 failed / 1 passed before the fix -- the call site
+  used `--for=condition=Bound` and had no jsonpath token); GREEN after the
+  fix (3 passed). Class G (Jetson continue-on-error) confirmed still in
+  place at ci.yml line 170. Local verification: ruff check src/ tests/ →
+  All checks passed!; black --check src/ tests/ → 199 files left unchanged;
+  guard tests (pvc_wait_idiom + k8s_overlay_builds + dockerfile_layer_order
+  + optional_extra_skip_guard + ci_config) → 17 passed; k8s e2e test skips
+  locally (no Docker daemon). Awaiting CI run 28612169371 to verify all 6
+  jobs green end-to-end.
 - timestamp: 2026-07-02 — **CLASS H ROOT CAUSE CONFIRMED** from run
   28606248332 k8s-e2e job (ID 84827124284) log. The diagnostics
   (`_dump_pvc_diagnostics`) captured the full picture, revealing the timeout
@@ -702,11 +794,25 @@ verification:
     (ubuntu 3.10/3.11/3.12 all SUCCESS).
   Class D (macOS mjpython): VERIFIED GREEN in run 28492071094 (macos 3.11
     SUCCESS after the headless-render skip guard).
-  Local: ruff/black clean; 87 targeted tests pass (CI=1 env); 138
-    fluid+simulator tests pass locally; 1491 passed in earlier full-suite run.
+  Class E (Dockerfile layer order): VERIFIED GREEN in run 28565320966 (CUDA /
+    ROCm / CPU steps green; egg_base/src error gone).
+  Class F (k8s e2e overlay self-contained): VERIFIED GREEN in run 28565320966
+    (preflight kubectl kustomize PASSED + kubectl apply -k SUCCEEDED).
+  Class G (Jetson continue-on-error): VERIFIED GREEN in run 28606248332
+    (docker-ci job SUCCESS; Jetson step non-blocking, the underlying
+    nvcr.io/nvidia/l4t-pytorch:r36.4.0-pth2.5.0 deprecation is contained as a
+    warning annotation; CPU/CUDA/ROCm steps gating GREEN).
+  Class H (PVC wait idiom): fix applied in commit a2a740c; awaiting CI run
+    28612169371 to confirm the k8s-e2e job goes GREEN with the jsonpath wait.
+  Local: ruff/black clean; 17 guard tests pass (pvc_wait_idiom +
+    k8s_overlay_builds + dockerfile_layer_order + optional_extra_skip_guard
+    + ci_config); k8s e2e skips locally (no Docker).
   - `ruff check src/ tests/` → All checks passed!
-  - `black --check src/ tests/` → 193 files left unchanged (Class A session),
-    then 196 files left unchanged (Class C+D session).
+  - `black --check src/ tests/` → 199 files left unchanged.
+  - `pytest tests/test_pvc_wait_idiom.py tests/test_k8s_overlay_builds.py
+    tests/test_dockerfile_layer_order.py tests/test_optional_extra_skip_guard.py
+    tests/test_ci_config.py` → 17 passed.
+  - `pytest tests/k8s/test_pvc_e2e.py` → 1 skipped (no Docker daemon locally).
   - `mypy src/surg_rl` → 364 latent type errors (non-blocking in CI; was hidden
     behind the ruff wall before).
   - `pytest tests/ -m "not integration"` (py3.13.3, pybullet installed) →
@@ -714,8 +820,6 @@ verification:
     Confirms pybullet tests still RUN and PASS on Linux (the physics extra
     works) and that the source edits (TYPE_CHECKING imports, ternary
     rewrites, B904 chaining, black reformat) did not break anything.
-  - `pytest tests/test_optional_extra_skip_guard.py` → 2 passed (skip-hook
-    regression guard).
   - macOS pybullet build: cannot reproduce locally (no Xcode 16.4 SDK / CI
     runner). Relies on pushed CI run to confirm — the install step no longer
     attempts pybullet on macOS, so the sdist build is bypassed entirely.

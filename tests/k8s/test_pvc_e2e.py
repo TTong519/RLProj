@@ -100,14 +100,18 @@ def _dump_pvc_diagnostics(kind_cluster: KindCluster, *, label: str) -> None:
 def _kubectl_wait_bound(kind_cluster: KindCluster, *, timeout: str = "180s") -> None:
     """Wait for PVC Bound, dumping diagnostics on timeout before re-raising.
 
-    Uses `kubectl wait --for=jsonpath='{.status.phase}'=Bound pvc/...` -- the
+    Uses `kubectl wait --for=jsonpath={.status.phase}=Bound pvc/...` -- the
     CORRECT PVC-bound wait idiom. PVCs (v1 core API) do NOT populate
     `.status.conditions` at all; they expose bound state via `.status.phase`
     (Pending / Bound / Lost). The structurally-broken
     `--for=condition=Bound` form polls `.status.conditions[].type == "Bound"`,
     which can never exist on a PVC, so it ALWAYS times out at 180s regardless
     of actual binding state (root cause of run 28606248332 k8s-e2e failure:
-    the PVC was Bound in ~14s but the wait timed out 180s later).
+    the PVC was Bound in ~14s but the wait timed out 180s later). NOTE: no
+    single quotes around the jsonpath expression here -- kind_cluster.kubectl
+    passes argv directly to subprocess (no shell), so `{}` is literal; adding
+    shell-style quotes makes kubectl reject the path (run 28612169371
+    regression: "error: unexpected path string").
 
     On a FUTURE timeout (for any NEW reason -- FailedScheduling /
     ImagePullBackOff / ProvisioningFailed / WaitForFirstConsumer timing), the
@@ -119,13 +123,17 @@ def _kubectl_wait_bound(kind_cluster: KindCluster, *, timeout: str = "180s") -> 
     timeout here means a NEW failure class worth surfacing.
     """
     try:
-        # `--for=jsonpath='{.status.phase}'=Bound` polls the field PVCs
-        # actually populate. Single-quoted per kubectl's shell requirement
-        # (the jsonpath expression contains `{}` which the shell would
-        # otherwise glob). `# fmt: skip` keeps the call single-line so the
-        # regression guard in tests/test_pvc_wait_idiom.py can match the
-        # exact substring `--for=jsonpath='{.status.phase}'=Bound`.
-        kind_cluster.kubectl("wait", "--for=jsonpath='{.status.phase}'=Bound", "pvc/surg-rl-checkpoints", f"--timeout={timeout}")  # fmt: skip
+        # `--for=jsonpath={.status.phase}=Bound` polls the field PVCs actually
+        # populate. NO single quotes here: kind_cluster.kubectl passes argv
+        # directly to subprocess (no shell), so the `{}` in the jsonpath is
+        # NOT subject to shell globbing. Adding single quotes (as required in
+        # a real shell) makes kubectl receive the LITERAL `'{{.status.phase}}'`
+        # (quotes included) and reject it with
+        # "error: unexpected path string" (run 28612169371 regression). The
+        # `# fmt: skip` keeps the call single-line so the regression guard in
+        # tests/test_pvc_wait_idiom.py can match the exact substring
+        # `--for=jsonpath={{.status.phase}}=Bound`.
+        kind_cluster.kubectl("wait", "--for=jsonpath={.status.phase}=Bound", "pvc/surg-rl-checkpoints", f"--timeout={timeout}")  # fmt: skip
     except subprocess.CalledProcessError:
         # Surface the real Pending cause BEFORE re-raising. Diagnostics are
         # best-effort; a failure inside _dump_pvc_diagnostics is swallowed so
@@ -188,13 +196,14 @@ def test_pvc_checkpoint_persistence(kind_cluster) -> None:
     kind_cluster.kubectl("apply", "-k", "k8s/overlays/e2e")
 
     # 2. Wait for the PVC to bind (consumer pod scheduling triggers binding).
-    # The wait uses `--for=jsonpath='{.status.phase}'=Bound` -- the CORRECT
+    # The wait uses `--for=jsonpath={.status.phase}=Bound` -- the CORRECT
     # PVC-bound idiom (PVCs expose bound state via .status.phase, NOT
-    # .status.conditions[]). The wrapper dumps `kubectl describe pvc/pod` +
-    # Events to stderr on timeout as a regression tripwire: the wait idiom is
-    # now correct, so a timeout here means a NEW failure class worth
-    # surfacing (FailedScheduling / ImagePullBackOff / ProvisioningFailed /
-    # WaitForFirstConsumer timing).
+    # .status.conditions[]). No shell quotes around the jsonpath: kubectl is
+    # invoked via subprocess (no shell), so `{}` is literal. The wrapper
+    # dumps `kubectl describe pvc/pod` + Events to stderr on timeout as a
+    # regression tripwire: the wait idiom is now correct, so a timeout here
+    # means a NEW failure class worth surfacing (FailedScheduling /
+    # ImagePullBackOff / ProvisioningFailed / WaitForFirstConsumer timing).
     _kubectl_wait_bound(kind_cluster, timeout="180s")
 
     # 3. Wait for the write Job to complete (writes 4096 random bytes to
