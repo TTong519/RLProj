@@ -3,6 +3,10 @@
 import numpy as np
 import pytest
 
+# phi (phiflow) is an optional `simulation` extra; skip the whole module when phi
+# is absent. See debug session ci-failures-lint-pybullet (C1).
+pytest.importorskip("phi")
+
 from surg_rl.scene_definition.schema import (
     BoundingBox,
     FluidConfig,
@@ -249,9 +253,7 @@ class TestFluidSimulatorInit3D:
         fs.step(dt=0.02)
         assert abs(fs._sim_time - 0.02) < 1e-9
 
-    def test_step_returns_empty_forces_without_obstacles_3d(
-        self, basic_config_3d
-    ):
+    def test_step_returns_empty_forces_without_obstacles_3d(self, basic_config_3d):
         from surg_rl.fluids import FluidSimulator
 
         fs = FluidSimulator(basic_config_3d)
@@ -274,8 +276,8 @@ class TestFluidSimulatorObstacles3D:
         assert fs._obstacle_names == ["cyl"]
 
     def test_add_instrument_3d(self, basic_config_3d):
-        from surg_rl.scene_definition.schema import Pose
         from surg_rl.fluids import FluidSimulator
+        from surg_rl.scene_definition.schema import Pose
 
         fs = FluidSimulator(basic_config_3d)
         pose = Pose(position=Position(x=0.15, y=0.15, z=0.10))
@@ -285,8 +287,8 @@ class TestFluidSimulatorObstacles3D:
 
     def test_add_instrument_requires_dim_3d(self, basic_config):
         """add_instrument raises ValueError when dim_3d is False (D-15)."""
-        from surg_rl.scene_definition.schema import Pose
         from surg_rl.fluids import FluidSimulator
+        from surg_rl.scene_definition.schema import Pose
 
         fs = FluidSimulator(basic_config)
         pose = Pose(position=Position(x=0.15, y=0.15, z=0.10))
@@ -303,8 +305,8 @@ class TestFluidSimulatorObstacles3D:
 
     def test_step_with_instrument_stable_3d(self, basic_config_3d):
         """N=5 steps with a thin instrument should not diverge (SC#2 level)."""
-        from surg_rl.scene_definition.schema import Pose
         from surg_rl.fluids import FluidSimulator
+        from surg_rl.scene_definition.schema import Pose
 
         fs = FluidSimulator(basic_config_3d)
         pose = Pose(position=Position(x=0.15, y=0.15, z=0.10))

@@ -153,9 +153,6 @@ def cut_tetrahedral_mesh(
     else:
         new_tets_all = keep_tets.copy()
 
-    if cut_faces_accum:
-        cut_faces = np.vstack(cut_faces_accum)
-    else:
-        cut_faces = np.zeros((0, 3), dtype=np.int32)
+    cut_faces = np.vstack(cut_faces_accum) if cut_faces_accum else np.zeros((0, 3), dtype=np.int32)
 
     return new_vertices_all, new_tets_all, cut_faces

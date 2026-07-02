@@ -9,12 +9,13 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
+
+
 def _rllib_available() -> bool:
     """True only when Ray + dm-tree are importable (Ray needs dm-tree at runtime)."""
     if __import__("importlib").util.find_spec("ray") is None:
         return False
     return __import__("importlib").util.find_spec("tree") is not None
-
 
 
 # --------------------------------------------------------------------------- #

@@ -39,6 +39,10 @@ This is an ADDITIVE test file — it does NOT edit any existing test.
 import numpy as np
 import pytest
 
+# phi (phiflow) is an optional `simulation` extra; skip the whole module when phi
+# is absent. See debug session ci-failures-lint-pybullet (C1).
+pytest.importorskip("phi")
+
 from surg_rl.scene_definition.schema import (
     BoundingBox,
     FluidConfig,

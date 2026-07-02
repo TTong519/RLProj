@@ -57,8 +57,7 @@ class TestBenchmarkSceneCoverage:
             scene = SceneLoader().load(scene_path)
             assert scene.task is not None, f"{scene_path}: no task block"
             assert scene.task.task_type == expected, (
-                f"{scene_path}: expected task_type={expected!r}, "
-                f"got {scene.task.task_type!r}"
+                f"{scene_path}: expected task_type={expected!r}, " f"got {scene.task.task_type!r}"
             )
 
     def test_scenes_use_primitive_fallback(self):

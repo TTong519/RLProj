@@ -8,6 +8,7 @@ Storage is platform-native via ``QSettings`` (registry on Windows,
 ``~/.config/SurgRL/SceneEditor.conf`` on Linux). No API keys are stored here
 — those stay in ``.env`` via ``surg_rl.utils.config.Settings()`` per D-20.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

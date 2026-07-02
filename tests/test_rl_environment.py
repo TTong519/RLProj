@@ -1,5 +1,8 @@
 """Tests for SurgicalEnv environment wrapper."""
 
+import os
+import sys
+
 import numpy as np
 import pytest
 
@@ -163,18 +166,20 @@ class TestRos2BridgeEnvLifecycle:
             ros2_bridge_config=rc,
         )
 
-        with patch("surg_rl.rl.environment.HAS_ROS2", True):
-            with patch("surg_rl.rl.environment.platform.system", return_value="Linux"):
-                with patch("surg_rl.rl.environment.multiprocessing.Process") as mock_process_cls:
-                    env = SurgicalEnv(config)
-                    try:
-                        assert env._bridge is not None
-                        # Verify Process was created via start()
-                        mock_process_cls.assert_called_once()
-                        mock_process = mock_process_cls.return_value
-                        mock_process.start.assert_called_once()
-                    finally:
-                        env.close()
+        with (
+            patch("surg_rl.rl.environment.HAS_ROS2", True),
+            patch("surg_rl.rl.environment.platform.system", return_value="Linux"),
+            patch("surg_rl.rl.environment.multiprocessing.Process") as mock_process_cls,
+        ):
+            env = SurgicalEnv(config)
+            try:
+                assert env._bridge is not None
+                # Verify Process was created via start()
+                mock_process_cls.assert_called_once()
+                mock_process = mock_process_cls.return_value
+                mock_process.start.assert_called_once()
+            finally:
+                env.close()
 
     def test_mocked_step_injects_external_action(self):
         """Test 4: step() calls controller.get_action() — external action injection."""
@@ -209,19 +214,21 @@ class TestRos2BridgeEnvLifecycle:
             ros2_bridge_config=rc,
         )
 
-        with patch("surg_rl.rl.environment.HAS_ROS2", True):
-            with patch("surg_rl.rl.environment.platform.system", return_value="Linux"):
-                mock_bridge = MagicMock()
-                with patch("surg_rl.rl.environment.Ros2Bridge", return_value=mock_bridge):
-                    env = SurgicalEnv(config)
-                    try:
-                        env.reset()
-                        action = env.action_space.sample()
-                        env.step(action)
-                        # publish_joint_state should have been called
-                        mock_bridge.publish_joint_state.assert_called()
-                    finally:
-                        env.close()
+        mock_bridge = MagicMock()
+        with (
+            patch("surg_rl.rl.environment.HAS_ROS2", True),
+            patch("surg_rl.rl.environment.platform.system", return_value="Linux"),
+            patch("surg_rl.rl.environment.Ros2Bridge", return_value=mock_bridge),
+        ):
+            env = SurgicalEnv(config)
+            try:
+                env.reset()
+                action = env.action_space.sample()
+                env.step(action)
+                # publish_joint_state should have been called
+                mock_bridge.publish_joint_state.assert_called()
+            finally:
+                env.close()
 
     def test_no_bridge_ros2_false_warns(self):
         """Test 3: When HAS_ROS2=False, bridge config → _bridge=None, env works."""
@@ -258,6 +265,13 @@ class TestRos2BridgeEnvLifecycle:
         # rgb may be None if renderer unavailable
         env.close()
 
+    @pytest.mark.skipif(
+        sys.platform == "darwin" and bool(os.environ.get("CI")),
+        reason="render_mode='human' tries to create a Cocoa GL window under "
+        "mjpython; on headless macOS CI runners this segfaults the mjpython "
+        "process (hard crash, no traceback). Linux CI headless falls back to "
+        "None cleanly. See debug ci-failures-lint-pybullet (Class D follow-up).",
+    )
     def test_render_human_returns_none(self):
         config = SurgicalEnvConfig(
             scene_path="scenes/minimal_scene.json",
@@ -505,9 +519,7 @@ class TestHumanRenderFallback:
         def _fake_start_viewer(self, target_fps: float = 30.0) -> bool:
             return False
 
-        monkeypatch.setattr(
-            sim_mod.MuJoCoSimulator, "start_viewer", _fake_start_viewer
-        )
+        monkeypatch.setattr(sim_mod.MuJoCoSimulator, "start_viewer", _fake_start_viewer)
 
         config = SurgicalEnvConfig(
             scene_path="scenes/minimal_scene.json",
@@ -535,9 +547,7 @@ class TestHumanRenderFallback:
         def _fake_start_viewer(self, target_fps: float = 30.0) -> bool:
             raise RuntimeError("MuJoCo passive viewer requires 'mjpython' on macOS.")
 
-        monkeypatch.setattr(
-            sim_mod.MuJoCoSimulator, "start_viewer", _fake_start_viewer
-        )
+        monkeypatch.setattr(sim_mod.MuJoCoSimulator, "start_viewer", _fake_start_viewer)
 
         config = SurgicalEnvConfig(
             scene_path="scenes/minimal_scene.json",

@@ -55,8 +55,8 @@ class TestGuiPyprojectSpec:
         ), "pyproject.toml must register surg-rl-gui as a console script"
 
     def test_pyproject_toml_parses(self) -> None:
-        """pyproject.toml parses cleanly via tomllib."""
-        import tomllib
+        """pyproject.toml parses cleanly via tomllib (compat shim handles Py<3.11)."""
+        from surg_rl.utils.toml_compat import tomllib
 
         data = tomllib.loads(PYPROJECT.read_text())
         assert "project" in data

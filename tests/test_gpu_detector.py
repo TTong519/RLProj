@@ -53,11 +53,11 @@ def test_has_cuda_false_no_binary():
 
 
 def test_has_cuda_false_subprocess_fails():
-    with mock.patch("surg_rl.utils.gpu._find_binary", return_value="/usr/bin/nvidia-smi"):
-        with mock.patch(
-            "subprocess.run", side_effect=subprocess.CalledProcessError(1, "nvidia-smi")
-        ):
-            assert _has_cuda() is False
+    with (
+        mock.patch("surg_rl.utils.gpu._find_binary", return_value="/usr/bin/nvidia-smi"),
+        mock.patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "nvidia-smi")),
+    ):
+        assert _has_cuda() is False
 
 
 # ---------------------------------------------------------------------------
@@ -100,11 +100,14 @@ def test_has_intel_true():
 
 
 def test_has_metal_true_darwin():
-    with mock.patch("surg_rl.utils.gpu._find_binary", return_value="/usr/bin/system_profiler"):
-        proc = mock.Mock(returncode=0, stdout="Metal: Yes\n", stderr="")
-        with mock.patch("subprocess.run", return_value=proc):
-            with mock.patch.object(sys, "platform", "darwin"):
-                assert _has_metal() is True
+    with (
+        mock.patch("surg_rl.utils.gpu._find_binary", return_value="/usr/bin/system_profiler"),
+        mock.patch(
+            "subprocess.run", return_value=mock.Mock(returncode=0, stdout="Metal: Yes\n", stderr="")
+        ),
+        mock.patch.object(sys, "platform", "darwin"),
+    ):
+        assert _has_metal() is True
 
 
 def test_has_metal_false_linux():
@@ -171,9 +174,9 @@ def test_select_backend_explicit_unavailable_raises():
         mock.patch("surg_rl.utils.gpu._has_rocm", return_value=False),
         mock.patch("surg_rl.utils.gpu._has_metal", return_value=False),
         mock.patch("surg_rl.utils.gpu._has_intel", return_value=False),
+        pytest.raises(RuntimeError, match="not available"),
     ):
-        with pytest.raises(RuntimeError, match="not available"):
-            select_backend(HardwareBackend.cuda)
+        select_backend(HardwareBackend.cuda)
 
 
 def test_select_backend_cpu_always_works():

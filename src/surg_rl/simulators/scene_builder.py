@@ -1120,7 +1120,7 @@ f 5 4 8
                 spacing=f"{dims[0]/5} {dims[1]/5} {dims[2]/2}",
                 pos="0 0 0",
             )
-                        # Add material properties for the soft body
+            # Add material properties for the soft body
             #
             # Radius: a tiny 0.1 mm value (0.0001 m) instead of the
             # 2 mm (0.002 m) default. The radius attribute in MuJoCo's

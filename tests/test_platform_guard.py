@@ -19,7 +19,6 @@ AppleSilicon with the shim's env vars set) must be allowed.
 """
 
 import importlib.util
-import os
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -70,8 +69,9 @@ def test_plain_python_apple_silicon_not_flagged(monkeypatch):
     _unpatch_omp_shim_env(monkeypatch)
 
     g = _load_guard_fresh()
-    with patch.object(g.platform, "system", return_value="Darwin"), patch.object(
-        g.platform, "machine", return_value="arm64"
+    with (
+        patch.object(g.platform, "system", return_value="Darwin"),
+        patch.object(g.platform, "machine", return_value="arm64"),
     ):
         assert g.is_under_mjpython() is False
         assert g.is_apple_silicon() is True
@@ -84,8 +84,9 @@ def test_mjpython_linux_not_flagged(monkeypatch):
     _unpatch_omp_shim_env(monkeypatch)
 
     g = _load_guard_fresh()
-    with patch.object(g.platform, "system", return_value="Linux"), patch.object(
-        g.platform, "machine", return_value="x86_64"
+    with (
+        patch.object(g.platform, "system", return_value="Linux"),
+        patch.object(g.platform, "machine", return_value="x86_64"),
     ):
         assert g.is_under_mjpython() is True
         assert g.is_apple_silicon() is False
@@ -98,8 +99,9 @@ def test_mjpython_intel_mac_not_flagged(monkeypatch):
     _unpatch_omp_shim_env(monkeypatch)
 
     g = _load_guard_fresh()
-    with patch.object(g.platform, "system", return_value="Darwin"), patch.object(
-        g.platform, "machine", return_value="x86_64"
+    with (
+        patch.object(g.platform, "system", return_value="Darwin"),
+        patch.object(g.platform, "machine", return_value="x86_64"),
     ):
         assert g.is_under_mjpython() is True
         assert g.is_apple_silicon() is False
@@ -114,8 +116,9 @@ def test_mjpython_apple_silicon_no_shim_flagged(monkeypatch):
     _unpatch_omp_shim_env(monkeypatch)
 
     g = _load_guard_fresh()
-    with patch.object(g.platform, "system", return_value="Darwin"), patch.object(
-        g.platform, "machine", return_value="arm64"
+    with (
+        patch.object(g.platform, "system", return_value="Darwin"),
+        patch.object(g.platform, "machine", return_value="arm64"),
     ):
         assert g.is_under_mjpython() is True
         assert g.is_apple_silicon() is True
@@ -137,8 +140,9 @@ def test_mjpython_apple_silicon_with_shim_not_flagged(monkeypatch):
     _patch_omp_shim_env(monkeypatch)
 
     g = _load_guard_fresh()
-    with patch.object(g.platform, "system", return_value="Darwin"), patch.object(
-        g.platform, "machine", return_value="arm64"
+    with (
+        patch.object(g.platform, "system", return_value="Darwin"),
+        patch.object(g.platform, "machine", return_value="arm64"),
     ):
         assert g.is_under_mjpython() is True
         assert g.is_apple_silicon() is True
@@ -162,8 +166,9 @@ def test_mjpython_apple_silicon_partial_shim_env_still_flagged(monkeypatch):
     monkeypatch.delenv("KMP_DUPLICATE_LIB_OK", raising=False)
 
     g = _load_guard_fresh()
-    with patch.object(g.platform, "system", return_value="Darwin"), patch.object(
-        g.platform, "machine", return_value="arm64"
+    with (
+        patch.object(g.platform, "system", return_value="Darwin"),
+        patch.object(g.platform, "machine", return_value="arm64"),
     ):
         assert g.is_risky_render_combination() is True
 
@@ -179,8 +184,9 @@ def test_mjpython_apple_silicon_shim_env_with_wrong_value_still_flagged(monkeypa
     monkeypatch.setenv("KMP_DUPLICATE_LIB_OK", "TRUE")
 
     g = _load_guard_fresh()
-    with patch.object(g.platform, "system", return_value="Darwin"), patch.object(
-        g.platform, "machine", return_value="arm64"
+    with (
+        patch.object(g.platform, "system", return_value="Darwin"),
+        patch.object(g.platform, "machine", return_value="arm64"),
     ):
         # thread=4 doesn't trigger the shim's workaround; still risky.
         assert g.is_risky_render_combination() is True

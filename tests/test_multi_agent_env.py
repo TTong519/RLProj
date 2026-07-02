@@ -874,9 +874,7 @@ class TestMarlTrainCLISmoke:
         # output does NOT contain the render_mode kwarg bug or the
         # np.zeros(0) path bug (the two bugs Phase 25 closed).
         combined = (result.stdout or "") + (result.stderr or "")
-        assert "unexpected keyword argument 'render_mode'" not in combined, (
-            f"CLI still has the render_mode kwarg bug: {combined}"
-        )
-        assert "np.zeros(0)" not in combined, (
-            f"MARL env still calls step(np.zeros(0)): {combined}"
-        )
+        assert (
+            "unexpected keyword argument 'render_mode'" not in combined
+        ), f"CLI still has the render_mode kwarg bug: {combined}"
+        assert "np.zeros(0)" not in combined, f"MARL env still calls step(np.zeros(0)): {combined}"

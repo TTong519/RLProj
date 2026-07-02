@@ -12,6 +12,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+# phi (phiflow) is an optional `simulation` extra; the 3D fixtures below build
+# PhiFlow fields. Skip the whole module when phi is absent. See debug session
+# ci-failures-lint-pybullet (C1).
+pytest.importorskip("phi")
+
 from surg_rl.fluids.visualizer import render_fluid_2d, render_fluid_3d
 
 
@@ -47,18 +52,66 @@ def _make_2d_pressure_fixture() -> object:
 # render_fluid_2d. The _render_np_2d extraction MUST reproduce this exactly.
 _EXPECTED_2D_IMG = np.array(
     [
-        [[15, 3, 15], [15, 3, 15], [24, 4, 24], [32, 6, 32], [41, 8, 41],
-         [49, 9, 49], [58, 11, 58], [58, 11, 58]],
-        [[38, 7, 38], [38, 7, 38], [46, 9, 46], [55, 11, 55], [63, 12, 63],
-         [72, 14, 72], [80, 16, 80], [80, 16, 80]],
-        [[83, 16, 83], [83, 16, 83], [92, 18, 92], [100, 20, 100],
-         [109, 21, 109], [117, 23, 117], [126, 25, 126], [126, 25, 126]],
-        [[128, 25, 128], [128, 25, 128], [137, 27, 137], [145, 29, 145],
-         [154, 30, 154], [162, 32, 162], [171, 34, 171], [171, 34, 171]],
-        [[174, 34, 174], [174, 34, 174], [182, 36, 182], [191, 38, 191],
-         [199, 39, 199], [208, 41, 208], [216, 43, 216], [216, 43, 216]],
-        [[196, 39, 196], [196, 39, 196], [205, 41, 205], [213, 42, 213],
-         [222, 44, 222], [230, 46, 230], [239, 47, 239], [239, 47, 239]],
+        [
+            [15, 3, 15],
+            [15, 3, 15],
+            [24, 4, 24],
+            [32, 6, 32],
+            [41, 8, 41],
+            [49, 9, 49],
+            [58, 11, 58],
+            [58, 11, 58],
+        ],
+        [
+            [38, 7, 38],
+            [38, 7, 38],
+            [46, 9, 46],
+            [55, 11, 55],
+            [63, 12, 63],
+            [72, 14, 72],
+            [80, 16, 80],
+            [80, 16, 80],
+        ],
+        [
+            [83, 16, 83],
+            [83, 16, 83],
+            [92, 18, 92],
+            [100, 20, 100],
+            [109, 21, 109],
+            [117, 23, 117],
+            [126, 25, 126],
+            [126, 25, 126],
+        ],
+        [
+            [128, 25, 128],
+            [128, 25, 128],
+            [137, 27, 137],
+            [145, 29, 145],
+            [154, 30, 154],
+            [162, 32, 162],
+            [171, 34, 171],
+            [171, 34, 171],
+        ],
+        [
+            [174, 34, 174],
+            [174, 34, 174],
+            [182, 36, 182],
+            [191, 38, 191],
+            [199, 39, 199],
+            [208, 41, 208],
+            [216, 43, 216],
+            [216, 43, 216],
+        ],
+        [
+            [196, 39, 196],
+            [196, 39, 196],
+            [205, 41, 205],
+            [213, 42, 213],
+            [222, 44, 222],
+            [230, 46, 230],
+            [239, 47, 239],
+            [239, 47, 239],
+        ],
     ],
     dtype=np.uint8,
 )
@@ -70,12 +123,10 @@ def _make_3d_pressure_fixture():
     Mirrors the Wake_Flow 3D pattern: Box(x,y,z) + StaggeredGrid(x,y,z) +
     make_incompressible -> 3D pressure.
     """
-    from phi.flow import Box, StaggeredGrid, extrapolation, fluid, Solve
+    from phi.flow import Box, Solve, StaggeredGrid, extrapolation, fluid
 
     domain = Box(x=0.3, y=0.3, z=0.3)
-    velocity = StaggeredGrid(
-        0.0, extrapolation.ZERO, domain, x=16, y=16, z=16
-    )
+    velocity = StaggeredGrid(0.0, extrapolation.ZERO, domain, x=16, y=16, z=16)
     _, pressure = fluid.make_incompressible(
         velocity, solve=Solve(rel_tol=1e-4, abs_tol=1e-4, max_iterations=500)
     )

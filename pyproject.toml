@@ -31,9 +31,12 @@ dependencies = [
     "scipy>=1.11.0",
     
     # Simulation backends
+    # NOTE: pybullet is an optional extra (`pip install surg-rl[physics]`) —
+    # PyBullet publishes no macOS arm64 wheel for any version, and its sdist
+    # does not compile under modern Xcode SDKs (see ADR / debug session
+    # ci-failures-lint-pybullet). Install surg-rl[physics] on Linux/CI-Linux
+    # and on developer machines that want the PyBullet backend.
     "mujoco>=3.0.0",
-    "pybullet>=3.2.5",
-    
     # RL training
     "gymnasium>=0.29.0",
     "stable-baselines3>=2.0.0",
@@ -63,6 +66,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# PyBullet physics backend — Linux/CI-Linux + dev machines that want it.
+# Not installable on macOS arm64 (no wheel; sdist fails under modern Xcode).
+physics = [
+    "pybullet>=3.2.5",
+]
+
 # Real surgical mesh assets — OBJ loading + decimation
 assets = [
     "trimesh>=4.5.0",
@@ -205,6 +214,21 @@ ignore = ["E501"]
 # "OMP: Error #15: libomp.dylib already initialized" crash on macOS.
 [tool.ruff.lint.per-file-ignores]
 "demos/*.py" = ["I001"]
+# __init__.py / package-export files put a LazyImport guard before submodule
+# imports on purpose (the guard must run first so the ImportError carries the
+# pip-install hint). Reordering would break the lazy-import contract.
+"src/surg_rl/benchmark/__init__.py" = ["E402"]
+"src/surg_rl/dynamics/environment_controller.py" = ["E402"]
+"src/surg_rl/rl/rllib/__init__.py" = ["E402"]
+"src/surg_rl/ros2/config.py" = ["E402"]
+"tests/test_rl.py" = ["E402"]
+# assets/* use a TRIMESH LazyImport sentinel evaluated as a bare expression at
+# the top of each procedural-shape function (raises ImportError w/ pip hint when
+# trimesh is absent). B018 flags this as a "useless expression" — it is load-bearing.
+"src/surg_rl/assets/*.py" = ["B018"]
+# cutting/engine.py uses single-letter math names (A, B, C, D, p_AC, ...) that
+# carry geometric meaning; renaming would destroy readability.
+"src/surg_rl/cutting/engine.py" = ["N806"]
 
 [tool.mypy]
 python_version = "3.10"
@@ -212,6 +236,17 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 plugins = ["pydantic.mypy"]
+# Many runtime deps ship no py.typed marker / stubs (trimesh, pybullet, rclpy,
+# mujoco, phi, pettingzoo, rliable, seaborn, pandas, scipy, yaml). Treat
+# missing third-party imports as warnings-suppressed so mypy focuses on our
+# own untyped code rather than optional-dep stub gaps.
+ignore_missing_imports = true
+
+# tifffile (transitive dep) uses PEP 695 `type` statements requiring 3.12+;
+# don't follow imports into it under our 3.10 target.
+[[tool.mypy.overrides]]
+module = "tifffile.*"
+follow_imports = "skip"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
