@@ -180,5 +180,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,k8s-test]"
 
+      # Preflight: fail fast with a clear message if the e2e overlay doesn't
+      # kustomize-build, instead of letting the pytest step fail inside the kind
+      # apply with a less obvious CalledProcessError. Catches the load-restrictor
+      # regression class (resources referencing files outside the overlay dir).
+      - name: Preflight kustomize build (e2e overlay)
+        run: kubectl kustomize k8s/overlays/e2e >/dev/null
+
       - name: Run PVC e2e test (CPU-only kind cluster)
         run: pytest tests/k8s/test_pvc_e2e.py -m k8s -v --cluster-name=surg-rl-e2e
