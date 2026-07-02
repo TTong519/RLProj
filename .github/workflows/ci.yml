@@ -154,6 +154,20 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build Jetson (arm64)
+        # INTERIM (non-gating): the base image
+        # `nvcr.io/nvidia/l4t-pytorch:r36.4.0-pth2.5.0` referenced by
+        # Dockerfile.jetson was NEVER published on NGC -- NVIDIA deprecated
+        # the `l4t-pytorch` repo at JetPack 6 (last tag is r35.2.1-pth2.0-py3
+        # for JetPack 5). The build fails with
+        # `... not found` and there is no drop-in replacement tag available
+        # yet. `continue-on-error: true` lets the docker-ci job go GREEN
+        # (CPU/CUDA/ROCm are the gating builds) while a real base image is
+        # pinned separately -- candidates: NVIDIA's official
+        # `nvcr.io/nvidia/pytorch:<version>-igpu` (monthly releases, e.g.
+        # 25.05-py3-igpu) or the community `dustynv/l4t-pytorch:r36.4.0` on
+        # Docker Hub. DO NOT remove this guard until Dockerfile.jetson's FROM
+        # line is updated to a published, pullable image.
+        continue-on-error: true
         uses: docker/build-push-action@v6
         with:
           context: .
