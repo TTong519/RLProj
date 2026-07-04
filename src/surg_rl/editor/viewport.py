@@ -352,7 +352,6 @@ class ViewportPanel(QtWidgets.QWidget):
         pixmap = QtGui.QPixmap.fromImage(qimg)
         self._canvas.set_image(pixmap)
 
-
     def _on_mouse_press(self, pos: QtCore.QPoint, button: QtCore.Qt.MouseButton) -> None:
         self._last_mouse_pos = pos
         self._drag_button = button

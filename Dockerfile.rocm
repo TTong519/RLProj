@@ -28,8 +28,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/bin/python3.11 /usr/bin/python
 
-# Copy dependency definitions first for layer caching
+# Copy dependency definitions + the editable-install build inputs first for
+# layer caching. pyproject.toml declares `readme = "README.md"` and
+# `[tool.setuptools.packages.find] where = ["src"]`, so BOTH src/ and README.md
+# must be present for `pip install -e .` to build the editable wheel. Copying only
+# pyproject.toml (as the original did) makes pip fail with
+# `error in 'egg_base' option: 'src' does not exist or is not a directory`.
 COPY pyproject.toml pytest.ini ./
+COPY src/ src/
+COPY README.md README.md
 
 # Install package with dev and tracking extras
 RUN pip install --no-cache-dir --upgrade pip \

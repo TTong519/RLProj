@@ -4,9 +4,18 @@
 # `kubectl apply -f k8s/overlays/e2e/read-job.yaml` in the test body AFTER
 # the write-Job completes -- it is deliberately NOT listed in `resources:`
 # (listing it here would race the write-Job for /checkpoints/ckpt.bin).
+#
+# NOTE: the PVC is a LOCAL copy (pvc.yaml in this dir), NOT a `../../base/...`
+# reference. kubectl's embedded kustomize uses load_restrictor=security by
+# default, which forbids loading files outside the kustomization directory; the
+# original `../../base/pvc.yaml` reference failed with `file '...' is not in or
+# below '.../k8s/overlays/e2e'`. Referencing `../../base` (the directory) would
+# work mechanically (it has its own kustomization.yaml) but would pull in the
+# full base stack (training-jobs, rayclusters, etc.), violating the "ONLY the
+# PVC + write-Job" design intent. Keep pvc.yaml in sync with k8s/base/pvc.yaml.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-  - ../../base/pvc.yaml      # the PVC under test (storageClassName: standard -- matches kind)
-  - e2e-write-job.yaml       # CPU-only Job that writes a checkpoint to the PVC
+  - pvc.yaml              # the PVC under test (local copy; storageClassName: standard -- matches kind)
+  - e2e-write-job.yaml    # CPU-only Job that writes a checkpoint to the PVC

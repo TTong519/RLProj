@@ -1,7 +1,6 @@
 """TDD regression for SchemaWalker — locks the contract from CONTEXT.md D-05..D-08."""
-from __future__ import annotations
 
-import pytest
+from __future__ import annotations
 
 from surg_rl.scene_definition import SceneDefinition
 
@@ -9,6 +8,7 @@ from surg_rl.scene_definition import SceneDefinition
 class TestSchemaWalkerBasics:
     def test_walk_top_level_object_emits_one_spec_per_field(self) -> None:
         from surg_rl.editor.schema_walker import SchemaWalker
+
         schema = {
             "type": "object",
             "properties": {
@@ -24,6 +24,7 @@ class TestSchemaWalkerBasics:
 
     def test_spec_carries_default_and_required(self) -> None:
         from surg_rl.editor.schema_walker import SchemaWalker
+
         schema = {
             "type": "object",
             "properties": {
@@ -43,6 +44,7 @@ class TestSchemaWalkerBasics:
 class TestSchemaWalkerNested:
     def test_walk_nested_object_via_dollar_ref(self) -> None:
         from surg_rl.editor.schema_walker import SchemaWalker
+
         schema = {
             "type": "object",
             "properties": {
@@ -69,6 +71,7 @@ class TestSchemaWalkerNested:
 
     def test_walk_array_of_objects_emits_indexed_paths(self) -> None:
         from surg_rl.editor.schema_walker import SchemaWalker
+
         schema = {
             "type": "object",
             "properties": {
@@ -97,6 +100,7 @@ class TestSchemaWalkerNested:
 class TestSchemaWalkerEnum:
     def test_enum_string_field_carries_enum_values(self) -> None:
         from surg_rl.editor.schema_walker import SchemaWalker
+
         schema = {
             "type": "object",
             "properties": {
@@ -116,6 +120,7 @@ class TestSchemaWalkerEnum:
 class TestSchemaWalkerVec3:
     def test_position_class_emits_vec3_spinbox_hint(self) -> None:
         from surg_rl.editor.schema_walker import SchemaWalker
+
         schema = {
             "type": "object",
             "properties": {
@@ -139,6 +144,7 @@ class TestSchemaWalkerVec3:
 
     def test_euler_angles_class_emits_vec3_spinbox_hint(self) -> None:
         from surg_rl.editor.schema_walker import SchemaWalker
+
         schema = {
             "type": "object",
             "properties": {
@@ -163,6 +169,7 @@ class TestSchemaWalkerVec3:
 
     def test_rgb_color_class_emits_color_picker_hint(self) -> None:
         from surg_rl.editor.schema_walker import SchemaWalker
+
         schema = {
             "type": "object",
             "properties": {
@@ -190,6 +197,7 @@ class TestSchemaWalkerVec3:
 class TestSchemaWalker62Classes:
     def test_walk_full_scene_definition_covers_all_classes(self) -> None:
         from surg_rl.editor.schema_walker import SchemaWalker
+
         schema = SceneDefinition.model_json_schema()
         w = SchemaWalker()
         specs = w.walk(schema)

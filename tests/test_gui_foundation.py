@@ -7,22 +7,22 @@ Covers:
 - TestAppMainGates — `surg-rl-gui` console-script entrypoint behavior
 - TestSurgRlCliIndependence — locks that `surg-rl --help` does NOT import PySide6
 """
+
 from __future__ import annotations
 
 import os
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
-
 
 # --- Helpers ----------------------------------------------------------------
 
 
-def _HAS_PYSIDE6() -> bool:
+def _has_pyside6() -> bool:
     try:
         import PySide6  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -36,6 +36,7 @@ def isolated_home(tmp_path, monkeypatch):
     # caching does not leak values between tests.
     try:
         from PySide6.QtCore import QSettings
+
         QSettings.setDefaultFormat(QSettings.Format.IniFormat)
         QSettings.setPath(
             QSettings.Format.IniFormat,
@@ -49,10 +50,11 @@ def isolated_home(tmp_path, monkeypatch):
 
 @pytest.fixture(scope="session")
 def qapp():
-    if not _HAS_PYSIDE6():
+    if not _has_pyside6():
         pytest.skip("PySide6 not installed")
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
+
     app = QApplication.instance() or QApplication(sys.argv)
     yield app
     app.quit()
@@ -64,40 +66,47 @@ def qapp():
 class TestSafeErrorMessage:
     def test_redacts_openai_key(self) -> None:
         from surg_rl.editor._safe_error import safe_error_message
+
         out = safe_error_message("auth failed with sk-projabc123def456ghi789jkl012mno")
         assert "[REDACTED]" in out
         assert "sk-projabc123def456ghi789jkl012mno" not in out
 
     def test_redacts_anthropic_key(self) -> None:
         from surg_rl.editor._safe_error import safe_error_message
+
         out = safe_error_message("sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdef")
         assert "[REDACTED]" in out
         assert "sk-ant-api03" not in out
 
     def test_redacts_xai_key(self) -> None:
         from surg_rl.editor._safe_error import safe_error_message
+
         out = safe_error_message("got 401 for xai-AbCdEfGhIjKlMnOpQrStUvWxYz012345")
         assert "[REDACTED]" in out
         assert "xai-AbCd" not in out
 
     def test_redacts_bearer_token(self) -> None:
         from surg_rl.editor._safe_error import safe_error_message
+
         out = safe_error_message("Authorization: Bearer AbCdEfGhIjKlMnOpQrStUvWxYz0123456789")
         assert "[REDACTED]" in out
 
     def test_redacts_env_var_style(self) -> None:
         from surg_rl.editor._safe_error import safe_error_message
+
         out = safe_error_message("OPENAI_API_KEY=sk-projabc123def456ghi789jkl012mno")
         assert "sk-projabc" not in out
         assert "[REDACTED]" in out
 
     def test_passes_through_normal_error_text(self) -> None:
         from surg_rl.editor._safe_error import safe_error_message
+
         msg = "Connection refused: ECONNREFUSED 127.0.0.1:11434"
         assert safe_error_message(msg) == msg
 
     def test_accepts_exception_object(self) -> None:
         from surg_rl.editor._safe_error import safe_error_message
+
         exc = ValueError("auth failed with sk-projabc123def456ghi789jkl012mno")
         out = safe_error_message(exc)
         # str(exc) is the message itself, not the qualified class name
@@ -107,19 +116,22 @@ class TestSafeErrorMessage:
 
     def test_does_not_crash_on_empty_string(self) -> None:
         from surg_rl.editor._safe_error import safe_error_message
+
         assert safe_error_message("") == ""
 
 
 # --- QSettings wrapper tests (require PySide6) ------------------------------
 
 
-@pytest.mark.skipif(not _HAS_PYSIDE6(), reason="PySide6 not installed")
+@pytest.mark.skipif(not _has_pyside6(), reason="PySide6 not installed")
 class TestEditorSettings:
     def test_save_and_load_window(self, isolated_home) -> None:
-        if not _HAS_PYSIDE6():
+        if not _has_pyside6():
             pytest.skip("PySide6 not installed")
         from PySide6.QtCore import QByteArray
+
         from surg_rl.editor._settings import EditorSettings
+
         s = EditorSettings()
         geo = QByteArray(b"geometry-bytes")
         state = QByteArray(b"state-bytes")
@@ -130,9 +142,10 @@ class TestEditorSettings:
         assert st2 == state
 
     def test_recent_files_dedupe_and_cap(self, isolated_home) -> None:
-        if not _HAS_PYSIDE6():
+        if not _has_pyside6():
             pytest.skip("PySide6 not installed")
         from surg_rl.editor._settings import EditorSettings
+
         s = EditorSettings()
         for i in range(8):
             s.add_recent_file(f"/path/{i}.json")
@@ -145,18 +158,20 @@ class TestEditorSettings:
         assert len(recent2) == 5
 
     def test_recent_files_persists_across_instances(self, isolated_home) -> None:
-        if not _HAS_PYSIDE6():
+        if not _has_pyside6():
             pytest.skip("PySide6 not installed")
         from surg_rl.editor._settings import EditorSettings
+
         s1 = EditorSettings()
         s1.add_recent_file("/p/a.json")
         s2 = EditorSettings()
         assert "/p/a.json" in s2.recent_files()
 
     def test_last_provider_round_trip(self, isolated_home) -> None:
-        if not _HAS_PYSIDE6():
+        if not _has_pyside6():
             pytest.skip("PySide6 not installed")
         from surg_rl.editor._settings import EditorSettings
+
         s = EditorSettings()
         assert s.last_provider() is None
         s.set_last_provider("anthropic")
@@ -167,11 +182,12 @@ class TestEditorSettings:
 # --- MainWindow tests (require PySide6 + offscreen) -------------------------
 
 
-@pytest.mark.skipif(not _HAS_PYSIDE6(), reason="PySide6 not installed")
+@pytest.mark.skipif(not _has_pyside6(), reason="PySide6 not installed")
 class TestMainWindow:
     def test_main_window_can_be_constructed(self, qapp, isolated_home) -> None:
-        from surg_rl.editor.main_window import EditorWindow
         from surg_rl.editor import QtWidgets
+        from surg_rl.editor.main_window import EditorWindow
+
         w = EditorWindow()
         assert w.windowTitle() == "Surg-RL Scene Editor"
         docks = w.findChildren(QtWidgets.QDockWidget)
@@ -179,16 +195,20 @@ class TestMainWindow:
         assert titles == sorted(["Scene Tree", "Properties", "LLM Prompt-to-JSON"])
         assert w.centralWidget() is not None
 
-    def test_main_window_with_scene_path_does_not_crash(self, qapp, isolated_home, tmp_path) -> None:
+    def test_main_window_with_scene_path_does_not_crash(
+        self, qapp, isolated_home, tmp_path
+    ) -> None:
         from surg_rl.editor.main_window import EditorWindow
+
         scene = tmp_path / "test.json"
         scene.write_text('{"metadata": {"name": "x", "version": "0.1.0"}}')
         w = EditorWindow(scene_path=scene)
         assert w.windowTitle() == "Surg-RL Scene Editor"
 
     def test_drag_drop_accepts_json(self, qapp, isolated_home, tmp_path) -> None:
-        from surg_rl.editor.main_window import EditorWindow
         from surg_rl.editor import QtCore, QtGui
+        from surg_rl.editor.main_window import EditorWindow
+
         w = EditorWindow()
         scene = tmp_path / "drop.json"
         scene.write_text("{}")
@@ -206,6 +226,7 @@ class TestMainWindow:
 
     def test_close_event_persists_geometry(self, qapp, isolated_home) -> None:
         from surg_rl.editor.main_window import EditorWindow
+
         w = EditorWindow()
         w.resize(900, 700)
         w.close()
@@ -215,15 +236,16 @@ class TestMainWindow:
         assert w2.height() >= 500, f"expected height >= 500, got {w2.height()}"
 
     def test_status_bar_has_four_labels(self, qapp, isolated_home) -> None:
-        from surg_rl.editor.main_window import EditorWindow
         from surg_rl.editor import QtWidgets
+        from surg_rl.editor.main_window import EditorWindow
+
         w = EditorWindow()
         bar = w.statusBar()
         labels = bar.findChildren(QtWidgets.QLabel)
-        assert any("Untitled" in l.text() for l in labels)
-        assert any("sim:" in l.text() for l in labels)
-        assert any("fps:" in l.text() for l in labels)
-        assert any("validate:" in l.text() for l in labels)
+        assert any("Untitled" in lbl.text() for lbl in labels)
+        assert any("sim:" in lbl.text() for lbl in labels)
+        assert any("fps:" in lbl.text() for lbl in labels)
+        assert any("validate:" in lbl.text() for lbl in labels)
 
 
 # --- App entrypoint tests ---------------------------------------------------

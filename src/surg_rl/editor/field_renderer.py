@@ -3,6 +3,7 @@
 Per GUI-05 + D-06: registry dict keyed by FieldSpec.widget_hint maps to
 widget factory. Unknown types fall back to QLineEdit (per D-06).
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -46,7 +47,9 @@ def _make_enum_combobox(spec: FieldSpec) -> QtWidgets.QComboBox:
     combo = QtWidgets.QComboBox()
     for v in spec.enum_values:
         combo.addItem(str(v))
-    if spec.default_value is not None and str(spec.default_value) in [str(v) for v in spec.enum_values]:
+    if spec.default_value is not None and str(spec.default_value) in [
+        str(v) for v in spec.enum_values
+    ]:
         combo.setCurrentText(str(spec.default_value))
     return combo
 

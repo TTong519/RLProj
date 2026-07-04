@@ -1,8 +1,5 @@
 """Tests for GymToEmbodiedWrapper — Gymnasium-to-embodied translation."""
 
-from types import SimpleNamespace
-from unittest.mock import MagicMock
-
 import numpy as np
 import pytest
 from gymnasium import spaces
@@ -47,7 +44,10 @@ class MockEnv:
             low=action_low, high=action_high, shape=(action_dim,), dtype=np.float32
         )
         self.observation_space = spaces.Dict(
-            {k: spaces.Box(-np.inf, np.inf, shape=s, dtype=np.float32) for k, s in (obs_shape or {}).items()}
+            {
+                k: spaces.Box(-np.inf, np.inf, shape=s, dtype=np.float32)
+                for k, s in (obs_shape or {}).items()
+            }
         )
         self._step_count = 0
         self._reset_count = 0
@@ -277,9 +277,7 @@ class TestConvertState:
     """Test _convert_state produces 128-dim float32."""
 
     def test_state_shape_is_128(self):
-        simulator = MockSimulator(
-            state_dict={"qpos": np.zeros(7), "qvel": np.zeros(7)}
-        )
+        simulator = MockSimulator(state_dict={"qpos": np.zeros(7), "qvel": np.zeros(7)})
         env = MockEnv(simulator=simulator)
         wrapper = GymToEmbodiedWrapper(env, obs_type="state")
         wrapper.reset()
@@ -298,9 +296,7 @@ class TestConvertState:
         assert obs["state"].shape == (128,)
 
     def test_state_truncated_when_long(self):
-        simulator = MockSimulator(
-            state_dict={"qpos": np.zeros(200), "qvel": np.zeros(200)}
-        )
+        simulator = MockSimulator(state_dict={"qpos": np.zeros(200), "qvel": np.zeros(200)})
         env = MockEnv(simulator=simulator)
         wrapper = GymToEmbodiedWrapper(env, obs_type="state")
         wrapper.reset()

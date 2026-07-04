@@ -35,7 +35,7 @@ class TestLazyImportGetattr:
         """__getattr__ on a missing module raises ImportError with pip install hint."""
         li = LazyImport("nonexistent_pkg_xyz_123", "test")
         with pytest.raises(ImportError) as exc_info:
-            li.some_attr
+            li.some_attr  # noqa: B018 — triggers LazyImport.__getattr__ side effect
         msg = str(exc_info.value)
         assert "pip install" in msg, f"Missing pip hint: {msg}"
         assert "[test]" in msg, f"Missing package name in hint: {msg}"

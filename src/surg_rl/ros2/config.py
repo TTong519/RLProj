@@ -88,6 +88,7 @@ class Ros2BridgeConfig:
             warnings.warn(
                 f"ROS2 bridge config file not found: {path}. " f"Using default configuration.",
                 UserWarning,
+                stacklevel=2,
             )
             raise FileNotFoundError(f"ROS2 bridge config file not found: {path}")
 

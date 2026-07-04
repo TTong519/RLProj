@@ -55,7 +55,7 @@ class TestPipColconCompatibility:
     """LAUNCH-02: pip + colcon workflow compatibility."""
 
     def test_pyproject_has_data_files(self):
-        import tomllib
+        from surg_rl.utils.toml_compat import tomllib
 
         path = PROJECT_ROOT / "pyproject.toml"
         with open(path, "rb") as f:
@@ -64,7 +64,7 @@ class TestPipColconCompatibility:
         assert len(data_files) > 0
 
     def test_ros2_extra_includes_launch(self):
-        import tomllib
+        from surg_rl.utils.toml_compat import tomllib
 
         path = PROJECT_ROOT / "pyproject.toml"
         with open(path, "rb") as f:
@@ -73,7 +73,7 @@ class TestPipColconCompatibility:
         assert any("launch" in dep for dep in ros2_deps)
 
     def test_pyproject_has_bridge_console_scripts(self):
-        import tomllib
+        from surg_rl.utils.toml_compat import tomllib
 
         path = PROJECT_ROOT / "pyproject.toml"
         with open(path, "rb") as f:

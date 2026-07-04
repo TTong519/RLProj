@@ -3,6 +3,8 @@
 DIST-06 — CLI integration verification.
 """
 
+import os
+import re
 import subprocess
 import sys
 
@@ -10,6 +12,20 @@ import sys
 def _check_rllib_available():
     """Return True if Ray is installed."""
     return __import__("importlib").util.find_spec("ray") is not None
+
+
+# Rich/typer emit ANSI color escapes when the CI environment forces color
+# (e.g. FORCE_COLOR=1). The escapes split option names (``--scene`` becomes
+# ``\x1b[1;36m-\x1b[0m\x1b[1;36m-scene\x1b[0m``), so literal substring asserts
+# against raw stdout fail. Strip CSI sequences before asserting. NO_COLOR does
+# NOT override FORCE_COLOR in this Rich setup, so in-test stripping is the only
+# robust fix. See debug session ci-failures-lint-pybullet (C4).
+_ANSI_CSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI CSI escape sequences from *text*."""
+    return _ANSI_CSI_RE.sub("", text)
 
 
 class _CliRunner:
@@ -21,7 +37,7 @@ class _CliRunner:
             [sys.executable, "-m", "surg_rl.cli"] + cmd,
             capture_output=True,
             text=True,
-            env={**__import__("os").environ, "PYTHONPATH": "src"},
+            env={**os.environ, "PYTHONPATH": "src"},
         )
 
 
@@ -29,30 +45,31 @@ def test_cli_help_includes_rllib_commands():
     """``surg-rl --help`` lists train-rllib / tune / checkpoint-inspect."""
     result = _CliRunner().invoke(["--help"])
     assert result.returncode == 0
-    assert "train-rllib" in result.stdout
-    assert "tune" in result.stdout
-    assert "checkpoint-inspect" in result.stdout
+    out = _strip_ansi(result.stdout)
+    assert "train-rllib" in out
+    assert "tune" in out
+    assert "checkpoint-inspect" in out
 
 
 def test_train_rllib_help():
     """``surg-rl train-rllib --help` prints options."""
     result = _CliRunner().invoke(["train-rllib", "--help"])
     assert result.returncode == 0
-    assert "--scene" in result.stdout
+    assert "--scene" in _strip_ansi(result.stdout)
 
 
 def test_tune_help():
     """``surg-rl tune --help`` prints options."""
     result = _CliRunner().invoke(["tune", "--help"])
     assert result.returncode == 0
-    assert "--num-samples" in result.stdout
+    assert "--num-samples" in _strip_ansi(result.stdout)
 
 
 def test_checkpoint_inspect_help():
     """``surg-rl checkpoint-inspect --help`` prints options."""
     result = _CliRunner().invoke(["checkpoint-inspect", "--help"])
     assert result.returncode == 0
-    assert "--compare-with" in result.stdout
+    assert "--compare-with" in _strip_ansi(result.stdout)
 
 
 def test_checkpoint_inspect_rllib_mock(tmp_path):

@@ -60,9 +60,8 @@ Lazy import discipline (debug: gui-no-render-under-mjpython):
     still work via ``__getattr__``.
 """
 
-from typing import Any
-
 import importlib
+from typing import Any
 
 # Lightweight submodules that are cheap to import (no heavy third-party
 # deps). These are imported eagerly so they are available immediately.
@@ -151,19 +150,21 @@ _LAZY_EXPORTS: dict[str, tuple[str, str]] = {
 
 # Expose heavy submodules as attributes so tests can monkeypatch
 # names like ``surg_rl.rl.environment.MuJoCoSimulator``.
-_SUBMODULE_NAMES = frozenset({
-    "action",
-    "callbacks",
-    "difficulty",
-    "environment",
-    "observation",
-    "rewards",
-    "rllib",
-    "task_results",
-    "task_reward_router",
-    "task_termination",
-    "training",
-})
+_SUBMODULE_NAMES = frozenset(
+    {
+        "action",
+        "callbacks",
+        "difficulty",
+        "environment",
+        "observation",
+        "rewards",
+        "rllib",
+        "task_results",
+        "task_reward_router",
+        "task_termination",
+        "training",
+    }
+)
 
 
 def __getattr__(name: str) -> Any:
@@ -269,4 +270,3 @@ __all__ = [
     "TensorBoardCallback",
     "TrainingProgressCallback",
 ]
-

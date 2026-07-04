@@ -16,6 +16,8 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+import contextlib
+
 from surg_rl.scene_definition.schema import (
     DomainRandomizationConfig,
     SceneDefinition,
@@ -212,10 +214,8 @@ class EnvironmentController:
             action: Action array from external source (e.g., ROS2 command).
         """
         if self._external_action_queue.full():
-            try:
+            with contextlib.suppress(queue.Empty):
                 self._external_action_queue.get_nowait()
-            except queue.Empty:
-                pass
         self._external_action_queue.put_nowait(action.copy())
 
     def get_action(self, policy_action: np.ndarray) -> np.ndarray:

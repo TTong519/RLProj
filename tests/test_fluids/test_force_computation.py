@@ -13,6 +13,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+# phi (phiflow) is an optional `simulation` extra; skip the whole module when phi
+# is absent. See debug session ci-failures-lint-pybullet (C1).
+pytest.importorskip("phi")
+
 from surg_rl.scene_definition.schema import (
     BoundingBox,
     FluidConfig,
@@ -70,10 +74,9 @@ def _make_synthetic_3d_pressure(arr: np.ndarray):
     real 3D pressure field so `phi.field.sample(geometry, pressure)` returns a
     valid {0.0, 1.0} mask.
     """
-    from phi.flow import Box, extrapolation
-    from phi.field import CenteredGrid
-    from phi.geom import infinite_cylinder
     import phi.math as math
+    from phi.field import CenteredGrid
+    from phi.flow import Box, extrapolation
 
     dom = Box(x=0.3, y=0.3, z=0.3)
     nx, ny, nz = arr.shape
@@ -109,10 +112,10 @@ class TestComputeObstacleForces3D:
         with a linear ramp in y and samples the cylinder mask; the integral of
         grad_y over the mask cells is nonzero by construction.
         """
-        from surg_rl.fluids.force_computation import _compute_obstacle_forces_3d
-        from phi.geom import infinite_cylinder
         from phi.flow import Obstacle
-        import phi.field as field
+        from phi.geom import infinite_cylinder
+
+        from surg_rl.fluids.force_computation import _compute_obstacle_forces_3d
 
         cfg = _make_3d_config()
         # Synthetic pressure ramp in y: p[i,j,k] = j / ny.
@@ -123,9 +126,7 @@ class TestComputeObstacleForces3D:
         cyl = infinite_cylinder(x=0.15, y=0.15, radius=0.05, inf_dim="z")
         obstacle = Obstacle(cyl)
 
-        forces = _compute_obstacle_forces_3d(
-            None, p, [obstacle], ["cyl"], cfg
-        )
+        forces = _compute_obstacle_forces_3d(None, p, [obstacle], ["cyl"], cfg)
         f = forces["cyl"]
         assert f.shape == (3,)
         assert abs(float(f[1])) > 0.0, f"expected fy nonzero, got {f}"
@@ -141,9 +142,10 @@ class TestComputeObstacleForces3D:
         to exactly -1e4. Asserting |fx| == 1e4 AND |fy| == 1e4 distinguishes the
         two clamp strategies.
         """
-        from surg_rl.fluids.force_computation import _compute_obstacle_forces_3d
-        from phi.geom import infinite_cylinder
         from phi.flow import Obstacle
+        from phi.geom import infinite_cylinder
+
+        from surg_rl.fluids.force_computation import _compute_obstacle_forces_3d
 
         cfg = _make_3d_config()
         arr = np.zeros((16, 16, 16), dtype=np.float64)
@@ -154,9 +156,7 @@ class TestComputeObstacleForces3D:
         cyl = infinite_cylinder(x=0.15, y=0.15, radius=0.05, inf_dim="z")
         obstacle = Obstacle(cyl)
 
-        forces = _compute_obstacle_forces_3d(
-            None, p, [obstacle], ["cyl"], cfg
-        )
+        forces = _compute_obstacle_forces_3d(None, p, [obstacle], ["cyl"], cfg)
         f = forces["cyl"]
         cap = 1e4
         # Independent per-axis clamp: each component bounded by the cap.
@@ -165,12 +165,8 @@ class TestComputeObstacleForces3D:
         assert abs(float(f[2])) <= cap, f"fz exceeds cap: {f}"
         # Both spiked axes reach the cap independently (would be ~7071 under
         # scalar-magnitude clamp).
-        assert abs(abs(float(f[0])) - cap) < 1e-6, (
-            f"fx not independently clamped to cap: {f}"
-        )
-        assert abs(abs(float(f[1])) - cap) < 1e-6, (
-            f"fy not independently clamped to cap: {f}"
-        )
+        assert abs(abs(float(f[0])) - cap) < 1e-6, f"fx not independently clamped to cap: {f}"
+        assert abs(abs(float(f[1])) - cap) < 1e-6, f"fy not independently clamped to cap: {f}"
 
     def test_compute_obstacle_forces_3d_finite_no_nan(self):
         """Forces from a normal 3D step contain no NaN/Inf."""
@@ -178,9 +174,7 @@ class TestComputeObstacleForces3D:
 
         cfg = _make_3d_config()
         v, p, obstacle = _make_3d_pressure_with_obstacle()
-        forces = _compute_obstacle_forces_3d(
-            v, p, [obstacle], ["cyl"], cfg
-        )
+        forces = _compute_obstacle_forces_3d(v, p, [obstacle], ["cyl"], cfg)
         f = forces["cyl"]
         assert np.all(np.isfinite(f)), f"non-finite force: {f}"
 
@@ -196,8 +190,9 @@ class TestComputeObstacleForces2DUnchanged:
         `compute_obstacle_forces`, and asserts the force vector is (fx, 0, fz)
         with |fx|, |fz| <= 1e4 (scalar-magnitude clamp behavior).
         """
+        from phi.flow import Box, Solve, StaggeredGrid, extrapolation, fluid
+
         from surg_rl.fluids.force_computation import compute_obstacle_forces
-        from phi.flow import Box, StaggeredGrid, extrapolation, fluid, Solve
 
         cfg = FluidConfig(
             enabled=True,

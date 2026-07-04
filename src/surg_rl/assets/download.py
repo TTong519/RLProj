@@ -104,7 +104,7 @@ def list_local_meshes(meshes_dir: str = "assets/meshes") -> dict[str, bool]:
     d = Path(meshes_dir)
     result: dict[str, bool] = {}
 
-    for name, url in DEFAULT_MESH_URLS.items():
+    for name, _url in DEFAULT_MESH_URLS.items():
         local_path = d / f"{name}.obj"
         result[name] = local_path.exists()
 

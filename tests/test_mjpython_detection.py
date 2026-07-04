@@ -19,9 +19,6 @@ import os
 import sys
 from unittest.mock import patch
 
-import pytest
-
-
 # Reuse the detection logic without instantiating the full simulator
 # (which would import mujoco and require a working display). The
 # function we test is inlined from MuJoCoSimulator.start_viewer.
@@ -92,10 +89,10 @@ def test_does_not_match_substring_inside_path():
     """
     # No MJPYTHON_BIN env var, no 'mjpython' in the executable
     # basename, no 'mjpython' in argv[0] — all three signals miss.
-    with patch.dict(os.environ, {}, clear=False), patch.object(
-        sys, "executable", "/home/user/mjpython-wrapper/python"
-    ), patch.object(
-        sys, "argv", ["/home/user/mjpython-wrapper/python", "demo.py"]
+    with (
+        patch.dict(os.environ, {}, clear=False),
+        patch.object(sys, "executable", "/home/user/mjpython-wrapper/python"),
+        patch.object(sys, "argv", ["/home/user/mjpython-wrapper/python", "demo.py"]),
     ):
         if "MJPYTHON_BIN" in os.environ:
             del os.environ["MJPYTHON_BIN"]

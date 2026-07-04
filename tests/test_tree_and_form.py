@@ -1,4 +1,5 @@
 """TDD regression for SceneTreeView + PropertyForm (GUI-04 + GUI-05 runtime)."""
+
 from __future__ import annotations
 
 import os
@@ -37,14 +38,13 @@ try:
 except ImportError:
     _HAVE_PYSIDE6 = False
 
-pytestmark_viewport = pytest.mark.skipif(
-    not _HAVE_PYSIDE6, reason="PySide6 not installed"
-)
+pytestmark_viewport = pytest.mark.skipif(not _HAVE_PYSIDE6, reason="PySide6 not installed")
 
 
 @pytest.fixture(scope="session")
 def qapp():
     from PySide6.QtWidgets import QApplication
+
     return QApplication.instance() or QApplication(sys.argv)
 
 
@@ -66,10 +66,12 @@ def _fake_scene() -> MagicMock:
 # SceneTreeView tests
 # =====================================================================
 
+
 @pytestmark_viewport
 class TestSceneTreeBuilds:
     def test_tree_populates_from_scene_top_level(self, qapp) -> None:
         from surg_rl.editor.tree_view import SceneTreeView
+
         scene = _fake_scene()
         tree = SceneTreeView(scene)
         model = tree.model()
@@ -77,6 +79,7 @@ class TestSceneTreeBuilds:
 
     def test_tree_root_label_is_scene_name(self, qapp) -> None:
         from surg_rl.editor.tree_view import SceneTreeView
+
         scene = _fake_scene()
         tree = SceneTreeView(scene)
         root = tree.model().item(0)
@@ -84,20 +87,29 @@ class TestSceneTreeBuilds:
 
     def test_tree_node_has_validation_icon_role(self, qapp) -> None:
         from surg_rl.editor.tree_view import SceneTreeView, _ValidationState
+
         scene = _fake_scene()
         tree = SceneTreeView(scene)
         root = tree.model().item(0)
-        state = root.data(_ValidationState.DATA_ROLE) if hasattr(_ValidationState, 'DATA_ROLE') else None
+        state = (
+            root.data(_ValidationState.DATA_ROLE)
+            if hasattr(_ValidationState, "DATA_ROLE")
+            else None
+        )
         assert state is None or state in {
-            _ValidationState.UNVALIDATED, _ValidationState.VALID, _ValidationState.INVALID
+            _ValidationState.UNVALIDATED,
+            _ValidationState.VALID,
+            _ValidationState.INVALID,
         }
 
 
 @pytestmark_viewport
 class TestSceneTreeContextMenu:
     def test_right_click_opens_context_menu(self, qapp) -> None:
-        from surg_rl.editor.tree_view import SceneTreeView
         from PySide6.QtCore import Qt
+
+        from surg_rl.editor.tree_view import SceneTreeView
+
         scene = _fake_scene()
         tree = SceneTreeView(scene)
         assert tree.contextMenuPolicy() == Qt.ContextMenuPolicy.CustomContextMenu
@@ -105,6 +117,7 @@ class TestSceneTreeContextMenu:
 
     def test_context_menu_has_add_remove_duplicate(self, qapp) -> None:
         from surg_rl.editor.tree_view import SceneTreeView
+
         scene = _fake_scene()
         tree = SceneTreeView(scene)
         menu = tree._build_context_menu(tree.model().item(0))
@@ -116,12 +129,14 @@ class TestSceneTreeContextMenu:
 # PropertyForm tests
 # =====================================================================
 
+
 @pytestmark_viewport
 class TestPropertyFormRendersFields:
     def test_form_renders_widgets_for_class(self, qapp) -> None:
         from surg_rl.editor.property_form import PropertyForm
         from surg_rl.editor.schema_walker import SchemaWalker
         from surg_rl.scene_definition import Position
+
         form = PropertyForm()
         schema = Position.model_json_schema()
         specs = SchemaWalker().walk(schema)
@@ -130,10 +145,12 @@ class TestPropertyFormRendersFields:
         assert form._form_layout.count() >= 1
 
     def test_form_uses_field_renderer(self, qapp) -> None:
+        from PySide6.QtWidgets import QDoubleSpinBox
+
         from surg_rl.editor.property_form import PropertyForm
         from surg_rl.editor.schema_walker import SchemaWalker
         from surg_rl.scene_definition import Position
-        from PySide6.QtWidgets import QDoubleSpinBox
+
         form = PropertyForm()
         specs = SchemaWalker().walk(Position.model_json_schema())
         form.set_field_specs(specs, instance=Position())
@@ -145,22 +162,29 @@ class TestPropertyFormRendersFields:
 # EditorWindow integration tests
 # =====================================================================
 
+
 @pytestmark_viewport
 class TestEditorWindowTreeAndForm:
     def test_editor_window_has_tree_and_form(self, qapp, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("HOME", str(tmp_path))
-        from surg_rl.editor.main_window import EditorWindow
-        from surg_rl.editor.tree_view import SceneTreeView
-        from surg_rl.editor.property_form import PropertyForm
         from surg_rl.editor import QtWidgets
+        from surg_rl.editor.main_window import EditorWindow
+        from surg_rl.editor.property_form import PropertyForm
+        from surg_rl.editor.tree_view import SceneTreeView
+
         w = EditorWindow()
-        assert any(isinstance(d.widget(), SceneTreeView) for d in w.findChildren(QtWidgets.QDockWidget))
-        assert any(isinstance(d.widget(), PropertyForm) for d in w.findChildren(QtWidgets.QDockWidget))
+        assert any(
+            isinstance(d.widget(), SceneTreeView) for d in w.findChildren(QtWidgets.QDockWidget)
+        )
+        assert any(
+            isinstance(d.widget(), PropertyForm) for d in w.findChildren(QtWidgets.QDockWidget)
+        )
         w.close()
 
     def test_tree_builds_from_real_scene_definition(self, qapp) -> None:
         from surg_rl.editor.tree_view import SceneTreeView
-        from surg_rl.scene_definition import SceneDefinition, SimulatorType, InstrumentConfig
+        from surg_rl.scene_definition import InstrumentConfig, SceneDefinition, SimulatorType
+
         scene = SceneDefinition(simulator=SimulatorType.MUJOCO)
         scene.instruments.append(InstrumentConfig(name="scalpel1"))
         tree = SceneTreeView(scene)

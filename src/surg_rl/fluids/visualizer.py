@@ -26,10 +26,7 @@ def _render_np_2d(
 
         p_norm = arr - arr.min()
         p_max = p_norm.max()
-        if p_max > 1e-12:
-            p_norm = p_norm / p_max
-        else:
-            p_norm = np.zeros_like(p_norm)
+        p_norm = p_norm / p_max if p_max > 1e-12 else np.zeros_like(p_norm)
 
         img = np.zeros((height, width, 3), dtype=np.uint8)
 

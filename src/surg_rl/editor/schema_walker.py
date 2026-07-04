@@ -14,6 +14,7 @@ Widget hints are inferred from:
   - confloat with ge+le constraints: "range-slider"
   - default: "text"
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -23,9 +24,10 @@ from typing import Any
 @dataclass
 class FieldSpec:
     """One leaf field in the scene schema."""
-    json_path: str           # e.g. "instruments.0.pose.position.x"
-    field_name: str          # e.g. "x"
-    type: str                # e.g. "string", "number", "integer", "boolean", "array", "object"
+
+    json_path: str  # e.g. "instruments.0.pose.position.x"
+    field_name: str  # e.g. "x"
+    type: str  # e.g. "string", "number", "integer", "boolean", "array", "object"
     format: str | None = None
     widget_hint: str = "text"
     enum_values: list[Any] = field(default_factory=list)
@@ -42,8 +44,14 @@ _VEC3_TRIPLES: tuple[frozenset[str], ...] = (
 _COLOR_QUADS: frozenset[str] = frozenset({"r", "g", "b", "a"})
 
 _CONSTRAINT_KEYS = (
-    "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum",
-    "minLength", "maxLength", "pattern", "multipleOf",
+    "minimum",
+    "maximum",
+    "exclusiveMinimum",
+    "exclusiveMaximum",
+    "minLength",
+    "maxLength",
+    "pattern",
+    "multipleOf",
 )
 
 
@@ -81,8 +89,9 @@ class SchemaWalker:
         for name, sub in props.items():
             full_path = f"{prefix}.{name}" if prefix else name
             sub_required = name in required_set
-            self._walk_field(sub, full_path, name, out, required=sub_required, defs=defs,
-                             parent_hint=object_hint)
+            self._walk_field(
+                sub, full_path, name, out, required=sub_required, defs=defs, parent_hint=object_hint
+            )
 
     def _walk_field(
         self,
@@ -157,7 +166,11 @@ class SchemaWalker:
         if schema.get("type") == "string" and name in ("color", "colour", "hex_color", "hex"):
             return "color-picker"
 
-        if schema.get("type") in ("number", "integer") and "minimum" in schema and "maximum" in schema:
+        if (
+            schema.get("type") in ("number", "integer")
+            and "minimum" in schema
+            and "maximum" in schema
+        ):
             return "range-slider"
 
         return "text"

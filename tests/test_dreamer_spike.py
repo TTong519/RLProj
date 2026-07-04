@@ -20,7 +20,7 @@ class TestModuleConstants:
 
     def test_spike_report_path_is_models_dreamerv3_spike_report_json(self):
         assert isinstance(SPIKE_REPORT_PATH, Path)
-        assert SPIKE_REPORT_PATH == Path("models/dreamerv3/spike_report.json")
+        assert Path("models/dreamerv3/spike_report.json") == SPIKE_REPORT_PATH
 
     def test_default_thresholds_reconstruction_mse(self):
         assert DEFAULT_THRESHOLDS["reconstruction_mse"] == 0.01
@@ -69,7 +69,9 @@ class TestSpikeOrchestratorConstructor:
 class TestCreateSpikeScene:
     """Test _create_spike_scene."""
 
-    def test_create_spike_scene_falls_back_to_programmatic_when_no_file(self, monkeypatch, tmp_path):
+    def test_create_spike_scene_falls_back_to_programmatic_when_no_file(
+        self, monkeypatch, tmp_path
+    ):
         monkeypatch.chdir(tmp_path)
         orch = SpikeOrchestrator(task="suturing", obs_type="pixels")
         scene = orch._create_spike_scene()
@@ -107,7 +109,7 @@ class TestGenerateReport:
     """Test _generate_report output structure and fields."""
 
     def _make_orchestrator(self, **kwargs):
-        defaults = dict(task="suturing", obs_type="pixels", total_steps=100)
+        defaults = {"task": "suturing", "obs_type": "pixels", "total_steps": 100}
         defaults.update(kwargs)
         return SpikeOrchestrator(**defaults)
 
@@ -233,8 +235,12 @@ class TestRunSpikeConvenience:
     """Test run_spike() convenience function."""
 
     def test_run_spike_calls_orchestrator_run(self):
-        with patch.object(SpikeOrchestrator, "run", return_value=(True, {"status": "passed"})) as mock_run:
-            passed, report = run_spike(task="grasping", obs_type="state", steps=1000, eval_episodes=2)
+        with patch.object(
+            SpikeOrchestrator, "run", return_value=(True, {"status": "passed"})
+        ) as mock_run:
+            passed, report = run_spike(
+                task="grasping", obs_type="state", steps=1000, eval_episodes=2
+            )
             assert passed is True
             assert report["status"] == "passed"
             assert mock_run.called

@@ -6,6 +6,7 @@ Plans 33-02..05 fill in the panes:
   - 33-04: Tree view + validation icons
   - 33-05: LLM panel + undo/redo
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -24,6 +25,7 @@ _PLACEHOLDER_TEXT = "(populated by Phase 33 plan {plan})"
 def _empty_scene_stub() -> SceneDefinition:
     """Create a minimal valid SceneDefinition for when the editor opens with no scene."""
     from surg_rl.scene_definition import SceneDefinition, SimulatorType
+
     return SceneDefinition(simulator=SimulatorType.MUJOCO)
 
 
@@ -56,12 +58,14 @@ class EditorWindow(QtWidgets.QMainWindow):
 
         # Phase 33-05: undo/redo stack (per-scene, capped, cleared on save)
         from surg_rl.editor.undo_stack import SceneUndoStack
+
         self._undo_stack = SceneUndoStack(self)
         self._undo_stack.canUndoChanged.connect(self._update_undo_actions)
         self._undo_stack.canRedoChanged.connect(self._update_undo_actions)
 
         # Phase 33-03 wires the 3D viewport as the central widget.
         from surg_rl.editor.viewport import ViewportPanel
+
         self._viewport_panel = ViewportPanel(
             scene=self._scene or _empty_scene_stub(),
             on_fps_update=self._update_fps_status,
@@ -89,6 +93,7 @@ class EditorWindow(QtWidgets.QMainWindow):
         from surg_rl.editor.llm_panel import LLMPanel
         from surg_rl.editor.property_form import PropertyForm
         from surg_rl.editor.tree_view import SceneTreeView
+
         self._tree_view = SceneTreeView(self._scene or _empty_scene_stub())
         self._property_form = PropertyForm()
         self._llm_panel = LLMPanel()
@@ -131,12 +136,18 @@ class EditorWindow(QtWidgets.QMainWindow):
         self._recent_menu = file_menu.addMenu("Open &Recent")
         self._refresh_recent_menu()
         file_menu.addAction("&Save", self._action_save, QtGui.QKeySequence.StandardKey.Save)
-        file_menu.addAction("Save &As...", self._action_save_as, QtGui.QKeySequence.StandardKey.SaveAs)
+        file_menu.addAction(
+            "Save &As...", self._action_save_as, QtGui.QKeySequence.StandardKey.SaveAs
+        )
         file_menu.addSeparator()
         file_menu.addAction("E&xit", self.close, QtGui.QKeySequence.StandardKey.Quit)
         self._edit_menu = mb.addMenu("&Edit")
-        self._undo_action = self._edit_menu.addAction("&Undo", self._on_undo, QtGui.QKeySequence.StandardKey.Undo)
-        self._redo_action = self._edit_menu.addAction("&Redo", self._on_redo, QtGui.QKeySequence.StandardKey.Redo)
+        self._undo_action = self._edit_menu.addAction(
+            "&Undo", self._on_undo, QtGui.QKeySequence.StandardKey.Undo
+        )
+        self._redo_action = self._edit_menu.addAction(
+            "&Redo", self._on_redo, QtGui.QKeySequence.StandardKey.Redo
+        )
         self._undo_action.setEnabled(False)
         self._redo_action.setEnabled(False)
         view_menu = mb.addMenu("&View")
@@ -187,11 +198,16 @@ class EditorWindow(QtWidgets.QMainWindow):
 
     def _update_fps_status(self, fps: float) -> None:
         path_label = self._current_path.name if self._current_path else "Untitled"
-        sim_label = self._scene.simulator.value if self._scene and hasattr(self._scene.simulator, "value") else "—"
+        sim_label = (
+            self._scene.simulator.value
+            if self._scene and hasattr(self._scene.simulator, "value")
+            else "—"
+        )
         self._set_status(path_label, sim_label, f"{fps:.1f}", "—")
 
     def _on_node_selected(self, cls: type) -> None:
         from surg_rl.editor.schema_walker import SchemaWalker
+
         instance = _find_instance(self._scene, cls)
         if instance is None:
             return
@@ -200,6 +216,7 @@ class EditorWindow(QtWidgets.QMainWindow):
 
     def _action_new(self) -> None:
         from surg_rl.scene_definition import SceneDefinition
+
         self._scene = SceneDefinition()
         self._current_path = None
         self._refresh_viewport_and_tree()
@@ -221,7 +238,8 @@ class EditorWindow(QtWidgets.QMainWindow):
 
     def _action_save_as(self) -> None:
         path, _ = QtWidgets.QFileDialog.getSaveFileName(
-            self, "Save scene as",
+            self,
+            "Save scene as",
             str(self._current_path or Path.cwd() / "scene.json"),
             "Scene JSON (*.json)",
         )
@@ -230,8 +248,9 @@ class EditorWindow(QtWidgets.QMainWindow):
 
     def _action_about(self) -> None:
         QtWidgets.QMessageBox.about(
-            self, "About Surg-RL Scene Editor",
-            "Surg-RL Scene Editor\nv0.5.0\nPhase 33 - PySide6 scene editor"
+            self,
+            "About Surg-RL Scene Editor",
+            "Surg-RL Scene Editor\nv0.5.0\nPhase 33 - PySide6 scene editor",
         )
 
     def _action_reset_layout(self) -> None:
@@ -244,6 +263,7 @@ class EditorWindow(QtWidgets.QMainWindow):
 
     def _open_scene(self, path: Path) -> None:
         from surg_rl.scene_definition import load_scene
+
         try:
             self._scene = load_scene(path)
         except Exception as exc:  # noqa: BLE001
@@ -254,13 +274,18 @@ class EditorWindow(QtWidgets.QMainWindow):
         self._refresh_viewport_and_tree()
         self._refresh_recent_menu()
         self._undo_stack.clear()
-        sim = self._scene.simulator.value if hasattr(self._scene.simulator, "value") else str(self._scene.simulator)
+        sim = (
+            self._scene.simulator.value
+            if hasattr(self._scene.simulator, "value")
+            else str(self._scene.simulator)
+        )
         self._set_status(path.name, sim, "—", "valid")
 
     def _save_scene_to(self, path: Path) -> None:
         from pydantic import ValidationError
 
         from surg_rl.scene_definition import SceneDefinition, save_scene
+
         if self._scene is None:
             return
         try:
@@ -271,12 +296,17 @@ class EditorWindow(QtWidgets.QMainWindow):
         save_scene(self._scene, path)
         self._current_path = path
         self._undo_stack.clear_on_save()
-        sim = self._scene.simulator.value if hasattr(self._scene.simulator, "value") else str(self._scene.simulator)
+        sim = (
+            self._scene.simulator.value
+            if hasattr(self._scene.simulator, "value")
+            else str(self._scene.simulator)
+        )
         self._set_status(path.name, sim, "—", "valid")
 
     def _refresh_viewport_and_tree(self) -> None:
         from surg_rl.editor.tree_view import SceneTreeView
         from surg_rl.editor.viewport import ViewportPanel
+
         self._tree_view = SceneTreeView(self._scene or _empty_scene_stub())
         self._tree_dock.setWidget(self._tree_view)
         self._tree_view.node_selected.connect(self._on_node_selected)
@@ -290,6 +320,7 @@ class EditorWindow(QtWidgets.QMainWindow):
 
     def _on_undo(self) -> None:
         from surg_rl.editor.undo_stack import SceneUndoStack
+
         self._undo_stack.undo()
         snap = SceneUndoStack.take_active_apply()
         if snap is not None:
@@ -298,6 +329,7 @@ class EditorWindow(QtWidgets.QMainWindow):
 
     def _on_redo(self) -> None:
         from surg_rl.editor.undo_stack import SceneUndoStack
+
         self._undo_stack.redo()
         snap = SceneUndoStack.take_active_apply()
         if snap is not None:
@@ -310,6 +342,7 @@ class EditorWindow(QtWidgets.QMainWindow):
 
     def _on_llm_scene_accepted(self, scene: SceneDefinition) -> None:
         from surg_rl.scene_definition import SceneDefinition
+
         before = self._scene.model_copy(deep=True) if self._scene is not None else SceneDefinition()
         self._undo_stack.push_snapshot(before, scene)
         self._scene = scene
@@ -319,10 +352,14 @@ class EditorWindow(QtWidgets.QMainWindow):
     def _refresh_recent_menu(self) -> None:
         self._recent_menu.clear()
         for p in self._settings.recent_files():
-            self._recent_menu.addAction(p, lambda checked=False, path=p: self._open_scene(Path(path)))
+            self._recent_menu.addAction(
+                p, lambda checked=False, path=p: self._open_scene(Path(path))
+            )
         self._recent_menu.clear()
         for p in self._settings.recent_files():
-            self._recent_menu.addAction(p, lambda checked=False, path=p: self._open_scene(Path(path)))
+            self._recent_menu.addAction(
+                p, lambda checked=False, path=p: self._open_scene(Path(path))
+            )
 
     def _restore_geometry(self) -> None:
         geo, state = self._settings.load_window()
@@ -337,7 +374,7 @@ class EditorWindow(QtWidgets.QMainWindow):
         # Stop the viewport render loop BEFORE Qt tears down — prevents
         # dangling QTimer callbacks and MuJoCo Renderer __del__ crashes
         # during interpreter shutdown (UAT Gap 2 fix, plan 33-07).
-        try:
+        try:  # noqa: SIM105 — best-effort cleanup; broad suppress is intentional
             self._viewport_panel.stop()
         except Exception:  # noqa: BLE001
             pass  # best-effort — don't block window close on viewport cleanup

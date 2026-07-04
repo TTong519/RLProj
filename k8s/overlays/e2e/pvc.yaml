@@ -1,0 +1,22 @@
+# Source: copied from k8s/base/pvc.yaml to keep the e2e overlay self-contained.
+# kubectl's embedded kustomize uses load_restrictor=security by default, which
+# forbids referencing files outside the kustomization directory; the original
+# `../../base/pvc.yaml` path resolves outside k8s/overlays/e2e/ and so fails with
+# `file '...' is not in or below '...'`. Keeping a local copy avoids the
+# load-restrictor and honors the e2e fixture's "ONLY the PVC + write-Job" design
+# (referencing `../../base` would pull in the full base stack: training-jobs,
+# rayclusters, etc., which the e2e test deliberately excludes). If you update
+# k8s/base/pvc.yaml, mirror the change here.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: surg-rl-checkpoints
+  labels:
+    app: surg-rl
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: standard

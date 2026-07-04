@@ -47,7 +47,7 @@ def _compute_obstacle_forces_3d(
 
     try:
         p_np = pressure.values.numpy("x,y,z")
-    except Exception as exc:  # pragma: no cover - defensive guard
+    except Exception:  # pragma: no cover - defensive guard
         return {name: np.zeros(3) for name in obstacle_names}
 
     dims = config.bounds.get_dimensions()

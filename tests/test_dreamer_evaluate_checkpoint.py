@@ -129,14 +129,14 @@ class TestEvaluateCheckpoint:
             patch("surg_rl.dreamer.training.DreamerSubprocess", return_value=mock_subprocess_inst),
             patch("surg_rl.dreamer.training._create_env", return_value=mock_env),
             patch("surg_rl.dreamer.training._create_scene_for_task", return_value=MagicMock()),
+            pytest.raises(RuntimeError, match="evaluate failed"),
         ):
-            with pytest.raises(RuntimeError, match="evaluate failed"):
-                evaluate_checkpoint(
-                    checkpoint_path="/x.pt",
-                    task="suturing",
-                    obs_type="state",
-                    n_episodes=1,
-                )
+            evaluate_checkpoint(
+                checkpoint_path="/x.pt",
+                task="suturing",
+                obs_type="state",
+                n_episodes=1,
+            )
         assert mock_subprocess_inst.shutdown.called
         assert mock_env.close.called
 

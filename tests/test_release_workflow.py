@@ -24,4 +24,4 @@ class TestReleaseWorkflow:
             if "ROS2" in str(step.get("name", "")) and "push" in str(step.get("name", "")).lower():
                 assert step.get("with", {}).get("file") == "./Dockerfile.ros2"
                 return
-        assert False, "ROS2 build step not found"
+        raise AssertionError("ROS2 build step not found")

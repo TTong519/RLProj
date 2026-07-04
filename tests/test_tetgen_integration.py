@@ -1,6 +1,12 @@
 """Tests for tetgen-based tetrahedral mesh generation."""
 
 import numpy as np
+import pytest
+
+# tetgen is an optional `meshing` extra; skip the whole module when tetgen is
+# absent so CI installs without the meshing extra stay green. See debug session
+# ci-failures-lint-pybullet (C2).
+pytest.importorskip("tetgen")
 
 
 class TestTetGenCore:

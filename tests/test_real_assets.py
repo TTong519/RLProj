@@ -26,7 +26,7 @@ class TestAssetFallback:
                 dimensions=(0.1, 0.1, 0.01),
                 name="tissue_b",
             )
-        warning_calls = [c for c in mock_logger.warning.call_args_list]
+        warning_calls = list(mock_logger.warning.call_args_list)
         assert len(warning_calls) == 1, f"Expected 1 warning, got {len(warning_calls)}"
 
     def test_missing_asset_raises_when_fallback_disabled(self, tmp_path):
@@ -128,7 +128,7 @@ class TestMuJoCoMeshAssets:
         # Should contain primitive geometry
         assert 'type="box"' in content
         # Warning should have been logged exactly once
-        warning_calls = [c for c in mock_logger.warning.call_args_list]
+        warning_calls = list(mock_logger.warning.call_args_list)
         assert len(warning_calls) == 1, f"Expected 1 warning, got {len(warning_calls)}"
 
 
@@ -294,10 +294,7 @@ class TestProceduralInstrumentTypes:
         """Every registered generator returns a non-empty trimesh mesh."""
         pytest.importorskip("trimesh")
         try:
-            from surg_rl.assets.mesh_generator import (
-                _procedural_map,
-                generate_procedural_instrument,
-            )
+            from surg_rl.assets.mesh_generator import generate_procedural_instrument
         except ImportError:
             pytest.skip("trimesh not installed")
 

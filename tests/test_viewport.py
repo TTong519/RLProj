@@ -633,7 +633,9 @@ class TestViewportMouseInteraction:
         panel = self._make_panel()
         initial = panel._camera_offset["distance"]
         panel._on_wheel(2.0)
-        assert panel._camera_offset["distance"] == pytest.approx(initial * (1.0 - 2.0 * 0.15), rel=1e-6)
+        assert panel._camera_offset["distance"] == pytest.approx(
+            initial * (1.0 - 2.0 * 0.15), rel=1e-6
+        )
         panel.stop()
 
     def test_wheel_distance_is_clamped(self, qapp) -> None:

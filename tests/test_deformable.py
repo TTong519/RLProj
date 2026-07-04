@@ -141,13 +141,13 @@ class TestMuJoCoFlexGeneration:
         vertex_el = flex.find("vertex")
         assert vertex_el is not None
         vertex_text = vertex_el.text.strip()
-        vertex_lines = [l for l in vertex_text.split("\n") if l.strip()]
+        vertex_lines = [ln for ln in vertex_text.split("\n") if ln.strip()]
         assert len(vertex_lines) == 9
 
         element_el = flex.find("element")
         assert element_el is not None
         element_text = element_el.text.strip()
-        element_lines = [l for l in element_text.split("\n") if l.strip()]
+        element_lines = [ln for ln in element_text.split("\n") if ln.strip()]
         assert len(element_lines) == 12
 
     def test_flex_body_elasticity_from_config(self, tetgen_cube_mesh):

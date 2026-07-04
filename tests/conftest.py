@@ -1,5 +1,6 @@
 """Shared pytest fixtures and utilities."""
 
+import importlib.util
 import os
 import subprocess
 import sys
@@ -8,6 +9,25 @@ from pathlib import Path
 import pytest
 
 from surg_rl.scene_definition import SceneLoader
+
+# PyBullet is an optional dependency (no macOS arm64 wheel). Tests whose node id
+# contains "pybullet" (test name or class name) are skipped when pybullet is not
+# importable, rather than erroring at runtime inside PyBulletSimulator methods.
+# This keeps the macOS CI job (which installs only mujoco, not pybullet) green
+# while leaving the full pybullet suite running on Linux where pybullet is
+# installed via the `physics` extra. See debug session ci-failures-lint-pybullet.
+_PYBULLET_AVAILABLE = importlib.util.find_spec("pybullet") is not None
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip pybullet-named tests when pybullet is not installed."""
+    if _PYBULLET_AVAILABLE:
+        return
+    skip_pybullet = pytest.mark.skip(reason="pybullet not installed (surg-rl[physics] extra)")
+    for item in items:
+        if "pybullet" in item.nodeid.lower():
+            item.add_marker(skip_pybullet)
+
 
 # Ensure src/ is on the path for pytest collection
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))

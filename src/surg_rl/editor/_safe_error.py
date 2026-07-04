@@ -15,6 +15,7 @@ Five pattern families are covered:
 The module is pure Python (no PySide6 import) so it can be unit-tested without
 ``QT_QPA_PLATFORM=offscreen``.
 """
+
 from __future__ import annotations
 
 import re

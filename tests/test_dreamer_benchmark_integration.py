@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -102,7 +102,10 @@ class TestExperimentRunnerDreamerEvaluation:
         monkeypatch.chdir(tmp_path)
         runner = self._make_runner({"dreamer_obs_types": ["pixels"]})
         with (
-            patch("surg_rl.benchmark.experiment_runner.check_spike_status", return_value={"status": "passed"}),
+            patch(
+                "surg_rl.benchmark.experiment_runner.check_spike_status",
+                return_value={"status": "passed"},
+            ),
         ):
             results = runner._run_dreamer_evaluation(["mujoco"])
         assert len(results) == 1
@@ -112,15 +115,23 @@ class TestExperimentRunnerDreamerEvaluation:
     def test_returns_pending_for_state_when_no_checkpoint(self, monkeypatch, tmp_path):
         monkeypatch.chdir(tmp_path)
         runner = self._make_runner({"dreamer_obs_types": ["state"]})
-        with patch("surg_rl.benchmark.experiment_runner.check_spike_status", return_value={"status": "passed"}):
+        with patch(
+            "surg_rl.benchmark.experiment_runner.check_spike_status",
+            return_value={"status": "passed"},
+        ):
             results = runner._run_dreamer_evaluation(["mujoco"])
         assert len(results) == 1
         assert results[0].status == "pending"
 
-    def test_returns_pending_for_both_pixels_and_state_when_no_checkpoints(self, monkeypatch, tmp_path):
+    def test_returns_pending_for_both_pixels_and_state_when_no_checkpoints(
+        self, monkeypatch, tmp_path
+    ):
         monkeypatch.chdir(tmp_path)
         runner = self._make_runner({"dreamer_obs_types": ["pixels", "state"]})
-        with patch("surg_rl.benchmark.experiment_runner.check_spike_status", return_value={"status": "passed"}):
+        with patch(
+            "surg_rl.benchmark.experiment_runner.check_spike_status",
+            return_value={"status": "passed"},
+        ):
             results = runner._run_dreamer_evaluation(["mujoco"])
         assert len(results) == 2
         assert all(r.status == "pending" for r in results)
@@ -134,8 +145,14 @@ class TestExperimentRunnerDreamerEvaluation:
 
         runner = self._make_runner({"dreamer_obs_types": ["state"]})
         with (
-            patch("surg_rl.benchmark.experiment_runner.check_spike_status", return_value={"status": "passed"}),
-            patch("surg_rl.benchmark.experiment_runner.evaluate_checkpoint", return_value={"reconstruction_mse": 0.0}) as mock_eval,
+            patch(
+                "surg_rl.benchmark.experiment_runner.check_spike_status",
+                return_value={"status": "passed"},
+            ),
+            patch(
+                "surg_rl.benchmark.experiment_runner.evaluate_checkpoint",
+                return_value={"reconstruction_mse": 0.0},
+            ) as mock_eval,
         ):
             results = runner._run_dreamer_evaluation(["mujoco"])
         assert mock_eval.called

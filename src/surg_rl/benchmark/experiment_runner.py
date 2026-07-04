@@ -110,7 +110,7 @@ def _run_single_seed(
 
         # Create training manager and train
         manager = TrainingManager(training_config)
-        model = manager.train(callback=metric_callback)
+        manager.train(callback=metric_callback)
 
         # Evaluate
         eval_metrics = manager.evaluate(n_episodes=config.eval_episodes)
@@ -468,7 +468,7 @@ class ExperimentRunner:
         if not algo_results:
             return
 
-        successful = [r for r in algo_results if r.status == "success"]
+        [r for r in algo_results if r.status == "success"]
         failed = [r for r in algo_results if r.status == "failed"]
 
         if RICH.available:

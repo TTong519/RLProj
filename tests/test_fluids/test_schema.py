@@ -1,7 +1,6 @@
 """Tests for FluidConfig Pydantic schema (FLUD-03)."""
 
 import pytest
-
 from pydantic import ValidationError
 
 from surg_rl.scene_definition.schema import (

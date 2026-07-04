@@ -4,9 +4,9 @@ DIST-06
 """
 
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -15,6 +15,7 @@ import pytest
 def _is_online() -> bool:
     """Return True if pypi.org appears reachable."""
     import socket
+
     try:
         socket.gethostbyname("pypi.org")
         return True
@@ -37,7 +38,16 @@ def test_distributed_extra_resolves():
         "PIP_CACHE_DIR": str(Path(__file__).parent.parent / ".pip_cache"),
     }
     result = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "--dry-run", "--no-cache-dir", "-e", ".[distributed]"],
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--dry-run",
+            "--no-cache-dir",
+            "-e",
+            ".[distributed]",
+        ],
         capture_output=True,
         text=True,
         cwd=".",

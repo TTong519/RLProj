@@ -177,26 +177,23 @@ class TestTrajectoryReplayRunReplayWithMocks:
         mock_model = MagicMock()
         mock_model.predict.return_value = (np.array([0.1, 0.2]), None)
 
-        with patch.dict(sys.modules, mock_modules), patch.object(sys, "platform", "linux"):
-            with patch(
-                "surg_rl.rl.environment.make_env",
-                return_value=mock_env,
-            ):
-                with patch(
-                    "stable_baselines3.PPO.load",
-                    return_value=mock_model,
-                ):
-                    import surg_rl.ros2.replay as replay_mod
+        with (
+            patch.dict(sys.modules, mock_modules),
+            patch.object(sys, "platform", "linux"),
+            patch("surg_rl.rl.environment.make_env", return_value=mock_env),
+            patch("stable_baselines3.PPO.load", return_value=mock_model),
+        ):
+            import surg_rl.ros2.replay as replay_mod
 
-                    importlib.reload(replay_mod)
+            importlib.reload(replay_mod)
 
-                    replay = replay_mod.TrajectoryReplay(
-                        model_path="/tmp/model.zip",
-                        scene_path="scenes/minimal_scene.json",
-                        speed=1.0,
-                    )
+            replay = replay_mod.TrajectoryReplay(
+                model_path="/tmp/model.zip",
+                scene_path="scenes/minimal_scene.json",
+                speed=1.0,
+            )
 
-                    result = replay.run_replay(max_steps=5)
+            result = replay.run_replay(max_steps=5)
 
         assert isinstance(result, dict)
         assert "steps_executed" in result
@@ -233,26 +230,23 @@ class TestTrajectoryReplayRunReplayWithMocks:
         # Setup model mock
         mock_model = MagicMock()
 
-        with patch.dict(sys.modules, mock_modules), patch.object(sys, "platform", "linux"):
-            with patch(
-                "surg_rl.rl.environment.make_env",
-                return_value=mock_env,
-            ):
-                with patch(
-                    "stable_baselines3.PPO.load",
-                    return_value=mock_model,
-                ):
-                    import surg_rl.ros2.replay as replay_mod
+        with (
+            patch.dict(sys.modules, mock_modules),
+            patch.object(sys, "platform", "linux"),
+            patch("surg_rl.rl.environment.make_env", return_value=mock_env),
+            patch("stable_baselines3.PPO.load", return_value=mock_model),
+        ):
+            import surg_rl.ros2.replay as replay_mod
 
-                    importlib.reload(replay_mod)
+            importlib.reload(replay_mod)
 
-                    replay = replay_mod.TrajectoryReplay(
-                        model_path="/tmp/model.zip",
-                        scene_path="scenes/minimal_scene.json",
-                        speed=1.0,
-                    )
+            replay = replay_mod.TrajectoryReplay(
+                model_path="/tmp/model.zip",
+                scene_path="scenes/minimal_scene.json",
+                speed=1.0,
+            )
 
-                    replay.terminate()
+            replay.terminate()
 
         mock_env.close.assert_called_once()
         mock_node.destroy_node.assert_called_once()
@@ -284,27 +278,24 @@ class TestTrajectoryReplayRunReplayWithMocks:
         mock_model = MagicMock()
         mock_model.predict.return_value = (np.array([0.1, 0.2]), None)
 
-        with patch.dict(sys.modules, mock_modules), patch.object(sys, "platform", "linux"):
-            with patch(
-                "surg_rl.rl.environment.make_env",
-                return_value=mock_env,
-            ):
-                with patch(
-                    "stable_baselines3.PPO.load",
-                    return_value=mock_model,
-                ):
-                    with patch.object(time_mod, "sleep") as mock_sleep:
-                        import surg_rl.ros2.replay as replay_mod
+        with (
+            patch.dict(sys.modules, mock_modules),
+            patch.object(sys, "platform", "linux"),
+            patch("surg_rl.rl.environment.make_env", return_value=mock_env),
+            patch("stable_baselines3.PPO.load", return_value=mock_model),
+            patch.object(time_mod, "sleep") as mock_sleep,
+        ):
+            import surg_rl.ros2.replay as replay_mod
 
-                        importlib.reload(replay_mod)
+            importlib.reload(replay_mod)
 
-                        replay = replay_mod.TrajectoryReplay(
-                            model_path="/tmp/model.zip",
-                            scene_path="scenes/minimal_scene.json",
-                            speed=0.1,
-                        )
+            replay = replay_mod.TrajectoryReplay(
+                model_path="/tmp/model.zip",
+                scene_path="scenes/minimal_scene.json",
+                speed=0.1,
+            )
 
-                        replay.run_replay(max_steps=3)
+            replay.run_replay(max_steps=3)
 
         # At speed=0.1, dt=0.002 → throttle = (10-1)*0.002 = 0.018
         # sleep should be called 3 times

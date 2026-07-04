@@ -194,7 +194,7 @@ class BoundingBox(BaseModel):
     max_corner: Position = Field(description="Maximum corner of bounding box")
 
     @model_validator(mode="after")
-    def validate_bounds(self) -> "BoundingBox":
+    def validate_bounds(self) -> BoundingBox:
         """Ensure min <= max for all dimensions."""
         if self.min_corner.x > self.max_corner.x:
             raise ValueError("min_corner.x must be <= max_corner.x")
@@ -256,7 +256,7 @@ class MeshAsset(AssetReference):
         default=True,
         description="Silently fall back to primitive geometry when mesh file missing (per ASET-03)",
     )
-    mesh_origin: "Position | None" = Field(
+    mesh_origin: Position | None = Field(
         default=None,
         description="Origin offset for mesh asset (None = use mesh file origin)",
     )
@@ -468,7 +468,7 @@ class DeformableConfig(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_mesh_source(self) -> "DeformableConfig":
+    def validate_mesh_source(self) -> DeformableConfig:
         if self.mesh_source != "flexcomp_grid" and not self.mesh_path:
             raise ValueError(f"mesh_path is required when mesh_source='{self.mesh_source}'")
         return self
@@ -648,7 +648,7 @@ class RobotConfig(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_robot_definition(self) -> "RobotConfig":
+    def validate_robot_definition(self) -> RobotConfig:
         """Ensure robot is defined either via file or direct definition."""
         has_file = self.urdf_path is not None or self.mujoco_xml_path is not None
         has_direct = len(self.links) > 0 or len(self.joints) > 0
@@ -679,7 +679,7 @@ class TissueMeshDefinition(BaseModel):
     length: float | None = Field(default=None, description="Length for cylinder/capsule")
 
     @model_validator(mode="after")
-    def validate_geometry(self) -> "TissueMeshDefinition":
+    def validate_geometry(self) -> TissueMeshDefinition:
         """Ensure geometry is properly defined."""
         if self.mesh is not None:
             return self
@@ -1110,7 +1110,7 @@ class TaskConfig(BaseModel):
         default=None,
         description="Surgical task type (None = generic/unspecified)",
     )
-    difficulty_level: "DifficultyLevel | None" = (
+    difficulty_level: DifficultyLevel | None = (
         Field(  # noqa: F821 — forward ref resolved at bottom of file
             default=None,
             description="Surgical difficulty preset (EASY/MEDIUM/HARD). "
@@ -1238,7 +1238,7 @@ class MultiAgentConfig(BaseModel):
         return len(self.arm_configs)
 
     @model_validator(mode="after")
-    def validate_unique_roles(self) -> "MultiAgentConfig":
+    def validate_unique_roles(self) -> MultiAgentConfig:
         """Ensure no duplicate roles in arm_configs (D-02: swappable but unique)."""
         roles = [arm.role for arm in self.arm_configs]
         if len(roles) != len(set(roles)):
@@ -1439,7 +1439,7 @@ class SceneDefinition(BaseModel):
     )
 
     # Fluid simulation
-    fluid: "FluidConfig | None" = Field(default=None, description="Fluid simulation configuration")
+    fluid: FluidConfig | None = Field(default=None, description="Fluid simulation configuration")
 
     # Custom parameters
     custom: dict[str, Any] = Field(
@@ -1447,7 +1447,7 @@ class SceneDefinition(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_multi_agent_robot_refs(self) -> "SceneDefinition":
+    def validate_multi_agent_robot_refs(self) -> SceneDefinition:
         """Ensure multi_agent arm robot_ref entries point to existing robots.
 
         D-01/D-03: cross-validate MultiAgentConfig against SceneDefinition.robots[].
@@ -1564,9 +1564,7 @@ class FluidConfig(BaseModel):
 
     @field_validator("grid_size")
     @classmethod
-    def _cap_grid_size(
-        cls, v: tuple[int, int, int] | None
-    ) -> tuple[int, int, int] | None:
+    def _cap_grid_size(cls, v: tuple[int, int, int] | None) -> tuple[int, int, int] | None:
         if v is None:
             return None
         if len(v) != 3:
@@ -1578,7 +1576,7 @@ class FluidConfig(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def _require_grid_size_when_dim_3d(self) -> "FluidConfig":
+    def _require_grid_size_when_dim_3d(self) -> FluidConfig:
         """SC#3 memory-blow-up guard: grid_size is hard-required when dim_3d=True.
 
         Also rejects degenerate 3D domains: any bounding-box axis with zero (or

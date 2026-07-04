@@ -1,4 +1,5 @@
 """GUI pytest fixtures: force offscreen Qt and isolated HOME for QSettings."""
+
 from __future__ import annotations
 
 import os
@@ -22,6 +23,7 @@ def qapp():
     if not _HAVE_PYSIDE6:
         pytest.skip("PySide6 not installed")
     from PySide6.QtWidgets import QApplication
+
     return QApplication.instance() or QApplication(sys.argv)
 
 
