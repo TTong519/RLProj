@@ -34,8 +34,8 @@ Carried-forward tech-debt closure. Each maps to a roadmap phase (36–40). No ne
 
 ### Deploy & Assets
 
-- [ ] **DEPLOY-01**: K8s PVC checkpoint-persistence e2e test asserts write → pod restart → read on a bound PVC (de-stubbed via `pytest-kind` `kind_cluster` fixture + `kubectl wait --for=condition=Bound`)
-- [ ] **ASET-06**: Organ-mesh licensing decision is recorded as an ADR — procedural generation as the default, surgtoolloc rejected with cited rationale (continues ASET-01..05)
+- [x] **DEPLOY-01**: K8s PVC checkpoint-persistence e2e test asserts write → pod restart → read on a bound PVC (de-stubbed via `pytest-kind` `kind_cluster` fixture + `kubectl wait --for=condition=Bound`)
+- [x] **ASET-06**: Organ-mesh licensing decision is recorded as an ADR — procedural generation as the default, surgtoolloc rejected with cited rationale (continues ASET-01..05)
 
 ## v2 Requirements
 
@@ -91,8 +91,8 @@ Which phases cover which requirements. Updated during roadmap creation (2026-06-
 | FLUID-01 | Phase 38 | Complete |
 | FLUID-02 | Phase 38 | Complete |
 | FLUID-03 | Phase 38 | Complete |
-| DEPLOY-01 | Phase 39 | Pending |
-| ASET-06 | Phase 39 | Pending |
+| DEPLOY-01 | Phase 39 | Complete |
+| ASET-06 | Phase 39 | Complete |
 
 **Coverage:**
 

@@ -51,7 +51,7 @@ Full phase goals, success criteria, and plan lists: see
 - [x] **Phase 36: Difficulty Schema + Discrete Curriculum** - DifficultyLevelConfig leaf model + additive CurriculumScheduler level progression (non-GPU, lowest risk, unblocks 37) (completed 2026-06-25)
 - [x] **Phase 37: Scene-Level difficulty_blocks + Env Wiring** - Scene JSON difficulty_blocks + SurgicalEnv precedence truth-table + load-all-6-scenes regression (completed 2026-06-24)
 - [x] **Phase 38: 3D Fluid Flag (dim_3d=True)** - 3D Eulerian grid fluids via PhiFlow 3D Box/StaggeredGrid; additive, 2D path stays green; independent of 36/37/39 (completed 2026-06-27)
-- [ ] **Phase 39: K8s PVC e2e + Organ-Mesh Licensing ADR** - De-stub checkpoint-persistence e2e via pytest-kind + record procedural-vs-surgtoolloc ADR; independent, low-risk before GPU-gated 40
+- [x] **Phase 39: K8s PVC e2e + Organ-Mesh Licensing ADR** - De-stub checkpoint-persistence e2e via pytest-kind + record procedural-vs-surgtoolloc ADR; independent, low-risk before GPU-gated 40 (completed 2026-06-27)
 - [ ] **Phase 40: Real DreamerV3 Integration + Sentinel Flip** - Replace 5 stub functions with real dreamerv3.Agent; flip Phase 30 sentinel negative→positive; GPU-gated LAST phase
 
 ### Phase Details
@@ -156,11 +156,12 @@ Plans:
   4. An ADR document records the organ-mesh licensing decision: procedural generation is the default; surgtoolloc is rejected with cited rationale (endoscopic video with tool-presence labels, not organ geometry; MICCAI/EndoVis challenge guidelines prohibit commercial use)
   5. The ADR cites the specific SurgToolLoc/EndoVis MICCAI license clause text (or the public challenge terms URL) so the rejection is auditable
 
-**Plans**: 2 plans
+**Plans**: 2/2 plans complete
 
 Plans:
-- [ ] 39-01-PLAN.md — De-stub K8s PVC e2e (pytest-kind + e2e overlay + [k8s-test] extra + CPU-only CI job) [DEPLOY-01]
-- [ ] 39-02-PLAN.md — Organ-mesh licensing ADR (procedural default, SurgToolLoc rejected, verbatim clause citation) [ASET-06]
+
+- [x] 39-01-PLAN.md — De-stub K8s PVC e2e (pytest-kind + e2e overlay + [k8s-test] extra + CPU-only CI job) [DEPLOY-01]
+- [x] 39-02-PLAN.md — Organ-mesh licensing ADR (procedural default, SurgToolLoc rejected, verbatim clause citation) [ASET-06]
 
 #### Phase 40: Real DreamerV3 Integration + Sentinel Flip
 
@@ -196,7 +197,7 @@ Phases execute in numeric order: 36 → 37 → 38 → 39 → 40. Phases 38 and 3
 | 36. Difficulty Schema + Discrete Curriculum | 3/3 | Complete    | 2026-06-25 |
 | 37. Scene-Level difficulty_blocks + Env Wiring | 3/3 | Complete    | 2026-06-25 |
 | 38. 3D Fluid Flag (dim_3d=True) | 4/4 | Complete    | 2026-06-27 |
-| 39. K8s PVC e2e + Organ-Mesh Licensing ADR | 0/TBD | Not started | - |
+| 39. K8s PVC e2e + Organ-Mesh Licensing ADR | 2/2 | Complete   | 2026-06-27 |
 | 40. Real DreamerV3 Integration + Sentinel Flip | 0/TBD | Not started | - |
 
 ## Next Steps

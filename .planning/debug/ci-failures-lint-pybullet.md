@@ -1,6 +1,6 @@
 ---
 slug: ci-failures-lint-pybullet
-status: fixing
+status: resolved
 trigger: "the github ci t4ests"
 created: 2026-06-30
 updated: 2026-07-02
@@ -802,8 +802,14 @@ verification:
     (docker-ci job SUCCESS; Jetson step non-blocking, the underlying
     nvcr.io/nvidia/l4t-pytorch:r36.4.0-pth2.5.0 deprecation is contained as a
     warning annotation; CPU/CUDA/ROCm steps gating GREEN).
-  Class H (PVC wait idiom): fix applied in commit a2a740c; awaiting CI run
-    28612169371 to confirm the k8s-e2e job goes GREEN with the jsonpath wait.
+  Class H (PVC wait idiom): VERIFIED GREEN in run 28612881839 (commit a2a740c
+    — `kubectl wait --for=jsonpath='{.status.phase}'=Bound pvc/...`); the k8s
+    e2e job is now SUCCESS. (Prior run 28612169371 was cancelled/superseded by
+    the next push; the final confirming run is 28612881839.)
+  OVERALL: run 28612881839 conclusion = SUCCESS — ALL 6 jobs green
+    (ubuntu 3.10/3.11/3.12, macos 3.11, Docker Build multi-arch, K8s PVC e2e).
+    This closes the session: the entire .github/workflows/ci.yml workflow is
+    green, not just the test matrix.
   Local: ruff/black clean; 17 guard tests pass (pvc_wait_idiom +
     k8s_overlay_builds + dockerfile_layer_order + optional_extra_skip_guard
     + ci_config); k8s e2e skips locally (no Docker).

@@ -4,17 +4,17 @@ milestone: v0.6.0
 milestone_name: Carried-Forward Debt Closure
 current_phase: 39
 current_phase_name: K8s PVC e2e + Organ-Mesh Licensing ADR
-status: executing
-stopped_at: Phase 38 planned (4 plans, 3 waves; ready to execute)
-last_updated: "2026-06-27T19:41:51.961Z"
+status: verifying
+stopped_at: Completed 39-01-PLAN.md (DEPLOY-01 K8s PVC e2e closed)
+last_updated: "2026-06-27T21:21:08.030Z"
 last_activity: 2026-06-27
-last_activity_desc: Phase 38 complete, transitioned to Phase 39
+last_activity_desc: Phase 39 execution started
 progress:
   total_phases: 5
-  completed_phases: 3
-  total_plans: 10
-  completed_plans: 10
-  percent: 60
+  completed_phases: 4
+  total_plans: 12
+  completed_plans: 12
+  percent: 80
 ---
 
 # Project State
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-25 — Phase 36 complete)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation — with automatic primitive fallbacks when real assets are missing, and a benchmarking framework for systematic RL research comparisons.
-**Current focus:** Phase 38 — fluid-3d-flag-dim-3d-true
+**Current focus:** Phase 39 — K8s PVC e2e + Organ-Mesh Licensing ADR
 
 ## Current Position
 
-Phase: 39 — K8s PVC e2e + Organ-Mesh Licensing ADR
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-06-27 — Phase 38 complete, transitioned to Phase 39
+Phase: 39 (K8s PVC e2e + Organ-Mesh Licensing ADR) — EXECUTING
+Plan: 2 of 2
+Status: Phase complete — ready for verification
+Last activity: 2026-06-27 — Phase 39 execution started
 
 Progress: [████░░░░░░] 40% (2/5 phases, 0/13 requirements closed)
 
@@ -71,6 +71,8 @@ Progress: [████░░░░░░] 40% (2/5 phases, 0/13 requirements cl
 | Phase 38 P02 | 206s | 2 tasks | 4 files |
 | Phase 38 P03 | ~3m | 2 tasks | 3 files |
 | Phase 38 P04 | 13min | 3 tasks | 3 files |
+| Phase 39 P02 | ~12m | 2 tasks | 2 files |
+| Phase 39 P01 | ~6m | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -109,6 +111,11 @@ Decisions are logged in PROJECT.md Key Architecture Decisions. Recent decisions 
 - [Phase ?]: _render_np_2d extracted from render_fluid_2d; 2D byte-identical guard pins pre-refactor output array (SC#1)
 - [Phase ?]: SC#1 2D baseline uses SHA256 hash-pin for byte-identical regression
 - [Phase ?]: SC#4 overlapping: pressure finite-or-None (union(*geoms) graceful degradation; NaN contract preserved)
+- [Phase 39]: Procedural generation is the DEFAULT organ-mesh source for surg-rl (ADR-0001, status: accepted)
+- [Phase 39]: SurgToolLoc REJECTED as organ-mesh source: modality mismatch (primary) + MICCAI/EndoVis challenge-guidelines licensing incompatibility (secondary), both cited from public URLs
+- [Phase 39]: MADR format adopted as repo ADR template; docs/adr/ is canonical ADR directory with 4-digit zero-padded numbering
+- [Phase 39]: [Phase 39-01]: pytest-kind>=22.11.1 + pykube-ng (transitive) added as [k8s-test] extra after human-verify SUS gate approved; e2e overlay references ../../base/pvc.yaml directly (NOT - ../../base) and read-job.yaml applied standalone in test body to avoid racing the write-Job
+- [Phase 39]: [Phase 39-01]: Module-level pytestmark skipif required (not just in-test pytest.skip) so K8s e2e test SKIPS not ERRORs when Docker is down -- kind_cluster fixture errors at setup before the test body runs
 
 ### Pending Todos
 
@@ -167,8 +174,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-27T05:36:00.353Z
-Stopped at: Phase 38 planned (4 plans, 3 waves; ready to execute)
+Last session: 2026-06-27T21:21:08.020Z
+Stopped at: Completed 39-01-PLAN.md (DEPLOY-01 K8s PVC e2e closed)
 Resume file: .planning/phases/38-fluid-3d-flag-dim-3d-true/38-CONTEXT.md (plans: 38-01..04-PLAN.md)
 
 *Updated: 2026-06-24 — v0.6.0 roadmap created (5 phases, 13/13 requirements mapped); ready to plan Phase 36*
