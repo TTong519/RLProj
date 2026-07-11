@@ -14,7 +14,7 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 
 **Next:** v0.6.0 — Carried-Forward Debt Closure (started 2026-06-24). Closes the four items deferred from v0.4.0–v0.5.0: real DreamerV3 integration, TASK-02 per-level difficulty schema, K8s PVC e2e + organ-mesh licensing decision, and the 3D fluid flag. GUI editor depth and scene-generation features are deferred to v0.7.0.
 
-**v0.6.0 progress:** Phases 36 (difficulty schema), 37 (scene-level `difficulty_blocks` + env wiring), and 38 (3D fluid flag `dim_3d=True`) complete. Remaining: Phase 39 (K8s PVC e2e + organ-mesh licensing ADR) and Phase 40 (real DreamerV3 integration + sentinel flip, GPU-gated). Test baseline 1,513 passing.
+**v0.6.0 progress:** Phases 36 (difficulty schema), 37 (scene-level `difficulty_blocks` + env wiring), 38 (3D fluid flag `dim_3d=True`), and 39 (K8s PVC e2e + organ-mesh licensing ADR) complete. Remaining: Phase 40 (real DreamerV3 integration + sentinel flip, GPU-gated). 9/13 v0.6.0 requirements closed. Test baseline 1,513 passing (Phase 39's e2e test is CI-only; macOS local skips by design).
 
 ## Current Milestone: v0.6.0 Carried-Forward Debt Closure
 
@@ -163,12 +163,11 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 ### Validated (v0.6.0 — in progress)
 
 - ✓ **3D Fluid Flag (`dim_3d=True`)** — 3D Eulerian grid fluids via PhiFlow 3D `Box`/`StaggeredGrid` + `make_incompressible` pressure projection; ONE_WAY coupling default (stable on thin instruments), TWO_WAY opt-in (documented unstable); `grid_size`-required memory-blow-up guard (SC#3); `union(*geoms)` NaN-regression covering both dims (SC#4); `fluid_step` hook unchanged (SC#5). 2D xz-slice path byte-identical to v0.5.0 (SC#1). (FLUID-01, FLUID-02, FLUID-03) — Phase 38
+- ✓ **K8s PVC e2e + organ-mesh licensing decision** — checkpoint-persistence e2e de-stubbed via `pytest-kind`'s session-scoped `kind_cluster` fixture (apply → `kubectl wait --for=condition=Bound` → write/read Jobs → `assert read_sha == write_sha` on a bound PVC); dedicated CPU-only `k8s-e2e` CI job on ubuntu-latest (observed GREEN 2026-07-04). Organ-mesh licensing recorded as ADR-0001 (MADR, status accepted): procedural generation is the DEFAULT, SurgToolLoc REJECTED on modality mismatch (primary — endoscopic video + tool-presence labels, no organ meshes) + MICCAI/EndoVis non-commercial clause (secondary, quoted verbatim, both public URLs cited). (DEPLOY-01, ASET-06) — Phase 39
 
 ### Active (v0.6.0 — Carried-Forward Debt Closure)
 
 - [ ] **Real DreamerV3 integration** — flip the `_build_agent` stub, wire a real agent into the JAX subprocess, validate on GPU
-- [ ] **TASK-02 per-level difficulty schema** — `DifficultyLevelConfig` overrides + discrete curriculum progression + scene-level difficulty blocks
-- [ ] **K8s PVC e2e + organ-mesh licensing decision** — de-stub checkpoint-persistence e2e; choose procedural vs surgtoolloc organ meshes
 
 ### Out of Scope
 
@@ -251,6 +250,8 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 - **Editor viewport uses a custom `ViewportCanvas(QWidget)`**, not a `QLabel` — reliable mouse/wheel event delivery on macOS; camera offsets are pushed into the simulator via `_editor_camera_*` attrs (PyBullet offscreen fallback honors them; MuJoCo ignores them)
 - **PyBullet RGB normalization** — `_normalize_pb_rgb()` converts all `getCameraImage` pixel payloads (HxWx4, HxWx3, flat tuples/arrays) to a canonical `(H, W, 3) uint8` so the render bridge is robust across PyBullet versions/flags
 - **MuJoCo offscreen renderer short-circuits on persistent CGL/EGL failure** (`_renderer_available = False`) instead of repeating the same error every frame
+- **ADR-0001 (MADR format) records the organ-mesh licensing decision** — procedural generation is the DEFAULT organ-mesh source; SurgToolLoc is REJECTED on dual grounds (PRIMARY modality mismatch — endoscopic video + tool-presence labels, no organ geometry; SECONDARY licensing — MICCAI/EndoVis non-commercial clause quoted verbatim on a single grep-matchable line, both public challenge-site URLs cited). `docs/adr/` is the canonical ADR directory with 4-digit zero-padded numbering. (Phase 39)
+- **pytest-kind session-scoped `kind_cluster` fixture drives the K8s PVC e2e test** — apply `-k k8s/overlays/e2e` → `kubectl wait --for=condition=Bound` → write/read Jobs → `assert read_sha == write_sha` on a bound PVC. A module-level `pytestmark = pytest.mark.skipif(not _k8s_e2e_available(), ...)` is required (not just an in-test `pytest.skip`) so the test SKIPs cleanly when Docker is down — the `kind_cluster` fixture errors at setup before the test body runs. The e2e Kustomize overlay references `../../base/pvc.yaml` directly (NOT `- ../../base`, to avoid pulling the GPU training-job + raycluster + secret); `read-job.yaml` is applied standalone via `kubectl apply -f` in the test body (NOT in overlay `resources:`) to avoid racing the write-Job. (Phase 39)
 
 ## Evolution
 
@@ -271,4 +272,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-06-27 — Phase 38 complete (3D fluid flag `dim_3d=True`; FLUID-01/02/03 verification 5/5 PASSED; code-review BLOCKER CR-01 tracked as follow-up debt via `/gsd-code-review 38 --fix`)*
+*Last updated: 2026-07-11 — Phase 39 complete (K8s PVC e2e de-stubbed via pytest-kind + dedicated `k8s-e2e` CI job observed GREEN; organ-mesh licensing decision recorded as ADR-0001, procedural generation default / SurgToolLoc rejected; DEPLOY-01 + ASET-06 closed. 9/13 v0.6.0 requirements done; Phase 40 Real DreamerV3 remains, GPU-gated)*

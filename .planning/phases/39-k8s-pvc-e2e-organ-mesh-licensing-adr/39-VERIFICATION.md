@@ -1,17 +1,19 @@
 ---
 phase: 39-k8s-pvc-e2e-organ-mesh-licensing-adr
 verified: 2026-06-27T00:00:00Z
-status: human_needed
+status: passed
 score: 4/5 must-haves verified
 behavior_unverified: 1
 overrides_applied: 0
 next_action: observe the `k8s-e2e` CI job go GREEN on the next push/PR (closes the SC#1 live-cluster binding path), then re-verify SC#1 as VERIFIED
 behavior_unverified_items:
+
   - truth: "A pytest-kind session-scoped kind_cluster fixture provisions a local Kubernetes cluster in CI and the de-stubbed test_pvc_checkpoint_persistence asserts write -> pod restart -> read byte-equality on a bound PVC (kubectl wait --for=condition=Bound)"
     test: "Push a commit / open a PR triggering the `k8s-e2e` GitHub Actions job; confirm the job reaches and passes the `pytest tests/k8s/test_pvc_e2e.py -m k8s -v --cluster-name=surg-rl-e2e` step (exit 0, `assert read_sha == write_sha` evaluated against a bound PVC)."
     expected: "The `k8s-e2e` job is GREEN on ubuntu-latest: kind provisions a cluster, the e2e overlay applies, PVC reaches Bound, both write/read Jobs reach Complete, and `read_sha == write_sha` holds. The post-merge full-suite skip (Docker down on macOS) is the designed local-macOS behavior and is NOT the binding GREEN."
     why_human: "The invariant is a runtime state transition across a live K8s cluster (write a checkpoint on a bound PVC, restart the pod via a second Job mounting the same PVC, read back, assert byte-equality). Symbol presence + wiring + YAML parse + collect + graceful-skip prove the test is correctly constructed and wired, but cannot exercise the apply->Bound->Complete->read->SHA-equality cycle without a running Docker daemon + kind cluster. Docker is DOWN on this macOS verification host (the module-level `pytestmark = skipif` fires SKIP before fixture setup), and the newly-added `k8s-e2e` CI job has not yet been observed GREEN on a real CI run. The CI run is the authoritative GREEN path; it must be observed once."
 human_verification:
+
   - test: "Observe the `k8s-e2e` GitHub Actions job go GREEN on the next push or PR."
     expected: "Job `K8s PVC e2e (kind)` on ubuntu-latest passes the `pytest tests/k8s/test_pvc_e2e.py -m k8s -v --cluster-name=surg-rl-e2e` step with exit 0; workflow run shows the test executed `assert read_sha == write_sha` against a bound PVC (not skipped)."
     why_human: "Behavior-dependent truth (state transition across a live kind cluster). Cannot be exercised locally without Docker; the CI job is the authoritative GREEN and is newly added / unobserved."
@@ -21,8 +23,22 @@ human_verification:
 
 **Phase Goal:** The K8s checkpoint-persistence path is verified end-to-end on a bound PVC (de-stubbed via `pytest-kind`), and the organ-mesh licensing decision is recorded as a cite-able ADR so future asset work has a single source of truth.
 **Verified:** 2026-06-27
-**Status:** human_needed
-**Re-verification:** No — initial verification
+**Status:** passed
+**Re-verification:** Yes — 2026-07-09 (SC#1 binding GREEN path closed)
+
+> **Re-verification note (2026-07-09):** SC#1's live-cluster GREEN path — the one
+> item this report originally routed to human verification (SC#1 was
+> `PRESENT_BEHAVIOR_UNVERIFIED` at initial verification on 2026-06-27 because the
+> newly-added `k8s-e2e` CI job had not yet been observed GREEN) — has now been
+> satisfied. After the post-merge CI fix landed on `main` (`ae773b7`), the latest
+> `K8s PVC e2e (kind)` run on `601819a` (2026-07-04) shows
+> `test_pvc_checkpoint_persistence PASSED [100%]` — executed against a bound PVC
+> (not skipped), i.e. `assert read_sha == write_sha` ran on a real kind cluster.
+> The user confirmed this in the phase UAT (39-UAT.md test 1, result: pass).
+> With the sole human-verification item closed and the UAT recording zero issues,
+> the report canonicalizes to `status: passed` per the verify-work completion
+> predicate. The body below retains its original 2026-06-27 wording for
+> auditability; SC#1's effective status is now VERIFIED.
 
 ## Goal Achievement
 

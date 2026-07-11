@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.6.0
 milestone_name: Carried-Forward Debt Closure
-current_phase: 39
-current_phase_name: K8s PVC e2e + Organ-Mesh Licensing ADR
-status: verifying
-stopped_at: Completed 39-01-PLAN.md (DEPLOY-01 K8s PVC e2e closed)
-last_updated: "2026-06-27T21:21:08.030Z"
-last_activity: 2026-06-27
-last_activity_desc: Phase 39 execution started
+current_phase: 40
+current_phase_name: Real DreamerV3 Integration + Sentinel Flip
+status: ready_to_plan
+stopped_at: Phase 39 complete, ready to plan Phase 40
+last_updated: "2026-07-11T07:57:58.578Z"
+last_activity: 2026-07-11
+last_activity_desc: Phase 39 complete, transitioned to Phase 40
 progress:
   total_phases: 5
   completed_phases: 4
@@ -21,19 +21,19 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-25 — Phase 36 complete)
+See: .planning/PROJECT.md (updated 2026-07-11 — Phase 39 complete)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation — with automatic primitive fallbacks when real assets are missing, and a benchmarking framework for systematic RL research comparisons.
-**Current focus:** Phase 39 — K8s PVC e2e + Organ-Mesh Licensing ADR
+**Current focus:** Phase 40 — Real DreamerV3 Integration + Sentinel Flip
 
 ## Current Position
 
-Phase: 39 (K8s PVC e2e + Organ-Mesh Licensing ADR) — EXECUTING
-Plan: 2 of 2
-Status: Phase complete — ready for verification
-Last activity: 2026-06-27 — Phase 39 execution started
+Phase: 40 — Real DreamerV3 Integration + Sentinel Flip
+Plan: Not started
+Status: Ready to plan Phase 40 (GPU-gated — schedule CI GPU host before planning)
+Last activity: 2026-07-11 — Phase 39 complete, transitioned to Phase 40
 
-Progress: [████░░░░░░] 40% (2/5 phases, 0/13 requirements closed)
+Progress: [████████████░░] 80% (4/5 phases, 9/13 requirements closed)
 
 ## Performance Metrics
 
@@ -131,8 +131,7 @@ Decisions are logged in PROJECT.md Key Architecture Decisions. Recent decisions 
 ### Blockers/Concerns
 
 - **Phase 40 (Real DreamerV3):** GPU-gated — requires CI GPU host; macOS local skips per INV-8. Highest external-API risk: dreamerv3 factory composition (`make_agent`/`make_replay`/`make_stream`/`make_logger` + `encoder.mlp_keys`/`cnn_keys`) signatures inferred from DeepWiki + `embodied.run.train` source (official `example.py` is 404). Needs deeper research during Phase 40 planning. Also: CI GPU host provisioning strategy — must run the GPU-skipif tests, else milestone audit fails on 100%-skipped.
-- **Phase 38 (3D fluid — `force_computation` 3D bbox branch):** 2D pressure-gradient bbox integration generalization to a z-axis slice needs design validation. PhiFlow 3D API itself is HIGH confidence.
-- **Phase 39 (Organ-mesh licensing ADR):** needs the specific SurgToolLoc/EndoVis MICCAI license clause text cited (legal-text research, not code). Modality mismatch (tool-presence labels, not organ geometry) already verified; exact legal terms need citation artifact.
+- **Phase 38 (3D fluid — `force_computation` 3D bbox branch):** 2D pressure-gradient bbox integration generalization to a z-axis slice needs design validation. PhiFlow 3D API itself is HIGH confidence. (3D obstacle-force magnitude bug CR-01 tracked in `38-REVIEW.md` — fix via `/gsd-code-review 38 --fix`.)
 - **Phase 36/37 (DifficultyLevelConfig):** main risk is re-introducing the v0.4.2 Pydantic cross-package cycle — mitigated by leaf-module placement + `model_rebuild()`. Override precedence must be TDD'd as a truth table against the existing 4-source chain in `_setup_rewards`.
 - **Cross-phase:** `CurriculumScheduler` regression — discrete progression MUST be additive (`progression_mode` flag); full v0.4.0+v0.4.2 curriculum suite must pass unchanged as the additive gate.
 
@@ -156,8 +155,8 @@ Items acknowledged and carried forward from previous milestone close:
 | TASK-02 | Scene-level `difficulty_blocks: dict[DifficultyLevel, DifficultyLevelConfig] \| None` | Phase 37 (TASK-08) | Naming reconciled to `difficulty_blocks`; shape = dict-keyed (RESEARCH.md Open Q3) |
 | Phase 30 | Stub-state sentinel flip when real dreamerv3 is integrated | Phase 40 (DMV3-09) | Flip IS the closure signal |
 | Config | 2D fluids only (3D behind dim_3d=True flag) | Phase 38 (FLUID-01..03) | |
-| Config | Dockerfile.ros2 amd64 / K8S PVC e2e / KubeRay prerequisite | Phase 39 (DEPLOY-01, PVC only) | KubeRay + Dockerfile.ros2 amd64 still out of scope |
-| Assets | Organ mesh source licensing (surgtoolloc or procedural) | Phase 39 (ASET-06) | ADR: procedural-as-default |
+| Config | Dockerfile.ros2 amd64 / K8S PVC e2e / KubeRay prerequisite | Phase 39 (DEPLOY-01, PVC only) | **Closed in Phase 39** — K8s PVC e2e de-stubbed (pytest-kind) + `k8s-e2e` CI job observed GREEN. KubeRay + Dockerfile.ros2 amd64 still out of scope |
+| Assets | Organ mesh source licensing (surgtoolloc or procedural) | Phase 39 (ASET-06) | **Closed in Phase 39** — ADR-0001 (MADR, accepted): procedural generation default, SurgToolLoc rejected (modality mismatch primary + licensing secondary) |
 
 ### Carried forward (unchanged, out of v0.6.0 scope)
 
@@ -174,14 +173,13 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-27T21:21:08.020Z
-Stopped at: Completed 39-01-PLAN.md (DEPLOY-01 K8s PVC e2e closed)
-Resume file: .planning/phases/38-fluid-3d-flag-dim-3d-true/38-CONTEXT.md (plans: 38-01..04-PLAN.md)
+Last session: 2026-07-11
+Stopped at: Phase 39 complete (UAT 3/3 passed, verification canonicalized to passed), ready to plan Phase 40
+Resume file: None
 
-*Updated: 2026-06-24 — v0.6.0 roadmap created (5 phases, 13/13 requirements mapped); ready to plan Phase 36*
+*Updated: 2026-07-11 — Phase 39 complete; ready to plan Phase 40 (GPU-gated)*
 
 ## Operator Next Steps
 
-- `/gsd-execute-phase 38` — execute the 4 planned plans (38-01 → 38-02/38-03 → 38-04) for the 3D Fluid Flag
-- Phase 39 (K8s PVC e2e + Organ-Mesh Licensing ADR) is independent and may be planned/parallelized via a worktree alongside 38 execution
-- Phase 40 (Real DreamerV3) is GPU-gated and runs LAST — schedule CI GPU host provisioning before planning 40
+- `/gsd-plan-phase 40` — plan Phase 40 (Real DreamerV3 Integration + Sentinel Flip). **GPU-gated** — schedule CI GPU host provisioning BEFORE planning, and plan deeper research on the dreamerv3 factory composition signatures (official `example.py` is 404). macOS local skips per INV-8.
+- Phase 40 is the LAST phase in v0.6.0 — milestone closure follows it (`/gsd-complete-milestone v0.6.0` once DMV3-09/10 are verified on a CI GPU host).

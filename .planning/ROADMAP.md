@@ -197,7 +197,7 @@ Phases execute in numeric order: 36 → 37 → 38 → 39 → 40. Phases 38 and 3
 | 36. Difficulty Schema + Discrete Curriculum | 3/3 | Complete    | 2026-06-25 |
 | 37. Scene-Level difficulty_blocks + Env Wiring | 3/3 | Complete    | 2026-06-25 |
 | 38. 3D Fluid Flag (dim_3d=True) | 4/4 | Complete    | 2026-06-27 |
-| 39. K8s PVC e2e + Organ-Mesh Licensing ADR | 2/2 | Complete   | 2026-06-27 |
+| 39. K8s PVC e2e + Organ-Mesh Licensing ADR | 2/2 | Complete    | 2026-06-27 |
 | 40. Real DreamerV3 Integration + Sentinel Flip | 0/TBD | Not started | - |
 
 ## Next Steps
