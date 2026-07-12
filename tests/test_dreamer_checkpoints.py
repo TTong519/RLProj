@@ -25,30 +25,31 @@ class TestFindLatestCheckpoint:
         result = _find_latest_checkpoint("suturing", "state")
         assert result is None
 
-    def test_returns_final_pt_when_only_final_pt_exists(self, monkeypatch, tmp_path):
+    def test_returns_checkpoint_ckpt_when_only_checkpoint_ckpt_exists(self, monkeypatch, tmp_path):
+        """D-09: the canonical embodied.Checkpoint native file is checkpoint.ckpt."""
         monkeypatch.chdir(tmp_path)
         ckpt_dir = Path("models/dreamerv3/suturing_state")
         ckpt_dir.mkdir(parents=True)
-        (ckpt_dir / "final.pt").write_bytes(b"checkpoint")
+        (ckpt_dir / "checkpoint.ckpt").write_bytes(b"checkpoint")
         result = _find_latest_checkpoint("suturing", "state")
-        assert result == str(ckpt_dir / "final.pt")
+        assert result == str(ckpt_dir / "checkpoint.ckpt")
 
     def test_returns_newest_checkpoint_by_mtime(self, monkeypatch, tmp_path):
         monkeypatch.chdir(tmp_path)
         ckpt_dir = Path("models/dreamerv3/suturing_pixels")
         ckpt_dir.mkdir(parents=True)
 
-        old_ckpt = ckpt_dir / "checkpoint_1000.pt"
+        old_ckpt = ckpt_dir / "checkpoint_1000.ckpt"
         old_ckpt.write_bytes(b"old")
         old_time = time.time() - 1000
         os.utime(old_ckpt, (old_time, old_time))
 
-        new_ckpt = ckpt_dir / "checkpoint_2000.pt"
+        new_ckpt = ckpt_dir / "checkpoint_2000.ckpt"
         new_ckpt.write_bytes(b"new")
         new_time = time.time()
         os.utime(new_ckpt, (new_time, new_time))
 
-        middle_ckpt = ckpt_dir / "checkpoint_1500.pt"
+        middle_ckpt = ckpt_dir / "checkpoint_1500.ckpt"
         middle_ckpt.write_bytes(b"middle")
         middle_time = time.time() - 500
         os.utime(middle_ckpt, (middle_time, middle_time))
@@ -62,7 +63,7 @@ class TestFindLatestCheckpoint:
         ckpt_dir.mkdir(parents=True)
 
         for i, t_offset in enumerate([3000, 1000, 2000]):
-            ckpt = ckpt_dir / f"checkpoint_{i}.pt"
+            ckpt = ckpt_dir / f"checkpoint_{i}.ckpt"
             ckpt.write_bytes(b"x")
             target_time = time.time() - t_offset
             os.utime(ckpt, (target_time, target_time))
@@ -70,19 +71,21 @@ class TestFindLatestCheckpoint:
         result = _find_latest_checkpoint("grasping", "state")
         assert result is not None
         assert "checkpoint_" in result
-        assert ".pt" in result
+        assert ".ckpt" in result
 
-    def test_final_pt_with_checkpoints_prefers_max_mtime(self, monkeypatch, tmp_path):
+    def test_checkpoint_ckpt_with_checkpoints_prefers_max_mtime(self, monkeypatch, tmp_path):
+        """D-09: checkpoint.ckpt and checkpoint_*.ckpt both match the *.ckpt glob;
+        the newest by mtime wins."""
         monkeypatch.chdir(tmp_path)
         ckpt_dir = Path("models/dreamerv3/suturing_state")
         ckpt_dir.mkdir(parents=True)
 
-        final = ckpt_dir / "final.pt"
+        final = ckpt_dir / "checkpoint.ckpt"
         final.write_bytes(b"final")
         old_time = time.time() - 100
         os.utime(final, (old_time, old_time))
 
-        ckpt_2 = ckpt_dir / "checkpoint_200.pt"
+        ckpt_2 = ckpt_dir / "checkpoint_200.ckpt"
         ckpt_2.write_bytes(b"ckpt_2")
         new_time = time.time()
         os.utime(ckpt_2, (new_time, new_time))
@@ -94,11 +97,11 @@ class TestFindLatestCheckpoint:
         monkeypatch.chdir(tmp_path)
         suturing_dir = Path("models/dreamerv3/suturing_state")
         suturing_dir.mkdir(parents=True)
-        (suturing_dir / "final.pt").write_bytes(b"x")
+        (suturing_dir / "checkpoint.ckpt").write_bytes(b"x")
 
         grasping_dir = Path("models/dreamerv3/grasping_state")
         grasping_dir.mkdir(parents=True)
-        (grasping_dir / "final.pt").write_bytes(b"x")
+        (grasping_dir / "checkpoint.ckpt").write_bytes(b"x")
 
         result = _find_latest_checkpoint("suturing", "state")
         assert "suturing" in result

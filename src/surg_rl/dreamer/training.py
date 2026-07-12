@@ -181,16 +181,18 @@ def _create_env(scene: SceneDefinition) -> SurgicalEnv:
 
 
 def _find_latest_checkpoint(task: str, obs_type: str) -> str | None:
-    """Find latest checkpoint for task/obs_type."""
+    """Find latest checkpoint for task/obs_type.
+
+    Globs ``*.ckpt`` — the ``embodied.Checkpoint`` native format registered by
+    40-01's ``_build_agent`` at ``models/dreamerv3/{task}_{obs_type}/checkpoint.ckpt``
+    (D-09). The stub-era legacy glob is retired — no compatibility shim or
+    dual-glob (D-09).
+    """
     checkpoint_dir = Path(f"models/dreamerv3/{task}_{obs_type}")
     if not checkpoint_dir.exists():
         return None
-    checkpoints = list(checkpoint_dir.glob("checkpoint_*.pt"))
+    checkpoints = list(checkpoint_dir.glob("*.ckpt"))
     if not checkpoints:
-        # Also check for final.pt
-        final = checkpoint_dir / "final.pt"
-        if final.exists():
-            return str(final)
         return None
     latest = max(checkpoints, key=lambda p: p.stat().st_mtime)
     return str(latest)
@@ -312,7 +314,7 @@ def run_dreamer_training(
 
             # Periodic evaluation
             if step > 0 and step % eval_every == 0:
-                checkpoint_file = checkpoint_path / f"checkpoint_{step}.pt"
+                checkpoint_file = checkpoint_path / f"checkpoint_{step}.ckpt"
                 subprocess.save_checkpoint(str(checkpoint_file))
                 eval_metrics = subprocess.evaluate(str(checkpoint_file), eval_episodes)
                 metrics_log["eval_results"].append(
@@ -329,8 +331,11 @@ def run_dreamer_training(
                 with open(metrics_file, "w") as f:
                     json.dump(metrics_log, f, indent=2)
 
-        # Final checkpoint
-        final_checkpoint = checkpoint_path / "final.pt"
+        # Final checkpoint — canonical embodied.Checkpoint native .ckpt format (D-09).
+        # The child's _save_checkpoint delegates to cp.save() which writes to the
+        # registered models/dreamerv3/{task}_{obs_type}/checkpoint.ckpt path; this
+        # parent-side path is a label echoed in CHECKPOINT_SAVED + metrics_log.
+        final_checkpoint = checkpoint_path / "checkpoint.ckpt"
         subprocess.save_checkpoint(str(final_checkpoint))
         final_eval = subprocess.evaluate(str(final_checkpoint), eval_episodes)
         metrics_log["eval_results"].append(
@@ -349,7 +354,7 @@ def run_dreamer_training(
 
     except KeyboardInterrupt:
         print("[Training] Interrupted - saving checkpoint...")
-        interrupt_checkpoint = checkpoint_path / f"checkpoint_interrupt_{step}.pt"
+        interrupt_checkpoint = checkpoint_path / f"checkpoint_interrupt_{step}.ckpt"
         subprocess.save_checkpoint(str(interrupt_checkpoint))
         raise
     finally:
