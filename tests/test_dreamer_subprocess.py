@@ -1,5 +1,6 @@
 """Tests for DreamerV3 subprocess isolation and message protocol."""
 
+import ast
 import inspect
 import json
 import os
@@ -125,6 +126,38 @@ class TestProcessIsolationImport:
 
         assert "jax" not in sys.modules
         assert "dreamerv3" not in sys.modules
+
+    def test_no_module_level_jax_dreamerv3_or_embodied_imports(self):
+        """SC#5: subprocess.py module scope must NOT import jax/dreamerv3/embodied.
+
+        All JAX/dreamerv3/embodied imports must live INSIDE function bodies
+        (the child-process call path) so importing ``surg_rl.dreamer.subprocess``
+        in the parent process never pulls JAX into ``sys.modules``. This is a
+        source-inspection (AST) guard complementing the runtime
+        ``sys.modules`` check in ``test_no_jax_or_dreamerv3_loaded_in_main_process``.
+        """
+        import textwrap
+
+        source = textwrap.dedent(inspect.getsource(dreamer_subprocess_mod))
+        tree = ast.parse(source)
+        # Walk only top-level nodes of the module body (module-level imports).
+        forbidden = {"jax", "dreamerv3", "embodied", "optax"}
+        for node in tree.body:
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    top = alias.name.split(".")[0]
+                    assert top not in forbidden, (
+                        f"SC#5 violation: subprocess.py has a module-level "
+                        f"import of {alias.name!r} — JAX/dreamerv3/embodied "
+                        f"imports must live inside function bodies only."
+                    )
+            elif isinstance(node, ast.ImportFrom):
+                mod = (node.module or "").split(".")[0]
+                assert mod not in forbidden, (
+                    f"SC#5 violation: subprocess.py has a module-level "
+                    f"from-import from {node.module!r} — JAX/dreamerv3/embodied "
+                    f"imports must live inside function bodies only."
+                )
 
 
 class TestDreamerSubprocessSpawn:
