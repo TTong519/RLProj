@@ -176,7 +176,7 @@ Plans:
   4. The CI GPU host runs the real-agent smoke test and asserts structural properties only (finite and non-increasing loss, checkpoint file exists) — NOT the v0.4.0 spike's converged `MSE<0.01` thresholds; macOS local runs skip cleanly per INV-8
   5. JAX never leaks into the parent process (no `import jax` / `import dreamerv3` in `surg_rl` parent-package import path), and the dreamerv3 logger writes to stderr (not stdout — stdout stays clean for the JSON pipe)
 
-**Plans**: 1/4 plans executed
+**Plans**: 2/4 plans executed
 
 Plans:
 **Wave 1**
@@ -185,7 +185,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 40-02-PLAN.md — Real `_train_loop`/`_evaluate`/`_save_checkpoint`/`_load_checkpoint` (manual Driver loop, D-07) + Phase 30 sentinel flip negative→positive with structural-only assertions (Wave 2, GPU-GREEN via CI) [DMV3-07, DMV3-09, DMV3-10]
+- [x] 40-02-PLAN.md — Real `_train_loop`/`_evaluate`/`_save_checkpoint`/`_load_checkpoint` (manual Driver loop, D-07) + Phase 30 sentinel flip negative→positive with structural-only assertions (Wave 2, GPU-GREEN via CI) [DMV3-07, DMV3-09, DMV3-10]
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -212,7 +212,7 @@ Phases execute in numeric order: 36 → 37 → 38 → 39 → 40. Phases 38 and 3
 | 37. Scene-Level difficulty_blocks + Env Wiring | 3/3 | Complete    | 2026-06-25 |
 | 38. 3D Fluid Flag (dim_3d=True) | 4/4 | Complete    | 2026-06-27 |
 | 39. K8s PVC e2e + Organ-Mesh Licensing ADR | 2/2 | Complete    | 2026-06-27 |
-| 40. Real DreamerV3 Integration + Sentinel Flip | 1/4 | In Progress|  |
+| 40. Real DreamerV3 Integration + Sentinel Flip | 2/4 | In Progress|  |
 
 ## Next Steps
 
