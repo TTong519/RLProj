@@ -6,15 +6,15 @@ current_phase: 40
 current_phase_name: real-dreamerv3-integration-sentinel-flip
 status: executing
 stopped_at: Phase 40 planned (4 plans, 3 waves)
-last_updated: "2026-07-12T02:17:22.953Z"
+last_updated: "2026-07-12T02:22:41.814Z"
 last_activity: 2026-07-12
 last_activity_desc: Phase 40 execution started
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 16
-  completed_plans: 12
-  percent: 75
+  completed_plans: 13
+  percent: 80
 ---
 
 # Project State
@@ -29,8 +29,8 @@ See: .planning/PROJECT.md (updated 2026-07-11 — Phase 39 complete)
 ## Current Position
 
 Phase: 40 (real-dreamerv3-integration-sentinel-flip) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 40
+Plan: 2 of 4
+Status: Ready to execute
 Last activity: 2026-07-12 — Phase 40 execution started
 
 Progress: [████████████░░] 80% (4/5 phases, 9/13 requirements closed)
@@ -73,6 +73,7 @@ Progress: [████████████░░] 80% (4/5 phases, 9/13 req
 | Phase 38 P04 | 13min | 3 tasks | 3 files |
 | Phase 39 P02 | ~12m | 2 tasks | 2 files |
 | Phase 39 P01 | ~6m | 2 tasks | 7 files |
+| Phase 40 P01 | ~3m | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -116,6 +117,8 @@ Decisions are logged in PROJECT.md Key Architecture Decisions. Recent decisions 
 - [Phase 39]: MADR format adopted as repo ADR template; docs/adr/ is canonical ADR directory with 4-digit zero-padded numbering
 - [Phase 39]: [Phase 39-01]: pytest-kind>=22.11.1 + pykube-ng (transitive) added as [k8s-test] extra after human-verify SUS gate approved; e2e overlay references ../../base/pvc.yaml directly (NOT - ../../base) and read-job.yaml applied standalone in test body to avoid racing the write-Job
 - [Phase 39]: [Phase 39-01]: Module-level pytestmark skipif required (not just in-test pytest.skip) so K8s e2e test SKIPS not ERRORs when Docker is down -- kind_cluster fixture errors at setup before the test body runs
+- [Phase ?]: 40-01: wrapper.py action_space left unchanged (D-05/A4 discretion) — _build_agent builds dict-form act_space from the wrapper's bare Box
+- [Phase ?]: 40-01: DMV3-09 regression guard uses AST Return(None) walk (not string match) to avoid false positives
 
 ### Pending Todos
 
@@ -173,7 +176,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-12T02:12:26.000Z
+Last session: 2026-07-12T02:22:34.385Z
 Stopped at: Phase 40 planned (4 plans, 3 waves)
 Resume file: .planning/phases/40-real-dreamerv3-integration-sentinel-flip/40-01-PLAN.md (Wave 1 entry point; CPU-runnable)
 
