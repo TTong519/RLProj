@@ -3,8 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   test:
@@ -203,3 +205,66 @@ jobs:
 
       - name: Run PVC e2e test (CPU-only kind cluster)
         run: pytest tests/k8s/test_pvc_e2e.py -m k8s -v --cluster-name=surg-rl-e2e
+
+  dreamer-gpu:
+    name: DreamerV3 GPU smoke
+    # DMV3-10: real-agent smoke test on a GitHub-hosted GPU Actions runner (D-01).
+    # Fires on merge-to-main + release tags + manual dispatch — NOT per-PR (D-02).
+    # PR-time signal comes from the CPU-only regression guard + JAX-leak guard
+    # in the `test` job's matrix; this job runs the flipped E2E test (40-02) +
+    # the restart-then-continue resume test (40-03) + the regression guard
+    # (40-01) against a real GPU. Structural-only assertions (finite +
+    # non-explosive loss, checkpoint.ckpt exists, training completes, resume
+    # takes effect) live in the tests themselves — NOT convergence thresholds
+    # (DMV3-10 exclusion).
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest-4-core-gpu
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-${{ runner.arch }}-gpu-pip-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-gpu-pip-
+
+      - name: Install CUDA-enabled jax
+        # Install jax[cuda12] BEFORE the project extra so pip resolves jaxlib
+        # against the CUDA build, not the CPU default (AI-SPEC Section 3).
+        # The ~=0.4.20 line matches the pyproject pin (D-04 — pins UNCHANGED).
+        run: |
+          python -m pip install --upgrade pip
+          pip install "jax[cuda12]~=0.4.20"
+
+      - name: Install project with dreamer + dev extras
+        # dreamerv3~=1.5.0 + optax>=0.1.7 come from the [dreamer] extra (D-04).
+        # jax is already installed with CUDA above, so pip keeps the CUDA build.
+        run: pip install -e ".[dev,dreamer]"
+
+      - name: Run dreamer smoke tests
+        # total_steps=1000 / eval_every=500 is the smoke budget (D-03, ~3-5 min
+        # on a GPU runner). The -rs flag surfaces skip reasons. On the GPU
+        # runner the flipped E2E test + resume test RUN (not skip); the
+        # regression guard also runs.
+        env:
+          DREAMER_TOTAL_STEPS: "1000"
+          DREAMER_EVAL_EVERY: "500"
+        run: pytest tests/dreamer/ -v -rs
+
+      - name: Upload dreamerv3 checkpoint (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dreamerv3-checkpoint
+          path: models/dreamerv3/
+          if-no-files-found: ignore
