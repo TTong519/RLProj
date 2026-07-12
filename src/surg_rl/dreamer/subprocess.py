@@ -201,7 +201,14 @@ def _build_agent(config: dict[str, Any]) -> Any:
     # Agent (jaxagent.py save/load), Replay, and Counter all qualify. Do NOT
     # register the env or driver. .pt compat shim is intentionally absent
     # (D-09 — .pt naming retired with the stub era).
-    ckpt_dir = Path(f"models/dreamerv3/{task}_{obs_type}")
+    # Honor the parent's checkpoint_dir when threaded (training.py threads it
+    # in dreamer_config). Fixes the latent checkpoint-path mismatch flagged by
+    # 40-03: the child previously wrote only to the hardcoded path, ignoring
+    # the parent's checkpoint_dir, so the E2E test's checkpoint_dir existence
+    # check failed on GPU. Fall back to the hardcoded path for callers that
+    # don't thread checkpoint_dir (e.g. evaluate_checkpoint's config). SC#1
+    # preserved — this is a path-source change only, not a protocol change.
+    ckpt_dir = Path(config.get("checkpoint_dir") or f"models/dreamerv3/{task}_{obs_type}")
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     cp = embodied.Checkpoint(ckpt_dir / "checkpoint.ckpt")
     cp.step = step

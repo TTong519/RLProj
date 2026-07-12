@@ -243,12 +243,20 @@ def run_dreamer_training(
     env = _create_env(scene)
 
     # Create subprocess
+    # Thread `task` + `checkpoint_dir` to the child so _build_agent can construct
+    # the agent (config["task"]) and register embodied.Checkpoint at the
+    # parent-resolved checkpoint_dir. Fixes two latent GPU-time bugs flagged by
+    # 40-03: (1) _build_agent's config["task"] KeyError without this key; (2) the
+    # child writing checkpoint.ckpt to a hardcoded path that ignored the parent's
+    # checkpoint_dir, breaking the E2E test's checkpoint_dir existence check.
     dreamer_config = {
         "process_isolation": True,
         "memory_fraction": 0.4,
         "obs_type": obs_type,
         "pixel_resolution": list(pixel_resolution),
         "total_steps": total_steps,
+        "task": task,
+        "checkpoint_dir": str(checkpoint_path),
         **(config_overrides or {}),
     }
     subprocess = DreamerSubprocess(dreamer_config)

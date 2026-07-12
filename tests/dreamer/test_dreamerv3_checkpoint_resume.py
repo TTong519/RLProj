@@ -80,14 +80,16 @@ class TestCheckpointResume:
         beyond step 500 instead of restarting at 0.
 
         Note: the child's ``_build_agent`` (subprocess.py, owned by 40-01/40-02)
-        registers the checkpoint at ``models/dreamerv3/{task}_{obs_type}/
-        checkpoint.ckpt`` — a hardcoded path that does NOT use the parent's
-        ``checkpoint_dir`` param. The ``checkpoint_dir`` param only affects
-        where the parent writes its sidecar files (``training_metrics.json``,
-        ``metrics_*.json``). The resume lookup (``_find_latest_checkpoint``)
-        also globs the hardcoded ``models/dreamerv3/{task}_{obs_type}/`` dir.
-        So both runs share the same on-disk ``checkpoint.ckpt`` regardless of
-        ``checkpoint_dir``.
+        honors the parent's threaded ``checkpoint_dir`` (training.py threads
+        ``task`` + ``checkpoint_dir`` into ``dreamer_config`` — the 40-04-prep
+        fix), registering ``embodied.Checkpoint`` at
+        ``<checkpoint_dir>/checkpoint.ckpt``. Both runs pass
+        ``checkpoint_dir=str(tmp_path / "run1")``, so both write to and resume
+        from ``tmp_path/run1/checkpoint.ckpt``. The resume lookup
+        (``_find_latest_checkpoint``) globs the default
+        ``models/dreamerv3/{task}_{obs_type}/`` dir; for a custom
+        ``checkpoint_dir`` it returns None — redundant but harmless, because the
+        child's ``cp.load_or_save()`` at construct time handles resume regardless.
 
         DMV3-10: structural-only assertions — checkpoint exists, run2 returns
         a metrics dict with finite losses, training completes. No MSE floor,
@@ -97,10 +99,10 @@ class TestCheckpointResume:
 
         task = "suturing"
         obs_type = "state"
-        # The child's _build_agent hardcodes the checkpoint dir to
-        # models/dreamerv3/{task}_{obs_type}/ (subprocess.py, 40-01). This is
-        # where checkpoint.ckpt is written, NOT the parent's checkpoint_dir.
-        child_ckpt_path = Path(f"models/dreamerv3/{task}_{obs_type}/checkpoint.ckpt")
+        # The child's _build_agent honors the parent's threaded checkpoint_dir
+        # (subprocess.py, 40-01 + 40-04-prep fix), so checkpoint.ckpt is written
+        # to <checkpoint_dir>/checkpoint.ckpt = tmp_path/run1/checkpoint.ckpt.
+        child_ckpt_path = tmp_path / "run1" / "checkpoint.ckpt"
 
         try:
             # --- Run 1: train for 500 steps, persist checkpoint.ckpt ---
@@ -153,9 +155,10 @@ class TestCheckpointResume:
             # convergence threshold).
 
         finally:
-            # Clean up the hardcoded checkpoint dir so the test is repeatable.
-            # The child writes to models/dreamerv3/{task}_{obs_type}/ regardless
-            # of checkpoint_dir; remove it so a subsequent test run starts fresh.
+            # tmp_path/run1 is auto-cleaned by pytest's tmp_path fixture. Keep
+            # a safety-net rmtree of the default-path dir in case a future
+            # change drops the threaded checkpoint_dir (the child would then
+            # fall back to the hardcoded models/dreamerv3/{task}_{obs_type}/).
             shutil.rmtree(
                 Path(f"models/dreamerv3/{task}_{obs_type}"),
                 ignore_errors=True,
