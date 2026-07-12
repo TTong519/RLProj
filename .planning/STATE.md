@@ -4,11 +4,11 @@ milestone: v0.6.0
 milestone_name: Carried-Forward Debt Closure
 current_phase: 40
 current_phase_name: real-dreamerv3-integration-sentinel-flip
-status: verifying
-stopped_at: Completed 40-04-PLAN.md (Phase 40 complete — all 4 plans done)
-last_updated: "2026-07-12T04:27:09.382Z"
+status: phase_complete_pending_milestone
+stopped_at: Phase 40 verified (human_needed — 2/5 truths verified, 3 PRESENT_BEHAVIOR_UNVERIFIED deferred to CI dreamer-gpu job per INV-8; GPU GREEN pending GitHub GPU runner enablement)
+last_updated: "2026-07-12T12:45:00Z"
 last_activity: 2026-07-12
-last_activity_desc: Phase 40 execution started
+last_activity_desc: Phase 40 verification complete — source + CPU guards GREEN; GPU GREEN deferred to CI per INV-8 (designed)
 progress:
   total_phases: 5
   completed_phases: 5
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-07-11 — Phase 39 complete)
 
 ## Current Position
 
-Phase: 40 (real-dreamerv3-integration-sentinel-flip) — EXECUTING
+Phase: 40 (real-dreamerv3-integration-sentinel-flip) — VERIFIED (human_needed)
 Plan: 4 of 4
-Status: Phase complete — ready for verification
-Last activity: 2026-07-12 — Phase 40 execution started
+Status: Phase verified — source complete + CPU guards GREEN; 3 PRESENT_BEHAVIOR_UNVERIFIED truths (DMV3-07 runtime, DMV3-08 resume, DMV3-10 CI GREEN) deferred to CI dreamer-gpu job per INV-8; GPU GREEN pending GitHub GPU runner enablement (user action item)
+Last activity: 2026-07-12 — Phase 40 verification complete
 
 Progress: [████████████░░] 80% (4/5 phases, 9/13 requirements closed)
 
@@ -194,5 +194,6 @@ Resume file: None
 
 ## Operator Next Steps
 
-- `/gsd-execute-phase 40` — execute Phase 40 (4 plans, 3 waves). Start with Wave 1 (`40-01`): CPU-runnable TDD RED→GREEN (real `_build_agent` + DMV3-09 regression guard + JAX-leak guard). Waves 2-3 (`40-02`, `40-03`, `40-04`) are GPU-gated — **enable GitHub-hosted GPU Actions runners on the repo account before merging Wave 3** so the `dreamer-gpu` CI job can satisfy DMV3-10's GPU GREEN at merge time. macOS local skips per INV-8.
-- Phase 40 is the LAST phase in v0.6.0 — milestone closure follows it (`/gsd-complete-milestone v0.6.0` once DMV3-07/08/09/10 are verified on a CI GPU host).
+- **Phase 40 VERIFIED (human_needed)** — all 4 plans complete; source + CPU guards GREEN; 3 PRESENT_BEHAVIOR_UNVERIFIED truths (DMV3-07 runtime, DMV3-08 resume, DMV3-10 CI GREEN) deferred to the `dreamer-gpu` CI job per INV-8 by design. See `.planning/phases/40-real-dreamerv3-integration-sentinel-flip/40-VERIFICATION.md`.
+- **USER ACTION ITEM (ops):** Enable GitHub-hosted GPU Actions runners on the repo account (`ubuntu-latest-4-core-gpu` label per D-01), then trigger the `dreamer-gpu` job (merge-to-main / `v*` tag / Actions tab Run workflow). Confirm the first GREEN run within `timeout-minutes: 15` — all 5 tests in `tests/dreamer/` PASS. This is the authoritative closure for DMV3-07 runtime + DMV3-08 resume + DMV3-10 CI GREEN.
+- **Milestone closure:** once the GPU GREEN is observed, run `/gsd-complete-milestone v0.6.0` to close the v0.6.0 milestone. Phase 40 is the LAST phase; the milestone audit should treat DMV3-10 as 'implemented, pending GPU runner enablement' rather than '100%-skipped' (the job exists and will run on the first merge-to-main after the runner is enabled).
