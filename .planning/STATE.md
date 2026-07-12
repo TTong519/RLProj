@@ -4,17 +4,17 @@ milestone: v0.6.0
 milestone_name: Carried-Forward Debt Closure
 current_phase: 40
 current_phase_name: real-dreamerv3-integration-sentinel-flip
-status: executing
-stopped_at: Phase 40 planned (4 plans, 3 waves)
-last_updated: "2026-07-12T03:35:07.689Z"
+status: verifying
+stopped_at: Completed 40-04-PLAN.md (Phase 40 complete — all 4 plans done)
+last_updated: "2026-07-12T04:27:09.382Z"
 last_activity: 2026-07-12
 last_activity_desc: Phase 40 execution started
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 16
-  completed_plans: 15
-  percent: 80
+  completed_plans: 16
+  percent: 100
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-11 — Phase 39 complete)
 
 Phase: 40 (real-dreamerv3-integration-sentinel-flip) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-12 — Phase 40 execution started
 
 Progress: [████████████░░] 80% (4/5 phases, 9/13 requirements closed)
@@ -76,6 +76,7 @@ Progress: [████████████░░] 80% (4/5 phases, 9/13 req
 | Phase 40 P01 | ~3m | 2 tasks | 4 files |
 | Phase 40 P02 | 19min | 2 tasks | 2 files |
 | Phase 40 P03 | 919 | 2 tasks | 3 files |
+| Phase 40 P04 | 1min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -127,6 +128,7 @@ Decisions are logged in PROJECT.md Key Architecture Decisions. Recent decisions 
 - [Phase ?]: 40-02: did NOT modify _run_subprocess_loop cleanup (SC#1); AttributeError on dict bundle swallowed by suppress — cosmetic for 40-04
 - [Phase ?]: 40-02: Phase 30 sentinel flipped negative→positive (DMV3-09) with structural-only assertions (DMV3-10, NO MSE<0.01 threshold); skipif preserved; macOS SKIPs cleanly per INV-8
 - [Phase ?]: 40-03 retired .pt glob for embodied.Checkpoint native .ckpt format D-09
+- [Phase 40]: 40-04: Used ubuntu-latest-4-core-gpu as the dreamer-gpu runs-on label (D-01). Implemented D-02 not-per-PR gate as a job-level if condition (push main || tags v* || workflow_dispatch) inside the existing CI workflow rather than a separate workflow file. Set DREAMER_TOTAL_STEPS=1000 + DREAMER_EVAL_EVERY=500 as env on the pytest step (D-03). Added on-failure checkpoint artifact upload for post-mortem. DMV3-10 GREEN pending GitHub GPU runner enablement on the repo account (user_setup).
 
 ### Pending Todos
 
@@ -184,9 +186,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-12T03:34:52.845Z
-Stopped at: Phase 40 planned (4 plans, 3 waves)
-Resume file: .planning/phases/40-real-dreamerv3-integration-sentinel-flip/40-01-PLAN.md (Wave 1 entry point; CPU-runnable)
+Last session: 2026-07-12T04:27:09.363Z
+Stopped at: Completed 40-04-PLAN.md (Phase 40 complete — all 4 plans done)
+Resume file: None
 
 *Updated: 2026-07-12 — Phase 40 planned (4 plans, 3 waves); ready to execute (GPU-gated)*
 
