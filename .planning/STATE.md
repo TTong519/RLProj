@@ -6,14 +6,14 @@ current_phase: 40
 current_phase_name: real-dreamerv3-integration-sentinel-flip
 status: executing
 stopped_at: Phase 40 planned (4 plans, 3 waves)
-last_updated: "2026-07-12T02:52:05.336Z"
+last_updated: "2026-07-12T03:35:07.689Z"
 last_activity: 2026-07-12
 last_activity_desc: Phase 40 execution started
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 16
-  completed_plans: 14
+  completed_plans: 15
   percent: 80
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-11 — Phase 39 complete)
 ## Current Position
 
 Phase: 40 (real-dreamerv3-integration-sentinel-flip) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-07-12 — Phase 40 execution started
 
@@ -75,6 +75,7 @@ Progress: [████████████░░] 80% (4/5 phases, 9/13 req
 | Phase 39 P01 | ~6m | 2 tasks | 7 files |
 | Phase 40 P01 | ~3m | 2 tasks | 4 files |
 | Phase 40 P02 | 19min | 2 tasks | 2 files |
+| Phase 40 P03 | 919 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -125,6 +126,7 @@ Decisions are logged in PROJECT.md Key Architecture Decisions. Recent decisions 
 - [Phase ?]: 40-02: _save_checkpoint delegates to cp.save() (registered .ckpt path); _load_checkpoint delegates to cp.load() + load_or_save() fallback (D-09)
 - [Phase ?]: 40-02: did NOT modify _run_subprocess_loop cleanup (SC#1); AttributeError on dict bundle swallowed by suppress — cosmetic for 40-04
 - [Phase ?]: 40-02: Phase 30 sentinel flipped negative→positive (DMV3-09) with structural-only assertions (DMV3-10, NO MSE<0.01 threshold); skipif preserved; macOS SKIPs cleanly per INV-8
+- [Phase ?]: 40-03 retired .pt glob for embodied.Checkpoint native .ckpt format D-09
 
 ### Pending Todos
 
@@ -182,7 +184,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-12T02:51:56.090Z
+Last session: 2026-07-12T03:34:52.845Z
 Stopped at: Phase 40 planned (4 plans, 3 waves)
 Resume file: .planning/phases/40-real-dreamerv3-integration-sentinel-flip/40-01-PLAN.md (Wave 1 entry point; CPU-runnable)
 

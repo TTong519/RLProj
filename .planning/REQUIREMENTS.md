@@ -13,7 +13,7 @@ Carried-forward tech-debt closure. Each maps to a roadmap phase (36–40). No ne
 <!-- Continues DMV3-01..05 (v0.4.0/v0.4.1/v0.4.2). DMV3-06 (offline training from demos) stays v2. -->
 
 - [x] **DMV3-07**: Researcher can train a real DreamerV3 agent on a surgical task via the process-isolated JAX subprocess (replaces the `_build_agent` stub and the 4 sibling stubs `_train_loop`/`_evaluate`/`_save_checkpoint`/`_load_checkpoint`)
-- [ ] **DMV3-08**: DreamerV3 checkpoints persist per task/obs-type and resume training across subprocess restarts
+- [x] **DMV3-08**: DreamerV3 checkpoints persist per task/obs-type and resume training across subprocess restarts
 - [x] **DMV3-09**: The Phase 30 E2E test asserts positive real-agent completion (sentinel flipped from the `RuntimeError("Agent not configured")` negative assertion) and guards against stub regression
 - [x] **DMV3-10**: Real DreamerV3 training runs end-to-end on the CI GPU host — smoke test asserts structural properties (finite/decreasing loss, checkpoint exists), not the v0.4.0 spike's converged `MSE<0.01` thresholds
 
@@ -81,7 +81,7 @@ Which phases cover which requirements. Updated during roadmap creation (2026-06-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | DMV3-07 | Phase 40 | Complete |
-| DMV3-08 | Phase 40 | Pending |
+| DMV3-08 | Phase 40 | Complete |
 | DMV3-09 | Phase 40 | Complete |
 | DMV3-10 | Phase 40 | Complete |
 | TASK-06 | Phase 36 | Complete |
