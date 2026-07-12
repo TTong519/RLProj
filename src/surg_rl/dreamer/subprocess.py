@@ -123,10 +123,93 @@ def _run_subprocess_loop(stdin_pipe) -> None:
 
 
 def _build_agent(config: dict[str, Any]) -> Any:
-    """Build DreamerV3 agent from config."""
-    # This will be implemented when dreamerv3 is available
-    # For now, return a mock that can be replaced
-    return None
+    """Build DreamerV3 agent from config (PyPI 1.5.0 object API, D-04).
+
+    Constructs a real ``dreamerv3.Agent`` bundle against the pinned PyPI 1.5.0
+    object-based API (``Agent(obs_space, act_space, step, config)`` — 4 args),
+    NOT the current-repo factory API (factory functions + the separate
+    config package that describes ``danijar/dreamerv3`` main, not what the
+    ``~=1.5.0`` pin installs). Returns a bundle dict with keys ``agent``,
+    ``env``, ``checkpoint``, ``replay``, ``step`` that the downstream
+    ``_train_loop`` / ``_evaluate`` / ``_save_checkpoint`` /
+    ``_load_checkpoint`` (owned by 40-02) unpack.
+
+    All ``jax`` / ``dreamerv3`` / ``embodied`` imports live INSIDE this
+    function body (SC#5: JAX isolation — importing
+    ``surg_rl.dreamer.subprocess`` in the parent process must not pull JAX
+    into ``sys.modules``). The runtime GREEN (actually constructing a real
+    agent) is GPU-gated and deferred to the CI ``dreamer-gpu`` job (40-04);
+    locally the runtime path skips per INV-8 (dreamerv3 not installed on
+    macOS). Items marked VERIFY must be confirmed against the installed
+    dreamerv3 1.5.0 package on the GPU host.
+    """
+    # --- child-process-only imports (SC#5: JAX isolation) ---
+    from pathlib import Path
+
+    import embodied  # vendored inside dreamerv3 1.5.0 (dreamerv3/embodied/)
+    from dreamerv3.agent import Agent  # 4-arg ctor (PyPI 1.5.0, D-04)
+    from gymnasium import spaces
+
+    # Local imports for the project helpers (CLAUDE.md rl-subpackage
+    # import-chain fragility rule — keep these lazy/local, not module-top).
+    from surg_rl.dreamer.training import _create_env, _create_scene_for_task
+    from surg_rl.dreamer.wrapper import GymToEmbodiedWrapper
+
+    task = config["task"]
+    obs_type = config["obs_type"]
+    pixel_resolution = tuple(config["pixel_resolution"])
+
+    # Construct the SurgicalEnv inside the child (JAX-safe) and wrap it in
+    # the project's GymToEmbodiedWrapper (D-05 — NOT dreamerv3's built-in gym
+    # adapter, which pins the old gym==0.19.0 and conflicts with
+    # gymnasium>=0.29.0). The wrapper already emits image/state +
+    # is_first/is_last/is_terminal dict keys that dreamerv3 1.5.0 expects.
+    scene = _create_scene_for_task(task, obs_type, pixel_resolution)
+    env = _create_env(scene)
+    wrapped = GymToEmbodiedWrapper(env, obs_type=obs_type, pixel_resolution=pixel_resolution)
+
+    # embodied.Counter is the global step counter (not a plain int); it
+    # implements save()/load() so it can be registered on embodied.Checkpoint.
+    # VERIFY: embodied.Counter exists under embodied.* in the installed 1.5.0
+    # (repo-main moved it to the separate config package).
+    step = embodied.Counter()
+
+    # Build the agent config tree from the CONFIG-message dict.
+    # VERIFY: embodied.Config ctor signature in the installed 1.5.0.
+    agent_config = embodied.Config(**config.get("agent", {}))
+
+    # obs_space: dict of space objects (from the wrapped env).
+    obs_space = dict(wrapped.observation_space)
+    # act_space: dict with 'action' (the env's Box) + 'reset' (bool space).
+    # Agent.__init__ extracts act_space['action'] internally (research A4).
+    # The wrapper's action_space property returns the bare env Box; the
+    # embodied-protocol dict shaping lives here in _build_agent so the
+    # wrapper keeps clean env-action-space semantics.
+    act_space = {"action": wrapped.action_space, "reset": spaces.Discrete(2)}
+
+    # 4-arg ctor — PyPI 1.5.0 object API (D-04). NOT the 3-arg repo-main
+    # ctor and NOT the current-repo factory API.
+    agent = Agent(obs_space, act_space, step, agent_config)
+
+    # Replay buffer (VERIFY ctor + kwargs against installed 1.5.0). FIFO
+    # eviction; set capacity from config, not unbounded.
+    replay = embodied.replay.Replay(length=config.get("replay_length", 10_000))
+
+    # Checkpoint registration + resume-or-init (D-09). The {task}_{obs_type}
+    # scoping prevents cross-config collisions (Pitfall 6). Checkpoint
+    # __setattr__ requires each registered object to implement save()/load();
+    # Agent (jaxagent.py save/load), Replay, and Counter all qualify. Do NOT
+    # register the env or driver. .pt compat shim is intentionally absent
+    # (D-09 — .pt naming retired with the stub era).
+    ckpt_dir = Path(f"models/dreamerv3/{task}_{obs_type}")
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
+    cp = embodied.Checkpoint(ckpt_dir / "checkpoint.ckpt")
+    cp.step = step
+    cp.agent = agent
+    cp.replay = replay
+    cp.load_or_save()  # resume if checkpoint.ckpt exists, else save initial state
+
+    return {"agent": agent, "env": wrapped, "checkpoint": cp, "replay": replay, "step": step}
 
 
 def _train_loop(agent: Any, total_steps: int, eval_every: int) -> Iterator[dict[str, Any]]:
