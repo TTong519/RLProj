@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v0.6.0
 milestone_name: Carried-Forward Debt Closure
 current_phase: 40
-current_phase_name: Real DreamerV3 Integration + Sentinel Flip
-status: ready_to_plan
-stopped_at: Phase 39 complete, ready to plan Phase 40
-last_updated: "2026-07-11T07:57:58.578Z"
-last_activity: 2026-07-11
-last_activity_desc: Phase 39 complete, transitioned to Phase 40
+current_phase_name: real-dreamerv3-integration-sentinel-flip
+status: executing
+stopped_at: Phase 40 planned (4 plans, 3 waves)
+last_updated: "2026-07-12T02:17:22.953Z"
+last_activity: 2026-07-12
+last_activity_desc: Phase 40 execution started
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 12
+  total_plans: 16
   completed_plans: 12
-  percent: 80
+  percent: 75
 ---
 
 # Project State
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-11 — Phase 39 complete)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation — with automatic primitive fallbacks when real assets are missing, and a benchmarking framework for systematic RL research comparisons.
-**Current focus:** Phase 40 — Real DreamerV3 Integration + Sentinel Flip
+**Current focus:** Phase 40 — real-dreamerv3-integration-sentinel-flip
 
 ## Current Position
 
-Phase: 40 — Real DreamerV3 Integration + Sentinel Flip
-Plan: Not started
-Status: Ready to plan Phase 40 (GPU-gated — schedule CI GPU host before planning)
-Last activity: 2026-07-11 — Phase 39 complete, transitioned to Phase 40
+Phase: 40 (real-dreamerv3-integration-sentinel-flip) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 40
+Last activity: 2026-07-12 — Phase 40 execution started
 
 Progress: [████████████░░] 80% (4/5 phases, 9/13 requirements closed)
 
@@ -173,13 +173,13 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-11
-Stopped at: Phase 39 complete (UAT 3/3 passed, verification canonicalized to passed), ready to plan Phase 40
-Resume file: None
+Last session: 2026-07-12T02:12:26.000Z
+Stopped at: Phase 40 planned (4 plans, 3 waves)
+Resume file: .planning/phases/40-real-dreamerv3-integration-sentinel-flip/40-01-PLAN.md (Wave 1 entry point; CPU-runnable)
 
-*Updated: 2026-07-11 — Phase 39 complete; ready to plan Phase 40 (GPU-gated)*
+*Updated: 2026-07-12 — Phase 40 planned (4 plans, 3 waves); ready to execute (GPU-gated)*
 
 ## Operator Next Steps
 
-- `/gsd-plan-phase 40` — plan Phase 40 (Real DreamerV3 Integration + Sentinel Flip). **GPU-gated** — schedule CI GPU host provisioning BEFORE planning, and plan deeper research on the dreamerv3 factory composition signatures (official `example.py` is 404). macOS local skips per INV-8.
-- Phase 40 is the LAST phase in v0.6.0 — milestone closure follows it (`/gsd-complete-milestone v0.6.0` once DMV3-09/10 are verified on a CI GPU host).
+- `/gsd-execute-phase 40` — execute Phase 40 (4 plans, 3 waves). Start with Wave 1 (`40-01`): CPU-runnable TDD RED→GREEN (real `_build_agent` + DMV3-09 regression guard + JAX-leak guard). Waves 2-3 (`40-02`, `40-03`, `40-04`) are GPU-gated — **enable GitHub-hosted GPU Actions runners on the repo account before merging Wave 3** so the `dreamer-gpu` CI job can satisfy DMV3-10's GPU GREEN at merge time. macOS local skips per INV-8.
+- Phase 40 is the LAST phase in v0.6.0 — milestone closure follows it (`/gsd-complete-milestone v0.6.0` once DMV3-07/08/09/10 are verified on a CI GPU host).
