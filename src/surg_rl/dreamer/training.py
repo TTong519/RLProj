@@ -180,22 +180,33 @@ def _create_env(scene: SceneDefinition) -> SurgicalEnv:
     return SurgicalEnv(config=config, render_mode="rgb_array")
 
 
-def _find_latest_checkpoint(task: str, obs_type: str) -> str | None:
-    """Find latest checkpoint for task/obs_type.
+def _find_latest_checkpoint(
+    task: str, obs_type: str, checkpoint_dir: str | None = None
+) -> str | None:
+    """Find latest checkpoint for task/obs_type, honoring a custom checkpoint_dir.
 
     Globs ``*.ckpt`` — the ``embodied.Checkpoint`` native format registered by
     40-01's ``_build_agent`` at ``models/dreamerv3/{task}_{obs_type}/checkpoint.ckpt``
     (D-09). The stub-era legacy glob is retired — no compatibility shim or
     dual-glob (D-09).
+
+    When ``checkpoint_dir`` is given (D-01 — parent-resolved custom dir), it is
+    searched first; if it has no ``.ckpt`` files the default
+    ``models/dreamerv3/{task}_{obs_type}/`` dir is tried as a fallback. When
+    ``checkpoint_dir`` is ``None`` the default dir is searched directly
+    (preserves pre-phase-40.1 behavior).
     """
-    checkpoint_dir = Path(f"models/dreamerv3/{task}_{obs_type}")
-    if not checkpoint_dir.exists():
-        return None
-    checkpoints = list(checkpoint_dir.glob("*.ckpt"))
-    if not checkpoints:
-        return None
-    latest = max(checkpoints, key=lambda p: p.stat().st_mtime)
-    return str(latest)
+    candidates = [
+        Path(checkpoint_dir) if checkpoint_dir else None,
+        Path(f"models/dreamerv3/{task}_{obs_type}"),
+    ]
+    for d in candidates:
+        if d is None or not d.exists():
+            continue
+        checkpoints = list(d.glob("*.ckpt"))
+        if checkpoints:
+            return str(max(checkpoints, key=lambda p: p.stat().st_mtime))
+    return None
 
 
 def run_dreamer_training(
@@ -279,7 +290,7 @@ def run_dreamer_training(
     try:
         if eval_only:
             # Evaluation only mode
-            latest_checkpoint = _find_latest_checkpoint(task, obs_type)
+            latest_checkpoint = _find_latest_checkpoint(task, obs_type, checkpoint_dir)
             if not latest_checkpoint:
                 raise RuntimeError(f"No checkpoint found for {task}_{obs_type}")
             print(f"[Training] Evaluating checkpoint: {latest_checkpoint}")
@@ -296,7 +307,7 @@ def run_dreamer_training(
         # Check for resume
         resume_checkpoint = None
         if resume:
-            latest = _find_latest_checkpoint(task, obs_type)
+            latest = _find_latest_checkpoint(task, obs_type, checkpoint_dir)
             if latest:
                 resume_checkpoint = latest
                 print(f"[Training] Resuming from checkpoint: {resume_checkpoint}")
