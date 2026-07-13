@@ -1547,7 +1547,7 @@ class FluidConfig(BaseModel):
         le=16,
         description=(
             "Internal coupling substeps per env step on the 3D obstacle path; "
-            "reuses substep_dt as per-substep dt."
+            "each substep uses sub_dt = dt / coupling_substeps."
         ),
     )
 
