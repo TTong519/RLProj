@@ -131,6 +131,50 @@ class TestComputeObstacleForces3D:
         assert f.shape == (3,)
         assert abs(float(f[1])) > 0.0, f"expected fy nonzero, got {f}"
 
+    def test_3d_force_y_axis_physical_magnitude(self):
+        """CR-01 regression: a linear y-ramp produces fy = -nabla_p . V_mask in Newtons.
+
+        Hand-computed (RESEARCH Focus Area 3 — VERIFIED EXACT, rel err 0.0):
+        p[i,j,k]=j/16 on 0.3m/16-cell -> grad_y = 1/0.3 Pa/m exactly
+        (np.gradient on a linear ramp is exact, including one-sided edges).
+        V_mask = N_mask * cell_vol where cell_vol = dy^3 = (0.3/16)^3.
+        fy = -(1/0.3) * V_mask. Asserts within 1% (D-04 tolerance); in practice
+        matches to machine precision.
+
+        The unclamped |fy| ~= 0.0084 N is 6 orders below the 1e4 per-axis clamp
+        (D-17), so the clamp does NOT mask the assertion — this is the trap that
+        let CR-01's ~53x unit error slip (without the dy spacing passed to
+        np.gradient, fy would be off by dy ~= 0.01875, a ~53x error the 1%
+        tolerance catches). Pins the already-committed CR-01 fix at cc117c3.
+        """
+        import phi.field as field
+        from phi.flow import Obstacle
+        from phi.geom import infinite_cylinder
+
+        from surg_rl.fluids.force_computation import _compute_obstacle_forces_3d
+
+        cfg = _make_3d_config()
+        arr = np.zeros((16, 16, 16), dtype=np.float64)
+        for j in range(16):
+            arr[:, j, :] = float(j) / 16.0
+        p = _make_synthetic_3d_pressure(arr)
+        cyl = infinite_cylinder(x=0.15, y=0.15, radius=0.05, inf_dim="z")
+        obstacle = Obstacle(cyl)
+
+        forces = _compute_obstacle_forces_3d(None, p, [obstacle], ["cyl"], cfg)
+        fy = float(forces["cyl"][1])
+
+        # Hand-computed expected value (RESEARCH Focus Area 3 — VERIFIED EXACT).
+        dy = 0.3 / 16
+        cell_vol = dy ** 3
+        mask_np = field.sample(obstacle.geometry, p).numpy("x,y,z")
+        V_mask = float(mask_np.sum()) * cell_vol
+        expected_fy = -(1.0 / 0.3) * V_mask  # grad_y = 1/0.3 for p=j/16 on 0.3m domain
+
+        assert abs(fy - expected_fy) / abs(expected_fy) < 0.01, (
+            f"fy={fy} vs expected={expected_fy} (rel err > 1% — CR-01 unit regression)"
+        )
+
     def test_3d_force_per_axis_independent_clamp(self):
         """Per-axis independent clamp (D-17): a spike on two axes is clamped
         independently to the per-axis cap (1e4), NOT scaled together.

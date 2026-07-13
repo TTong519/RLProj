@@ -130,6 +130,68 @@ class Test3DCouplingTwoWayOptIn:
         )
         assert cfg.coupling_mode == FluidCouplingMode.TWO_WAY
 
+    def test_two_way_takes_feedback_branch(self, monkeypatch):
+        """D-07a structural: TWO_WAY step() passes a moving Obstacle to make_incompressible.
+
+        Spies on phi.physics.fluid.make_incompressible (the 'fluid' imported
+        inside step() binds to phi.physics.fluid), captures the obstacles arg,
+        and asserts captured obstacles[0].is_moving is True (TWO_WAY takes the
+        moving-wall branch via Obstacle(merged, velocity=...)).
+
+        The fluid is seeded with a nonzero initial velocity so the pressure
+        solve develops nonzero forces; the TWO_WAY feedback loop integrates
+        these into the obstacle velocity, making is_moving=True on the 2nd+
+        substep. Without this seeding the fluid stays at rest (zero velocity ->
+        zero pressure -> zero forces -> zero obstacle velocity ->
+        is_moving=False), and the feedback branch could not be observed.
+
+        This test FAILS (RED) against the current inert step() because ONE_WAY
+        == TWO_WAY (both pass Obstacle(merged) with no velocity kwarg, so
+        is_moving is False). After Task 2 implements real TWO_WAY feedback, the
+        substep loop integrates forces into the obstacle velocity and is_moving
+        becomes True on later substeps.
+        """
+        import phi.physics.fluid as pfluid
+        from phi.flow import Box, StaggeredGrid, extrapolation
+
+        from surg_rl.fluids import FluidSimulator
+
+        cfg = FluidConfig(
+            enabled=True,
+            dim_3d=True,
+            grid_size=(16, 16, 16),
+            bounds=BoundingBox(
+                min_corner=Position(x=0.0, y=0.0, z=0.0),
+                max_corner=Position(x=0.3, y=0.3, z=0.3),
+            ),
+            coupling_mode=FluidCouplingMode.TWO_WAY,
+            coupling_substeps=4,
+        )
+        fs = FluidSimulator(cfg)
+        fs.add_instrument(_thin_instrument_pose(), _THIN_DIMS, "instrument")
+
+        # Seed a nonzero initial velocity so the pressure solve develops
+        # nonzero forces — without this the fluid stays at rest and the
+        # TWO_WAY feedback branch cannot be observed (is_moving requires a
+        # nonzero obstacle velocity, which only arises from integrated forces).
+        dom = Box(x=0.3, y=0.3, z=0.3)
+        fs._velocity = StaggeredGrid(0.1, extrapolation.ZERO, dom, x=16, y=16, z=16)
+
+        captured: dict = {}
+        orig = pfluid.make_incompressible
+
+        def spy(velocity, obstacles, **kw):
+            captured["obstacles"] = obstacles
+            return orig(velocity, obstacles, **kw)
+
+        monkeypatch.setattr(pfluid, "make_incompressible", spy)
+
+        fs.step()
+        assert captured["obstacles"][0].is_moving, (
+            "TWO_WAY step() must pass a moving Obstacle (is_moving=True) to "
+            "make_incompressible (D-07a structural gate — feedback branch not taken)"
+        )
+
     @pytest.mark.xfail(
         reason=(
             "TWO_WAY is opt-in and documented unstable on thin instruments "
@@ -140,7 +202,7 @@ class Test3DCouplingTwoWayOptIn:
         ),
         strict=False,
     )
-    def test_two_way_opt_in_documented_unstable(self):
+    def test_two_way_thin_instrument_unstable(self):
         """TWO_WAY N=100 steps with a thin instrument. If the run diverges
         (NaN / blow-up / exception) that is the documented instability (xfail);
         if it happens to complete finitely, that is an xpass (not a guarantee).
