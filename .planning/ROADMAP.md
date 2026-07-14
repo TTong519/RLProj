@@ -230,8 +230,13 @@ Phases execute in numeric order: 36 → 37 → 38 → 39 → 40. Phases 38 and 3
 **Goal:** Close the DMV3-08 resume-path gap (thread checkpoint_dir into _find_latest_checkpoint so the parent resume path finds custom-dir checkpoints) and land the Phase 38 advisory cleanups (CR-01 3D force-unit magnitude regression test + implement real TWO_WAY obstacle-velocity feedback and substep loop so coupling_mode/coupling_substeps behave as documented instead of being inert). Two parallel plans with disjoint module sets (dreamer/ vs fluids/).
 **Requirements**: D-01, D-02, D-03, D-04, D-05, D-06, D-07, D-08, D-09 (CONTEXT.md locked decisions)
 **Depends on:** Phase 40
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 40.1-01-PLAN.md — Dreamer checkpoint_dir threading: thread checkpoint_dir into _find_latest_checkpoint + both call sites + CPU-runnable subprocess-stub resume test (Wave 1, TDD) [D-01, D-02, D-03, D-09]
-- [ ] 40.1-02-PLAN.md — Fluids advisories: CR-01 magnitude regression test + implement TWO_WAY obstacle-velocity feedback + substep loop + structural/xfail test split + coupling_substeps schema description update (Wave 1, TDD) [D-04, D-05, D-06, D-07, D-08, D-09]
+
+- [x] 40.1-01-PLAN.md — Dreamer checkpoint_dir threading: thread checkpoint_dir into _find_latest_checkpoint + both call sites + CPU-runnable subprocess-stub resume test (Wave 1, TDD) [D-01, D-02, D-03, D-09]
+- [x] 40.1-02-PLAN.md — Fluids advisories: CR-01 magnitude regression test + implement TWO_WAY obstacle-velocity feedback + substep loop + structural/xfail test split + coupling_substeps schema description update (Wave 1, TDD) [D-04, D-05, D-06, D-07, D-08, D-09]
+
+**Cross-cutting constraints:**
+
+- Two parallel plans with disjoint module sets (dreamer/ vs fluids/) run in a single wave (D-09)

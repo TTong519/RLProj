@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v0.6.0
 milestone_name: Carried-Forward Debt Closure
-current_phase: 40
-current_phase_name: real-dreamerv3-integration-sentinel-flip
-status: phase_complete_pending_milestone
-stopped_at: Phase 40 verified (human_needed — 2/5 truths verified, 3 PRESENT_BEHAVIOR_UNVERIFIED deferred to CI dreamer-gpu job per INV-8; GPU GREEN pending GitHub GPU runner enablement)
-last_updated: "2026-07-12T12:45:00Z"
-last_activity: 2026-07-12
-last_activity_desc: Phase 40 verification complete — source + CPU guards GREEN; GPU GREEN deferred to CI per INV-8 (designed)
+current_phase: 40.1
+status: verifying
+stopped_at: Completed 40.1-02-PLAN.md (Phase 40.1 ready_for_verification)
+last_updated: "2026-07-14T23:43:05.722Z"
+last_activity: 2026-07-14
+last_activity_desc: Phase 40.1 complete
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 16
-  completed_plans: 16
+  total_phases: 6
+  completed_phases: 6
+  total_plans: 18
+  completed_plans: 18
   percent: 100
+current_phase_name: close-gap-dmv3-08-thread-checkpoint-dir-into-find-latest-che
 ---
 
 # Project State
@@ -24,14 +24,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-11 — Phase 39 complete)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation — with automatic primitive fallbacks when real assets are missing, and a benchmarking framework for systematic RL research comparisons.
-**Current focus:** Phase 40 — real-dreamerv3-integration-sentinel-flip
+**Current focus:** Phase 40.1 — close-gap-dmv3-08-thread-checkpoint-dir-into-find-latest-che
+
+> **Note:** Phase 40 remains VERIFIED (human_needed). Phase 40.1 is a post-verification gap-closing insertion — DMV3-08 checkpoint_dir was never threaded into `_find_latest_checkpoint` (resume path gap), plus advisory Phase 38 cleanups from code review (CR-01 3D force units, inert `coupling_mode`/`coupling_substeps` fields). Now planned (2 plans, Wave 1, TDD) — ready to execute.
 
 ## Current Position
 
-Phase: 40 (real-dreamerv3-integration-sentinel-flip) — VERIFIED (human_needed)
-Plan: 4 of 4
-Status: Phase verified — source complete + CPU guards GREEN; 3 PRESENT_BEHAVIOR_UNVERIFIED truths (DMV3-07 runtime, DMV3-08 resume, DMV3-10 CI GREEN) deferred to CI dreamer-gpu job per INV-8; GPU GREEN pending GitHub GPU runner enablement (user action item)
-Last activity: 2026-07-12 — Phase 40 verification complete
+Phase: 40.1
+Plan: Not started
+Status: Phase complete — ready for verification
+Last activity: 2026-07-14 — Phase 40.1 complete
 
 Progress: [████████████░░] 80% (4/5 phases, 9/13 requirements closed)
 
@@ -77,6 +79,8 @@ Progress: [████████████░░] 80% (4/5 phases, 9/13 req
 | Phase 40 P02 | 19min | 2 tasks | 2 files |
 | Phase 40 P03 | 919 | 2 tasks | 3 files |
 | Phase 40 P04 | 1min | 1 tasks | 1 files |
+| Phase 40.1 P01 | 6min | 2 tasks | 2 files |
+| Phase 40.1 P02 | 20min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -129,6 +133,12 @@ Decisions are logged in PROJECT.md Key Architecture Decisions. Recent decisions 
 - [Phase ?]: 40-02: Phase 30 sentinel flipped negative→positive (DMV3-09) with structural-only assertions (DMV3-10, NO MSE<0.01 threshold); skipif preserved; macOS SKIPs cleanly per INV-8
 - [Phase ?]: 40-03 retired .pt glob for embodied.Checkpoint native .ckpt format D-09
 - [Phase 40]: 40-04: Used ubuntu-latest-4-core-gpu as the dreamer-gpu runs-on label (D-01). Implemented D-02 not-per-PR gate as a job-level if condition (push main || tags v* || workflow_dispatch) inside the existing CI workflow rather than a separate workflow file. Set DREAMER_TOTAL_STEPS=1000 + DREAMER_EVAL_EVERY=500 as env on the pytest step (D-03). Added on-failure checkpoint artifact upload for post-mortem. DMV3-10 GREEN pending GitHub GPU runner enablement on the repo account (user_setup).
+- [Phase ?]: test decision
+- [Phase ?]: 40.1-01: additive checkpoint_dir param with candidate-list fallback (custom dir first, default dir second) — preserves default-dir behavior when None (D-01)
+- [Phase ?]: 40.1-01: MagicMock subprocess stub + JSON-serializable evaluate return for CPU-runnable resume wiring test (D-03 deliberate contrast, no skipif)
+- [Phase ?]: 40.1-02: Implemented real TWO_WAY obstacle-velocity feedback via Obstacle(merged, velocity=(float,float,float)) moving-wall boundary in make_incompressible (D-05/D-08) — closes Phase 38 WR-01/WR-02 advisory (coupling_mode/coupling_substeps were inert)
+- [Phase ?]: 40.1-02: 3D substep loop runs for BOTH ONE_WAY and TWO_WAY with sub_dt = dt / coupling_substeps (D-06); 2D path early-returns byte-identical to v0.5.0 (SC#1)
+- [Phase ?]: 40.1-02: m_obs = 1e-3 kg for added-mass feedback (D-08); Obstacle velocity passed as tuple of Python floats NOT np.ndarray (PhiFlow 3.4.0 Obstacle.__init__ wraps tuple/list only, RESEARCH landmine 7)
 
 ### Pending Todos
 
@@ -147,6 +157,10 @@ Decisions are logged in PROJECT.md Key Architecture Decisions. Recent decisions 
 - **Phase 38 (3D fluid — `force_computation` 3D bbox branch):** 2D pressure-gradient bbox integration generalization to a z-axis slice needs design validation. PhiFlow 3D API itself is HIGH confidence. (3D obstacle-force magnitude bug CR-01 tracked in `38-REVIEW.md` — fix via `/gsd-code-review 38 --fix`.)
 - **Phase 36/37 (DifficultyLevelConfig):** main risk is re-introducing the v0.4.2 Pydantic cross-package cycle — mitigated by leaf-module placement + `model_rebuild()`. Override precedence must be TDD'd as a truth table against the existing 4-source chain in `_setup_rewards`.
 - **Cross-phase:** `CurriculumScheduler` regression — discrete progression MUST be additive (`progression_mode` flag); full v0.4.0+v0.4.2 curriculum suite must pass unchanged as the additive gate.
+
+### Roadmap Evolution
+
+- Phase 40.1 inserted after Phase 40: Close gap: DMV3-08 thread checkpoint_dir into _find_latest_checkpoint + Phase 38 advisory cleanups (CR-01 3D force units, inert coupling_mode/substeps) (URGENT)
 
 ## Deferred Items
 
@@ -186,11 +200,11 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-12T04:27:09.363Z
-Stopped at: Completed 40-04-PLAN.md (Phase 40 complete — all 4 plans done)
+Last session: 2026-07-13T04:55:11.737Z
+Stopped at: Completed 40.1-02-PLAN.md (Phase 40.1 ready_for_verification)
 Resume file: None
 
-*Updated: 2026-07-12 — Phase 40 planned (4 plans, 3 waves); ready to execute (GPU-gated)*
+*Updated: 2026-07-13 — Phase 40.1 planned (2 plans, 1 wave, TDD); ready to execute (CPU-runnable, autonomous)*
 
 ## Operator Next Steps
 
