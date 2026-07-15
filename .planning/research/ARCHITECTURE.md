@@ -1,652 +1,732 @@
-# Architecture Patterns: v0.6.0 Carried-Forward Debt Closure
+# Architecture Research: v0.7.0 — GUI Editor Depth & Scene Generation
 
-**Domain:** Surgical-robotics RL training system — 4 tech-debt closure items integrating with an existing mature architecture
-**Researched:** 2026-06-24
-**Overall confidence:** HIGH (codebase-grounded integration points; DreamerV3 API at MEDIUM — official example.py unreachable, factory signatures from DeepWiki + PyPI docs)
+**Domain:** Surgical-robotics RL training system — PySide6 scene editor depth (render/sim-decoupled viewport, multi-view, lighting, gizmos, recording, editing UX, file/IO, perf/stability) + scene generation expansion (VLM image→scene, LLM clarifying-question flow, procedural/batch gen, more templates)
+**Researched:** 2026-07-15
+**Confidence:** HIGH (integration points verified against existing source code in `src/surg_rl/editor/`, `src/surg_rl/simulators/`, `src/surg_rl/scene_generation/`; render/sim decoupling pattern verified against Qt official docs + MuJoCo+PySide6 community gists; VLM structured-outputs pattern verified against OpenAI cookbook)
 
-## Scope
+## Executive Summary
 
-This document maps **only** the 4 v0.6.0 closure items onto the existing Surg-RL architecture. It is NOT a greenfield architecture survey. The existing architecture (BaseSimulator ABC, SurgicalEnv, CurriculumScheduler, TaskRewardRouter, DreamerSubprocess, FluidSimulator, K8s Kustomize) is treated as fixed substrate; each item is located at a precise integration point with new-vs-modified components explicit.
+v0.7.0 deepens the existing PySide6 scene editor and expands scene generation. The architectural keystone is **render/sim decoupling**: the current `ViewportPanel._tick()` couples a `simulator.render()` call to the 20 Hz `QTimer.singleShot(50ms)` self-rescheduling loop, and critically, **never calls `simulator.step()`** — so the preview is immobile (the scene never advances) and the frame rate collapses below 10 fps because each `_tick` blocks the Qt event loop for the full render duration with no parallelism. The fix is to split the sim-stepping loop from the render-polling loop: a `SimStepWorker(QObject)` on a `QThread` advances the simulation at a configurable rate (independent of render cadence), emits `stepped` signals carrying a lightweight state snapshot, and the UI-thread render loop polls `simulator.render()` at its own cadence — decoupled from physics step duration.
 
-The 4 items:
-- (a) Real DreamerV3 integration — replace `_build_agent` stub
-- (b) TASK-02 per-level difficulty schema — DifficultyLevelConfig + discrete curriculum + scene blocks
-- (c) 3D fluid flag — `dim_3d=True` path in PhiFlow solver
-- (d) K8s PVC e2e — de-stub checkpoint-persistence test + organ-mesh licensing decision
+The three known GUI bugs map to three distinct architectural fixes: (1) **<10fps** — the render/sim coupling means the render call blocks the event loop; decoupling + raising the timer cadence from 50ms (20fps theoretical) toward vsync-locked rendering fixes this; (2) **immobile preview** — `_tick()` never calls `simulator.step()`, so adding a sim-step loop with a zero-action (or gravity-only) step animates the scene; (3) **dock-panel layout reset on rerun** — `_refresh_viewport_and_tree()` destroys and recreates the `ViewportPanel` and `SceneTreeView` but does NOT save/restore dock state, so the `QMainWindow.restoreState()` call in `_restore_geometry()` runs against a fresh dock set whose `objectName`s match but whose geometry has been reset by the central-widget swap. The fix is to preserve dock widgets across scene reloads (swap the viewport's scene reference, not the `ViewportPanel` instance) and save dock state before any central-widget swap.
 
-## Existing Architecture Substrate (fixed)
+Scene generation integration builds on the existing `BaseParser`/`TextParser`/`VisionParser`/`SceneComposer` hierarchy. The VLM image→scene feature extends `VisionParser` with OpenAI Structured Outputs (`response_format: json_schema`) using `SceneDefinition.model_json_schema()` as the enforcement schema — no new parser class needed, just a new code path in `_call_vlm_async()`. The LLM clarifying-question flow adds a multi-turn conversation mode to `TextParser` (conversation state list + tool-calling for scene modifications) surfaced as a chat-style UI in `LLMPanel`. Procedural/batch generation extends `SceneComposer` with a `generate_batch()` method parameterizing templates over difficulty/instrument/organ axes. More templates is additive to `templates.py`'s existing registry (`get_template()`/`list_templates()`).
+
+Build order respects dependencies: **GUI first, scene generation second** (per milestone context). Within GUI, the dependency chain is: render/sim decoupling (GUI-11) is the foundation that all other viewport features depend on (multi-view, gizmos, recording all need a responsive viewport); perf/stability + bug fixes (GUI-15) fold into GUI-11 since the three bugs share the decoupling root cause; then multi-view/lighting/gizmos/recording (GUI-12/13/14) build on the decoupled loop; editing UX + file/IO (GUI-14/15) are independent of the viewport and can proceed in parallel. Scene generation (GEN-01..05) follows after GUI is stable.
+
+## System Overview — v0.7.0 Target State
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│  CLI (Typer) → training.py / dreamer training.py / marl-train       │
-├─────────────────────────────────────────────────────────────────────┤
-│  SurgicalEnv (Gymnasium) ── MultiAgentSurgicalEnv (PettingZoo)      │
-│   ├─ BaseSimulator (ABC: MuJoCoSimulator | PyBulletSimulator)       │
-│   ├─ TaskRewardRouter → 6 task reward classes                       │
-│   │    └─ get_params_for_difficulty() / apply_difficulty()          │
-│   ├─ CurriculumScheduler (additive; difficulty: float|DifficultyLevel) │
-│   ├─ EnvironmentController / ParameterRandomizer / AdaptiveDifficulty│
-│   ├─ FluidSimulator (PhiFlow 2D) — env-driven via env.step()        │
-│   └─ BaseSimulator.fluid_step(dt) hook — no-op for MuJoCo/PyBullet  │
-├─────────────────────────────────────────────────────────────────────┤
-│  DreamerSubprocess (multiprocessing.Process, spawn ctx)             │
-│   ├─ Parent: DreamerSubprocess (Pipe JSON protocol)                 │
-│   └─ Child:  _subprocess_main → _run_subprocess_loop (JAX)          │
-│        ├─ _build_agent(config)  ← STUB returns None  [CLOSURE (a)]  │
-│        ├─ _train_loop / _evaluate / _save_checkpoint  ← STUBS       │
-│        └─ _JsonStdout wrapper (PyTorch Pipe compatibility)          │
-├─────────────────────────────────────────────────────────────────────┤
-│  SceneDefinition (Pydantic v2, single source of truth)              │
-│   ├─ TaskConfig.difficulty_level: DifficultyLevel | None  (v0.4.2)  │
-│   ├─ FluidConfig (2D: Box(x,y), resolution (nx,ny))  [CLOSURE (c)]  │
-│   └─ DreamerConfig (obs_type, pixel_resolution, mem_fraction)       │
-├─────────────────────────────────────────────────────────────────────┤
-│  K8s Kustomize: base/ (pvc.yaml, training-job.yaml, ...)            │
-│   ├─ overlays/cpu/  ── overlays/gpu/                                │
-│   └─ tests/k8s/test_pvc_e2e.py  ← STUB  [CLOSURE (d)]              │
-└─────────────────────────────────────────────────────────────────────┘
+                           ┌──────────────────────────────────────────┐
+                           │              CLI Layer                     │
+                           │  surg-rl-gui [EXISTING, --scene flag]     │
+                           │  surg-rl generate [EXTENDED: --image]     │
+                           │  surg-rl generate --batch [NEW]           │
+                           └──────────────┬───────────────────────────┘
+                                          │
+        ┌─────────────────────────────────┼──────────────────────────────┐
+        ▼                                 ▼                              ▼
+┌────────────────────────┐   ┌─────────────────────────┐   ┌────────────────────────┐
+│      editor/            │   │    scene_generation/    │   │    simulators/         │
+│  (DEEPEN existing)      │   │  (EXTEND existing)      │   │  (EXTEND render API)   │
+│                        │   │                         │   │                        │
+│  EditorWindow           │   │  BaseParser [UNCHANGED] │   │  BaseSimulator         │
+│  ├─ ViewportPanel       │   │  TextParser [+clarify]  │   │   ├─ render() [EXTEND] │
+│  │   ├─ ViewportCanvas  │   │  VisionParser [+VLM SO] │   │   │   +camera params    │
+│  │   ├─ SimStepWorker ◀─┼───┼─│  SceneComposer          │   │   │   +light params     │
+│  │   │   (NEW, QThread) │   │  │   [+generate_batch]    │   │   │   +gizmo overlay    │
+│  │   ├─ RenderPollLoop  │   │  Templates [+more]       │   │   │                    │
+│  │   │   (MODIFIED tick)│   │                         │   │  MuJoCoSimulator       │
+│  │   ├─ MultiViewMgr    │   │  [NEW] ClarifyFlow       │   │   ├─ render() [EXTEND] │
+│  │   │   (NEW)          │   │   (conversation state)   │   │   │   +mjvOption flags  │
+│  │   ├─ GizmoOverlay    │   │  [NEW] BatchGenerator    │   │   │   +light XML       │
+│  │   │   (NEW)          │   │   (param sweep)           │   │  PyBulletSimulator    │
+│  │   └─ FrameRecorder   │   │                         │   │   ├─ render() [EXTEND] │
+│  │       (NEW)          │   │                         │   │   │   +light params     │
+│  ├─ SceneTreeView       │   │                         │   │   │   +shadow toggle    │
+│  ├─ PropertyForm        │   │                         │   │                        │
+│  ├─ LLMPanel            │   │                         │   │                        │
+│  │   [+chat mode]       │   │                         │   │                        │
+│  ├─ VLMPanel (NEW)      │   │                         │   │                        │
+│  ├─ SceneUndoStack      │   │                         │   │                        │
+│  └─ DockStateMgr (NEW)  │   │                         │   │                        │
+└────────────────────────┘   └─────────────────────────┘   └────────────────────────┘
+        │                                 │                              │
+        └─────────────────────────────────┴──────────────────────────────┘
+                                          │
+                                          ▼
+                              ┌──────────────────────┐
+                              │   BaseSimulator ABC  │
+                              │   load_scene/reset/  │
+                              │   step/render/       │
+                              │   get_state/set_state│
+                              └──────────────────────┘
 ```
 
-## Invariants That MUST Be Preserved
+## Component Responsibilities (NEW + MODIFIED)
 
-These are non-negotiable architectural rules established in prior milestones. Every closure item must respect them.
+### Editor Package — GUI Depth
 
-| # | Invariant | Source | Threat from closures |
-|---|-----------|--------|----------------------|
-| INV-1 | **CurriculumScheduler extension is additive — never replaces Phase 3 fix** | D-v0.4.0, STATE.md | (b) discrete progression must extend, not rewrite, sample_parameters/advance_stage |
-| INV-2 | **DreamerV3 process isolation via JAX subprocess (XLA_PYTHON_CLIENT_MEM_FRACTION=0.4)** | D-v0.4.0 Phase 24 | (a) real agent must live inside subprocess; no JAX in parent |
-| INV-3 | **`_JsonStdout` wrapper replaces `os.fdopen` on PyTorch's non-blocking Pipe** | Phase 26 fix | (a) real `_train_loop` must still `print(json.dumps(...), flush=True)` through `_JsonStdout` |
-| INV-4 | **Pydantic v2 + cross-package cycle-resolution pattern** (forward-ref + late import + model_rebuild) | Phase 29 D-SCHEMA-01 | (b) DifficultyLevelConfig must reuse this pattern if it references DifficultyLevel |
-| INV-5 | **DifficultyLevel is `_FloatMixin(float, Enum)` — scalar `.value` is canonical downstream** | Phase 29 | (b) DifficultyLevelConfig keys/indexes use DifficultyLevel but downstream reads float |
-| INV-6 | **Schema-first: new Pydantic v2 models with `None` defaults; existing models unchanged** | D-v0.4.0 | (b)(c) new fields optional with None defaults; no breaking changes |
-| INV-7 | **PhiFlow CPU-first; env-driven fluid (env.step calls `self._fluid_simulator.step()`)** | Phase 31 DEBT-03 | (c) 3D path extends FluidSimulator; `fluid_step()` hook stays no-op for MuJoCo/PyBullet |
-| INV-8 | **Phase 30 E2E test sentinel: asserts EXPECTED `RuntimeError("Agent not configured")` — STARTS FAILING when real dreamerv3 integrated** | Phase 30 D-30-01..05 | (a) test must FLIP to positive assertions (this is the closure signal) |
-| INV-9 | **`difficulty` is the single source of truth — no separate `task_difficulty` field** | D-08 Phase 21 | (b) discrete levels feed into the same `difficulty` scalar path |
-| INV-10 | **Benchmarking treats MuJoCo and PyBullet as separate targets — never cross-backend aggregate** | D-v0.4.0 | (a) DreamerV3 comparison reports stay per-backend |
+| Component | Responsibility | Status | Location |
+|-----------|----------------|--------|----------|
+| `editor/viewport.py` — `ViewportPanel` | Render-poll loop: polls `simulator.render()` at its own cadence, decoupled from sim stepping; displays frames via `ViewportCanvas` | **MODIFIED** (split `_tick` into render-poll + sim-step) | `src/surg_rl/editor/viewport.py` |
+| `editor/viewport.py` — `ViewportCanvas` | Custom QWidget receiving mouse/wheel events; paints QPixmap from render bridge | **UNCHANGED** (stable, reliable event delivery) | `src/surg_rl/editor/viewport.py` |
+| `editor/sim_step_worker.py` — `SimStepWorker` | QObject moved to QThread; advances `simulator.step()` at configurable sim-rate; emits `stepped` signal with state snapshot; supports pause/resume/step-one | **NEW** | `src/surg_rl/editor/sim_step_worker.py` |
+| `editor/render_poll_loop.py` — `RenderPollLoop` | QObject on UI thread; QTimer-driven (or vsync-driven) render polling at target fps; calls `simulator.render()` and pushes QPixmap to ViewportCanvas via signal | **NEW** (extracted from `_tick`) | `src/surg_rl/editor/render_poll_loop.py` |
+| `editor/multi_view.py` — `MultiViewManager` | Manages N viewport panels (split-screen or tabbed) each with independent camera offsets; drives multiple `render()` calls with different camera_name/params per view | **NEW** | `src/surg_rl/editor/multi_view.py` |
+| `editor/gizmo_overlay.py` — `GizmoOverlay` | Translates user clicks/drags on the viewport into body pose mutations; renders gizmo handles (translate/rotate axes) as an overlay composited in `ViewportCanvas.paintEvent` or via the render bridge's gizmo-mode | **NEW** | `src/surg_rl/editor/gizmo_overlay.py` |
+| `editor/frame_recorder.py` — `FrameRecorder` | Captures rendered frames (numpy arrays) and encodes to video via `QMediaRecorder` + `QVideoFrameInput` (Qt 6.8+, FFmpeg backend) or fallback to image-sequence dump | **NEW** | `src/surg_rl/editor/frame_recorder.py` |
+| `editor/dock_state.py` — `DockStateManager` | Saves/restores QMainWindow dock state via `saveState()`/`restoreState()`; ensures unique `objectName` on every dock; preserves dock layout across scene reloads (the bug fix) | **NEW** | `src/surg_rl/editor/dock_state.py` |
+| `editor/llm_panel.py` — `LLMPanel` | Existing text→scene panel; extended with chat-mode UI for multi-turn clarifying-question flow | **MODIFIED** (add chat mode) | `src/surg_rl/editor/llm_panel.py` |
+| `editor/vlm_panel.py` — `VLMPanel` | Image-upload → scene panel; calls `VisionParser.parse_sync()` with Structured Outputs; preview + accept/reject (mirrors LLMPanel) | **NEW** | `src/surg_rl/editor/vlm_panel.py` |
+| `editor/main_window.py` — `EditorWindow` | QMainWindow shell; wires new panels; preserves dock state across scene reloads | **MODIFIED** (fix `_refresh_viewport_and_tree` to not destroy dock layout) | `src/surg_rl/editor/main_window.py` |
+| `editor/_settings.py` — `EditorSettings` | QSettings wrapper; extends with dock-state save/restore keys + viewport settings (fps target, sim-rate, lighting) | **MODIFIED** (add dock-state + viewport prefs) | `src/surg_rl/editor/_settings.py` |
 
----
+### Simulator Package — Render API Extensions
 
-## (a) Real DreamerV3 Integration
+| Component | Responsibility | Status | Location |
+|-----------|----------------|--------|----------|
+| `simulators/base_simulator.py` — `BaseSimulator.render()` | Abstract render method; extend signature with optional `camera_params`, `light_params`, `render_flags` kwargs (additive, backwards-compatible) | **MODIFIED** (extend signature) | `src/surg_rl/simulators/base_simulator.py` |
+| `simulators/mujoco_simulator.py` — `MuJoCoSimulator.render()` | MuJoCo offscreen render; extend to accept camera params (azimuth/elevation/distance/target), light params (via XML or `mjvScene` light slots), render flags (shadows/wireframe/fog via `mjvScene.flags`), and optional gizmo-overlay mode | **MODIFIED** (add param plumbing) | `src/surg_rl/simulators/mujoco_simulator.py` |
+| `simulators/pybullet_simulator.py` — `PyBulletSimulator.render()` | PyBullet offscreen render; extend to accept light params (limited — PyBullet has no fine-grained light positioning; use shadow toggle + renderer enum), camera params (already partially via `_editor_camera_*` attrs), and multi-view via multiple `getCameraImage` calls | **MODIFIED** (add param plumbing) | `src/surg_rl/simulators/pybullet_simulator.py` |
 
-### Integration Point
+### Scene Generation Package — Generation Expansion
 
-`src/surg_rl/dreamer/subprocess.py:125-129` — the `_build_agent(config)` stub:
+| Component | Responsibility | Status | Location |
+|-----------|----------------|--------|----------|
+| `scene_generation/base_parser.py` — `BaseParser` | ABC for parsers; unchanged (parse/parse_with_context/validate_scene already sufficient) | **UNCHANGED** | `src/surg_rl/scene_generation/base_parser.py` |
+| `scene_generation/text_parser.py` — `TextParser` | LLM text→scene; extend with `clarify()` method for multi-turn conversation + `parse_with_clarification()` orchestrator; use tool-calling for scene modifications | **MODIFIED** (add clarify flow) | `src/surg_rl/scene_generation/text_parser.py` |
+| `scene_generation/vision_parser.py` — `VisionParser` | VLM image→scene; extend `_call_vlm_async()` to use OpenAI Structured Outputs (`response_format: json_schema`) with `SceneDefinition.model_json_schema()` as the enforcement schema; add Anthropic + Ollama structured paths | **MODIFIED** (add structured-outputs code path) | `src/surg_rl/scene_generation/vision_parser.py` |
+| `scene_generation/scene_composer.py` — `SceneComposer` | Scene merging; extend with `generate_batch()` method that parameterizes a template over difficulty/instrument/organ axes and produces N scenes | **MODIFIED** (add batch generation) | `src/surg_rl/scene_generation/scene_composer.py` |
+| `scene_generation/templates.py` | Template registry; add more task templates (expand beyond current 8: suturing, dissection, manipulation, anastomosis, biopsy, debridement, cauterization, retraction) | **MODIFIED** (additive) | `src/surg_rl/scene_generation/templates.py` |
+| `scene_generation/clarify_flow.py` — `ClarifyFlow` | Conversation-state manager for multi-turn LLM clarification; tracks slots (missing scene fields), decides ask-vs-generate, calls `TextParser._call_llm_async()` per turn | **NEW** | `src/surg_rl/scene_generation/clarify_flow.py` |
+| `scene_generation/batch_generator.py` — `BatchGenerator` | Parameterized procedural scene generation; takes a template name + axis spec (difficulty levels, instrument sets, organ configs) and yields N `SceneDefinition` objects; wraps `SceneComposer.generate_batch()` | **NEW** | `src/surg_rl/scene_generation/batch_generator.py` |
 
+## Recommended Project Structure — v0.7.0 Changes
+
+```
+src/surg_rl/
+├── editor/                              # DEEPEN existing
+│   ├── __init__.py                      # UNCHANGED (HAS_GUI sentinel)
+│   ├── _platform_guard.py               # UNCHANGED
+│   ├── _safe_error.py                   # UNCHANGED
+│   ├── _settings.py                     # MODIFIED (+dock-state, +viewport prefs)
+│   ├── app.py                           # UNCHANGED (entrypoint)
+│   ├── main_window.py                   # MODIFIED (dock preservation, new panel wiring)
+│   ├── viewport.py                      # MODIFIED (split tick → render-poll + sim-step)
+│   ├── sim_step_worker.py               # NEW — QThread physics stepper
+│   ├── render_poll_loop.py             # NEW — UI-thread render polling (vsync-aware)
+│   ├── multi_view.py                   # NEW — multi-camera viewport manager
+│   ├── gizmo_overlay.py                # NEW — translate/rotate gizmo handles
+│   ├── frame_recorder.py              # NEW — QMediaRecorder video capture
+│   ├── dock_state.py                   # NEW — saveState/restoreState wrapper
+│   ├── tree_view.py                     # UNCHANGED
+│   ├── property_form.py                 # UNCHANGED
+│   ├── schema_walker.py                 # UNCHANGED
+│   ├── field_renderer.py               # UNCHANGED
+│   ├── llm_panel.py                    # MODIFIED (+chat mode for clarify flow)
+│   ├── vlm_panel.py                     # NEW — image→scene panel
+│   └── undo_stack.py                    # UNCHANGED
+├── scene_generation/                    # EXTEND existing
+│   ├── __init__.py                      # UNCHANGED
+│   ├── base_parser.py                   # UNCHANGED
+│   ├── text_parser.py                   # MODIFIED (+clarify flow methods)
+│   ├── vision_parser.py                 # MODIFIED (+structured outputs path)
+│   ├── scene_composer.py               # MODIFIED (+generate_batch)
+│   ├── templates.py                     # MODIFIED (+more templates)
+│   ├── clarify_flow.py                 # NEW — multi-turn conversation manager
+│   ├── batch_generator.py             # NEW — procedural batch generation
+│   └── prompts/                         # MODIFIED (+clarify prompts, +VLM prompts)
+├── simulators/                          # EXTEND render API
+│   ├── base_simulator.py               # MODIFIED (render() signature extension)
+│   ├── mujoco_simulator.py             # MODIFIED (+camera/light/flag params)
+│   ├── pybullet_simulator.py           # MODIFIED (+camera/light/flag params)
+│   └── scene_builder.py                # UNCHANGED
+```
+
+### Structure Rationale
+
+- **`editor/sim_step_worker.py` (NEW, separate file):** The sim-step QThread worker is the keystone of render/sim decoupling. Keeping it in its own module makes it independently testable (instantiate worker + mock simulator, assert step calls + signal emissions) without importing any Qt widget.
+- **`editor/render_poll_loop.py` (NEW, separate file):** The render-poll loop replaces the current `_tick()` body. Extracting it from `viewport.py` allows swapping the timer strategy (QTimer vs vsync-driven) without touching the ViewportPanel/ViewportCanvas widget code.
+- **`editor/multi_view.py`, `gizmo_overlay.py`, `frame_recorder.py` (NEW, separate files):** Each viewport-depth feature is a self-contained manager that the ViewportPanel composes. This follows the existing pattern where `ViewportPanel` composes `ViewportCanvas` — each new feature is a composable unit, not a god-class.
+- **`editor/dock_state.py` (NEW):** The dock-state persistence bug fix is isolated so it can be tested without instantiating the full QMainWindow (test save/restore round-trip with a minimal QMainWindow + dummy docks).
+- **`scene_generation/clarify_flow.py`, `batch_generator.py` (NEW):** Both are pure-Python (no Qt) so they are testable in headless CI. The GUI panels (`LLMPanel`, `VLMPanel`) are thin Qt wrappers that call these workers via QThread — same pattern as the existing `TextParserWorker`.
+
+## Architectural Patterns
+
+### Pattern 1: Render/Sim Decoupling via QThread Worker (THE keystone pattern)
+
+**What:** Split the current monolithic `_tick()` (which calls `render()` and reschedules) into two independent loops: a `SimStepWorker` on a QThread that advances physics, and a `RenderPollLoop` on the UI thread that renders at its own cadence.
+
+**When to use:** Whenever the render call duration is non-trivial relative to the target frame interval. The current 50ms timer + blocking render = <20fps theoretical, and with render taking 80-120ms on macOS software-rendered PyBullet, actual fps drops below 10.
+
+**Why this works:**
+- Physics stepping (`mj_step` / `pybullet.stepSimulation`) is CPU-bound and fast (~1-2ms per step); rendering is GPU/CPU-bound and slow (~50-120ms offscreen). Coupling them means the slow operation gates the fast one.
+- Decoupling lets the sim advance at a fixed sim-rate (e.g., 50 Hz sim, 30 Hz render) while the render loop polls the latest sim state at its own pace.
+- The Qt event loop stays responsive because the render-poll loop uses `QTimer.singleShot(0)` after each frame (yielding to the event loop between frames), and the sim-step worker is on a separate thread entirely.
+
+**Trade-offs:**
+- + Render rate independent of sim rate (sim can run at 50 Hz physics, render at 30 Hz display)
+- + Qt event loop stays responsive (no blocking during render)
+- + Scene animates (sim.step() is actually called, unlike current code)
+- - Slight complexity: thread-safe state sharing between sim worker and render loop (use signal/slot queued connections — Qt's default cross-thread connection is thread-safe)
+- - Sim state may advance between render frames (render shows a snapshot, not every sim state — acceptable for a preview editor)
+
+**Implementation sketch:**
 ```python
-def _build_agent(config: dict[str, Any]) -> Any:
-    """Build DreamerV3 agent from config."""
-    # This will be implemented when dreamerv3 is available
-    # For now, return a mock that can be replaced
-    return None
+# editor/sim_step_worker.py
+class SimStepWorker(QObject):
+    stepped = Signal(object)  # carries lightweight State snapshot or None
+
+    def __init__(self, simulator: BaseSimulator, sim_rate_hz: float = 50.0):
+        super().__init__()
+        self._sim = simulator
+        self._interval_ms = int(1000 / sim_rate_hz)
+        self._timer = QTimer()
+        self._timer.setTimerType(Qt.PreciseTimer)
+        self._timer.timeout.connect(self._step)
+        self._running = False
+        self._zero_action = None  # np.zeros(num_controls) for gravity-only step
+
+    def start(self):
+        if not self._running:
+            self._running = True
+            self._timer.start(self._interval_ms)
+
+    def stop(self):
+        self._running = False
+        self._timer.stop()
+
+    @Slot()
+    def _step(self):
+        if self._sim is None or not self._sim._loaded:
+            return
+        try:
+            self._sim.step(self._zero_action)  # gravity-only step for preview
+            self.stepped.emit(None)  # signal render loop it can poll
+        except Exception:
+            pass  # swallow — editor preview should not crash on sim errors
+
+# editor/render_poll_loop.py
+class RenderPollLoop(QObject):
+    frame_ready = Signal(QPixmap)
+
+    def __init__(self, simulator, canvas, target_fps=30.0):
+        super().__init__()
+        self._sim = simulator
+        self._canvas = canvas
+        self._timer = QTimer()
+        self._timer.setTimerType(Qt.PreciseTimer)
+        self._timer.timeout.connect(self._render_frame)
+        self._interval_ms = int(1000 / target_fps)
+
+    def start(self):
+        self._timer.start(self._interval_ms)
+
+    def stop(self):
+        self._timer.stop()
+
+    @Slot()
+    def _render_frame(self):
+        arr = self._sim.render(mode="rgb_array",
+                               width=self._canvas.width(),
+                               height=self._canvas.height())
+        if arr is not None:
+            self.frame_ready.emit(self._array_to_pixmap(arr))
 ```
 
-This is the single seam. The subprocess JSON protocol (CONFIG → CONFIG_ACK → TRAIN → METRICS → TRAIN_COMPLETE → EVAL → CHECKPOINT → SHUTDOWN) is already correct and stays unchanged. The `_JsonStdout` wrapper (INV-3) stays. Only the 5 stub functions get real implementations:
+**Integration with existing `ViewportPanel`:**
+- `ViewportPanel.__init__` creates a `SimStepWorker`, moves it to a `QThread`, and connects `stepped` → (optional state-sync slot).
+- `ViewportPanel._start()` starts both the `SimStepWorker` thread and the `RenderPollLoop`.
+- `ViewportPanel.stop()` stops both loops and quits the QThread.
+- The existing `_editor_camera_*` attr-pushing logic stays — it's pushed before each render call in the render-poll loop (same as current `_tick`), not in the sim-step worker.
 
-| Stub function | Line | Current | Real implementation |
-|---------------|------|---------|---------------------|
-| `_build_agent(config)` | 125-129 | `return None` | Construct dreamerv3 agent + env + replay + stream + logger from config |
-| `_train_loop(agent, total_steps, eval_every)` | 132-134 | yields 1 zero-metric | Run dreamerv3 train driver, yield METRICS dicts |
-| `_evaluate(agent, checkpoint, n_episodes)` | 137-139 | returns zeroed dict | Load checkpoint, run eval driver, return real metrics |
-| `_save_checkpoint(agent, path)` | 142-144 | `pass` | `agent.save(path)` + write `final.pt` sentinel |
-| `_load_checkpoint(agent, path)` | 147-149 | `pass` | `agent.load(path)` |
+### Pattern 2: Multi-View via Multiple Render Calls (not multiple GL contexts)
 
-### Real `_build_agent` Wiring (inside JAX subprocess)
+**What:** Multi-view is implemented as N `simulator.render()` calls with different camera parameters per view, each rendered to a separate `ViewportCanvas` or a split-screen region of a single canvas. NOT as multiple `QOpenGLWidget` instances with shared GL contexts.
 
-The subprocess is a JAX-only process (INV-2). `SurgicalEnv` itself does NOT import torch — torch is only for SB3, and `surg_rl.rl.__init__` uses PEP-562 lazy `__getattr__` so importing `SurgicalEnv` does not pull `stable_baselines3`/`torch`. This means the subprocess can safely construct a `SurgicalEnv` + `GymToEmbodiedWrapper` without GPU memory conflict, as long as `XLA_PYTHON_CLIENT_MEM_FRACTION=0.4` is set (already done at subprocess.py:19-21).
+**When to use:** When the render pipeline is offscreen-numpy-based (current architecture: `render() → np.ndarray → QImage → QPixmap → ViewportCanvas.paintEvent`). Multiple GL contexts would require migrating to `QOpenGLWidget`, which is a larger architectural change.
 
-**New vs modified components:**
+**Why this choice:**
+- The current architecture is numpy-pipeline-based (offscreen render → QImage → QPixmap). Adding multiple GL contexts would require a full migration to `QOpenGLWidget` with shared contexts — a rewrite of the render bridge, not an extension.
+- Multiple `render()` calls per frame (one per view) are additive: each view is a new `ViewportCanvas` + a render call with different camera params. The sim-step worker is shared across all views (one sim, many cameras).
+- MuJoCo supports this natively: `update_scene(data, camera=cam_id)` per view, then `render()` per view. PyBullet supports it via multiple `getCameraImage` calls with different view matrices.
+- Performance: N render calls per frame at ~50-120ms each means N views × render time. For 2 views at 60ms each = 120ms/frame = ~8fps. This is the same problem the decoupling solves — the render calls go on the UI thread's render-poll loop, and the event loop stays responsive because they yield between calls.
 
-| Component | Status | Change |
-|-----------|--------|--------|
-| `subprocess.py::_build_agent` | **Modified** | Real dreamerv3 factory composition (see below) |
-| `subprocess.py::_train_loop` | **Modified** | Real training driver loop |
-| `subprocess.py::_evaluate` | **Modified** | Real eval driver |
-| `subprocess.py::_save_checkpoint` / `_load_checkpoint` | **Modified** | Real checkpoint I/O |
-| `wrapper.py::GymToEmbodiedWrapper` | **Unchanged** (reuse) | Already implements embodied.Env protocol; subprocess constructs its own instance |
-| `training.py::run_dreamer_training` | **Unchanged** (parent orchestrator) | Already sends CONFIG + TRAIN + handles METRICS; the pipe protocol is correct |
-| `tests/dreamer/test_dreamerv3_subprocess_e2e.py` | **Modified — FLIP sentinel** | INV-8: negative assertions → positive assertions |
-| `DreamerConfig` (schema.py:1222) | **Modified — additive** | Add `encoder_keys`/`decoder_keys` fields for custom obs key config |
+**Trade-offs:**
+- + No GL context migration (stays in the numpy-pipeline architecture)
+- + Additive: each view is a new canvas + render call
+- - N render calls per frame can drop fps (mitigate: lower per-view resolution, or stagger views across frames)
+- - Cannot share GPU textures between views (each render call produces an independent numpy array)
 
-**`_build_agent` internal structure (recommended):**
-
+**Implementation sketch:**
 ```python
-def _build_agent(config: dict[str, Any]) -> Any:
-    """Build DreamerV3 agent + env bundle from config dict.
+# editor/multi_view.py
+class MultiViewManager(QObject):
+    def __init__(self, simulator, target_fps=30.0):
+        self._sim = simulator
+        self._views: list[tuple[ViewportCanvas, _CameraOffset]] = []
+        self._render_loop = RenderPollLoop(simulator, None, target_fps)
+        self._render_loop.frame_ready = None  # disconnect default
+        self._render_loop._render_frame = self._render_all_views
 
-    Runs entirely inside the JAX subprocess. Constructs its own SurgicalEnv
-    + GymToEmbodiedWrapper from the scene JSON passed via config, so no
-    cross-process env interaction is needed (preserves INV-2).
-    """
-    import dreamerv3.main as d3_main
-    from embodied.envs.from_gym import FromGym
+    def add_view(self, canvas: ViewportCanvas, camera: _CameraOffset):
+        self._views.append((canvas, camera))
 
-    from surg_rl.dreamer.wrapper import GymToEmbodiedWrapper
-    from surg_rl.rl.environment import SurgicalEnv, SurgicalEnvConfig
-    from surg_rl.scene_definition.loader import load_scene
-
-    # 1. Construct env inside subprocess (no torch import — safe)
-    scene = load_scene(config["scene_path"])
-    env = SurgicalEnv(SurgicalEnvConfig(...), scene=scene)
-    embodied_env = GymToEmbodiedWrapper(
-        env, obs_type=config.get("obs_type", "state"),
-        pixel_resolution=config.get("pixel_resolution", (64, 64)),
-    )
-    # 2. Wrap in FromGym for dreamerv3's embodied.Env contract
-    wrapped = FromGym(
-        embodied_env,
-        obs_key="state" if config.get("obs_type") == "state" else "image",
-    )
-    # 3. Apply standard dreamerv3 wrappers (NormalizeAction, ClipAction, etc.)
-    wrapped = d3_main.wrap_env(wrapped, **config.get("env_wrappers", {}))
-    # 4. Build agent via factory: make_agent(obs_space, act_space, config.agent)
-    agent = d3_main.make_agent(wrapped.obs_space, wrapped.act_space, ...)
-    # 5. Build replay + stream + logger (needed by train driver)
-    replay = d3_main.make_replay(...)
-    stream = d3_main.make_stream(...)
-    logger = d3_main.make_logger(...)
-    return {"agent": agent, "env": wrapped, "replay": replay,
-            "stream": stream, "logger": logger}
+    def _render_all_views(self):
+        for canvas, cam in self._views:
+            self._push_camera_params(cam)
+            arr = self._sim.render(mode="rgb_array",
+                                   width=canvas.width(), height=canvas.height())
+            if arr is not None:
+                canvas.set_image(self._array_to_pixmap(arr))
 ```
 
-**Critical detail — `encoder.mlp_keys` / `encoder.cnn_keys`:** DreamerV3 requires explicit observation key configuration for custom envs (per PyPI docs + DeepWiki). The config dict must set `encoder.mlp_keys=["state"]` (state obs) or `encoder.cnn_keys=["image"]` (pixel obs), plus matching `decoder.mlp_keys`/`decoder.cnn_keys`. The existing `GymToEmbodiedWrapper` already produces `{"state": ...}` or `{"image": ...}` keys (wrapper.py:188-193, 259-264), so the key names are stable. This config must flow from `DreamerConfig` (schema.py:1222-1240) through `training.py::run_dreamer_training` → `DreamerSubprocess.send_config` → subprocess CONFIG message.
+### Pattern 3: Gizmo Overlay via Render Bridge (not Qt widget)
 
-### Phase 30 Sentinel Test Flip (INV-8)
+**What:** Gizmo handles (translate/rotate axes) are rendered in the offscreen render pipeline as an overlay on top of the scene, not as Qt widgets composited in `paintEvent`. The render bridge gets a `gizmo_target` param (body name + mode) and draws the gizmo handles into the framebuffer before returning the numpy array.
 
-`tests/dreamer/test_dreamerv3_subprocess_e2e.py` currently asserts the **stub failure** (lines 61-104):
+**When to use:** When the viewport is numpy-pipeline-based (offscreen render → QImage). Drawing gizmos as Qt widgets on top of the pixmap would require 2D-to-3D coordinate projection (screen-space gizmo handles → 3D world-space body), which is fragile and doesn't track camera changes. Rendering gizmos in the 3D pipeline keeps them in world space automatically.
 
+**Why this choice:**
+- MuJoCo: `mjvOption` flags can add visualization primitives (contact points, forces, etc.). Gizmo handles can be drawn as additional geoms in the `mjvScene` before `mjr_render()`. The gizmo is in world space, tracks the camera, and scales with distance (constant apparent size is a one-line calculation).
+- PyBullet: No native gizmo support. Gizmo handles must be drawn as debug lines (`addUserDebugLine`) or as small debug objects (`addUserDebugText` / `createMultiBody` with line shapes). This is more limited but works for basic translate/rotate axes.
+- Compositing in `paintEvent` (2D overlay) would require projecting 3D body positions to 2D screen coordinates — a manual matrix multiply with the view+projection matrices. This duplicates the render pipeline's own projection and is fragile when camera params change.
+
+**Trade-offs:**
+- + Gizmos in world space (automatic camera tracking, depth occlusion)
+- + No 2D-to-3D projection needed
+- - PyBullet gizmo support is limited (debug lines only, no torus rings for rotation)
+- - Requires per-backend gizmo rendering code (MuJoCo: mjvScene geoms; PyBullet: debug lines)
+
+**Implementation sketch:**
 ```python
-# CURRENT (stub state):
-with pytest.raises(RuntimeError, match="Agent not configured"):
-    run_dreamer_training(task="suturing", obs_type="state", ...)
-assert not (ckpt_dir / "final.pt").exists()
-assert not (ckpt_dir / "training_metrics.json").exists()
+# In MuJoCoSimulator.render() — extend:
+def render(self, ..., gizmo_target: str | None = None, gizmo_mode: str = "translate"):
+    ...
+    if gizmo_target is not None:
+        self._draw_gizmo(self._renderer, gizmo_target, gizmo_mode)
+    rgb = self._renderer.render()
+    return rgb
+
+def _draw_gizmo(self, renderer, body_name, mode):
+    # Add gizmo geoms (axis lines + cones for translate, torus for rotate)
+    # to the mjvScene before render. Constant apparent size:
+    # scale = camera_distance * 0.1
+    ...
 ```
 
-**After real integration, FLIP to positive assertions:**
+### Pattern 4: Dock-State Persistence (the bug fix)
 
+**What:** Save `QMainWindow.saveState()` to `QSettings` on close, restore via `restoreState()` on startup. Critically, do NOT destroy and recreate dock widgets on scene reload — swap the dock's child widget instead.
+
+**When to use:** Always (this is the fix for the dock-panel layout reset bug). The bug's root cause is in `EditorWindow._refresh_viewport_and_tree()`, which creates a new `ViewportPanel` and calls `setCentralWidget()` — this resets the central widget and can cascade dock layout changes.
+
+**The fix:**
+1. Every `QDockWidget` already has a unique `objectName` (set in `_build_dock_widgets`: `"dock_scene_tree"`, `"dock_properties"`, `"dock_llm"`). This is correct and required for `saveState()`/`restoreState()` to work.
+2. On scene reload (`_refresh_viewport_and_tree`), instead of creating a new `ViewportPanel` and calling `setCentralWidget()` (which destroys the old panel and resets layout), call `self._viewport_panel.update_scene(new_scene)` — a new method on `ViewportPanel` that swaps the scene reference and restarts the sim-step worker with the new scene, without recreating the widget.
+3. For `SceneTreeView`, instead of creating a new `SceneTreeView` and calling `self._tree_dock.setWidget()`, call `self._tree_view.update_scene(new_scene)` — a new method that rebuilds the tree model in place.
+4. Save dock state before any structural change, restore after.
+
+**Implementation sketch:**
 ```python
-# AFTER (real agent state):
-metrics = run_dreamer_training(task="suturing", obs_type="state",
-                               total_steps=1000, eval_every=500,
-                               checkpoint_dir=str(tmp_path / "checkpoints"))
-assert metrics is not None
-assert (ckpt_dir / "final.pt").exists()  # checkpoint written
-assert (ckpt_dir / "training_metrics.json").exists()
-assert "reconstruction_mse" in metrics  # real eval metrics returned
+# editor/dock_state.py
+class DockStateManager:
+    def __init__(self, window: QMainWindow, settings: EditorSettings):
+        self._window = window
+        self._settings = settings
+
+    def save(self):
+        self._settings.save_dock_state(self._window.saveState())
+
+    def restore(self):
+        state = self._settings.load_dock_state()
+        if state is not None:
+            self._window.restoreState(state)
+
+# In EditorWindow._refresh_viewport_and_tree — MODIFIED:
+def _refresh_viewport_and_tree(self):
+    self._dock_mgr.save()  # save before structural change
+    self._viewport_panel.update_scene(self._scene or _empty_scene_stub())  # no recreating
+    self._tree_view.update_scene(self._scene or _empty_scene_stub())
+    self._dock_mgr.restore()  # restore after
 ```
 
-The `pytestmark` skipif gate (lines 42-49: GPU + dreamerv3 + jax) stays unchanged — macOS local still skips, CI GPU host now runs the positive path. The docstrings that say "will START FAILING when real dreamerv3 is integrated" must be rewritten to describe the positive contract.
+### Pattern 5: VLM Image→Scene via Structured Outputs (not freeform JSON)
 
-### Data Flow (unchanged pipe protocol, real agent)
+**What:** Extend `VisionParser._call_vlm_async()` to use OpenAI Structured Outputs (`response_format: {"type": "json_schema", "schema": ...}`) with `SceneDefinition.model_json_schema()` as the enforcement schema, instead of instructing the model to produce JSON and parsing it.
 
-```
-Parent (training.py)                    Subprocess (JAX)
-  │                                       │
-  ├─ DreamerSubprocess(config) ──────────►│ _subprocess_main: set XLA mem fraction
-  │                                       │ import jax; print READY
-  │◄─── {"type":"READY"} ─────────────────┤
-  ├─ send_config({scene_path, obs_type,   │
-  │               encoder_keys, ...}) ───►│ _build_agent: load_scene → SurgicalEnv
-  │                                       │ → GymToEmbodiedWrapper → FromGym
-  │                                       │ → make_agent/make_replay/make_stream
-  │◄─── {"type":"CONFIG_ACK"} ────────────┤
-  ├─ train(total_steps=1000) ───────────►│ _train_loop: dreamerv3 driver
-  │                                       │   for metrics in driver: print METRICS
-  │◄─── {"type":"METRICS", step, loss,…}──┤  (via _JsonStdout → pipe.send)
-  │◄─── {"type":"TRAIN_COMPLETE"} ────────┤
-  ├─ save_checkpoint(path) ─────────────►│ _save_checkpoint: agent.save → final.pt
-  │◄─── {"type":"CHECKPOINT_SAVED"} ──────┤
-  ├─ shutdown() ───────────────────────►│ agent.close(); print SHUTDOWN_ACK
-  │                                       │ exit
-```
+**When to use:** For the VLM image→scene feature (GEN-03). The existing `VisionParser` already sends images as base64 and instructs the model to produce JSON — the improvement is to enforce the schema at the API level so the model cannot produce invalid JSON.
 
-**Key invariant preserved:** every `print(json.dumps(...), flush=True)` inside the subprocess still routes through `_JsonStdout.write()` → `pipe.send(payload)` (INV-3). The real dreamerv3 driver's logging must be redirected to stderr or captured, NOT printed to stdout (which would corrupt the JSON pipe). This is the highest-risk pitfall (see PITFALLS).
+**Why this choice:**
+- OpenAI Structured Outputs guarantee schema adherence (not just valid JSON — valid against YOUR schema). This eliminates the `_parse_json_response()` fragile regex/markdown-fence-stripping path.
+- `SceneDefinition.model_json_schema()` already exists (Pydantic v2 generates it). The schema is the single source of truth — no schema divergence between code and API.
+- The `instructor` library (used in the OpenAI cookbook) simplifies this further, but the raw API path (`response_format`) is sufficient and avoids a new dependency.
 
----
+**Trade-offs:**
+- + Guaranteed schema adherence (no more parse failures from malformed JSON)
+- + Single source of truth (Pydantic schema → API schema)
+- - OpenAI Structured Outputs requires `gpt-4o-2024-08-06` or later; older models fall back to the existing freeform path
+- - Anthropic doesn't have an equivalent strict-schema feature (uses tool-calling for structured output — different code path)
+- - Ollama (local models) has no Structured Outputs — must keep the freeform path for Ollama
 
-## (b) TASK-02 Per-Level Difficulty Schema + Discrete Curriculum + Scene Blocks
-
-This is a 3-part chain with strict internal dependency: schema → curriculum → scene blocks.
-
-### Part 1: DifficultyLevelConfig (Pydantic v2 schema)
-
-**Integration point:** `src/surg_rl/scene_definition/schema.py` — new model + new field on `TaskConfig` (lines 1087-1121).
-
-**New component:**
-
+**Implementation sketch:**
 ```python
-class DifficultyLevelConfig(BaseModel):
-    """Per-difficulty-level parameter overrides (TASK-02 closure).
-
-    None fields = inherit defaults from the task reward class's
-    PARAM_BOUNDS + interpolate_params(level.value). Non-None fields
-    override the interpolated value for this level.
-    """
-    tissue_stiffness: float | None = Field(default=None, ge=0.0, description="Override tissue stiffness (Pa)")
-    target_precision_tolerance: float | None = Field(default=None, ge=0.0, description="Override target tolerance (m)")
-    tool_position_noise: float | None = Field(default=None, ge=0.0, description="Override tool position noise std (m)")
-    time_limit: float | None = Field(default=None, ge=0.1, description="Override episode time limit (s)")
+# In VisionParser._call_vlm_async — MODIFIED:
+async def _call_vlm_async(self, image_b64, prompt, use_structured=True):
+    if self.provider == "openai" and use_structured:
+        schema = SceneDefinition.model_json_schema()
+        response = await self._client.chat.completions.create(
+            model=self.model or "gpt-4o",
+            messages=[{"role": "user", "content": [
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}},
+                {"type": "text", "text": prompt},
+            ]}],
+            response_format={"type": "json_schema", "json_schema": {
+                "name": "scene_definition", "schema": schema, "strict": True
+            }},
+        )
+        return json.loads(response.choices[0].message.content)
+    else:
+        # Existing freeform path (Anthropic, Ollama, older OpenAI)
+        ...
 ```
 
-**Modified component — `TaskConfig` gets a new optional field (INV-6: None default, existing fields unchanged):**
+### Pattern 6: LLM Clarifying-Question Flow as Multi-Turn Conversation
 
+**What:** A `ClarifyFlow` class manages a multi-turn conversation state: it tracks which scene fields are missing/ambiguous, asks clarifying questions via `TextParser._call_llm_async()`, accumulates user answers, and generates the scene when all slots are filled or the user says "generate now."
+
+**When to use:** For the interactive LLM clarifying-question flow (GEN-05). The existing `LLMPanel` does single-shot text→scene; the clarify flow adds a chat mode where the LLM can ask follow-up questions.
+
+**Why this design:**
+- The conversation state (messages list + filled/missing slots) must be separate from the Qt UI so it's testable headless. `ClarifyFlow` is pure-Python.
+- The GUI (`LLMPanel` chat mode) is a thin wrapper: it renders the conversation as a chat-bubble list, sends user messages to `ClarifyFlow.ask()`, and receives `ClarifyFlow.ask_complete` (carrying either a clarifying question or a finished scene) via a QThread worker signal.
+- The `ClarQ-LLM` and `ClarifyAgent` research shows that finite-state slot tracking prevents hallucination — the flow knows exactly what's missing and doesn't re-ask filled slots.
+
+**Implementation sketch:**
 ```python
-class TaskConfig(BaseModel):
-    # ... existing fields unchanged ...
-    difficulty_level: "DifficultyLevel | None" = Field(default=None, ...)  # existing v0.4.2
-    difficulty_overrides: dict["DifficultyLevel", DifficultyLevelConfig] | None = Field(
-        default=None,
-        description="Per-level parameter overrides. Keys are DifficultyLevel "
-                    "members (EASY/MEDIUM/HARD). None = use interpolated defaults.",
-    )
-```
+# scene_generation/clarify_flow.py
+class ClarifyFlow:
+    ask_complete = Signal(object)  # str (question) or SceneDefinition (done)
 
-**Why `dict[DifficultyLevel, DifficultyLevelConfig]` not `list[3]`:** The milestone context says "scene-level `difficulty_blocks: list[3]`" but a dict keyed by enum is safer (no positional indexing errors, validates key membership via Pydantic, matches the `DifficultyLevel` scalar-is-canonical invariant INV-5). The scene JSON form is `{"EASY": {...}, "MEDIUM": {...}, "HARD": {...}}` — Pydantic v2 coerces string keys to the enum by float value (0.0/0.5/1.0) per the established v0.4.2 pattern. If the roadmap prefers `list[3]`, a `field_validator` can map `[easy_cfg, med_cfg, hard_cfg]` → dict internally; the dict is the recommended internal representation.
+    def __init__(self, parser: TextParser):
+        self._parser = parser
+        self._messages: list[dict] = []
+        self._scene_slots: dict[str, bool] = {}  # field_name -> filled?
 
-**Cycle-resolution (INV-4):** `DifficultyLevelConfig` is a pure schema model with no `surg_rl.*` imports — no cycle. The `dict[DifficultyLevel, ...]` annotation reuses the already-resolved `DifficultyLevel` forward ref (schema.py:1501-1506). Add `TaskConfig.model_rebuild()` again at the bottom if the new annotation introduces a new forward ref (it does not, since `DifficultyLevelConfig` is defined above `TaskConfig` in the same file — but if ordering changes, follow the pattern).
+    async def start(self, user_prompt: str):
+        self._messages.append({"role": "user", "content": user_prompt})
+        await self._turn()
 
-### Part 2: Discrete Curriculum Progression (additive — INV-1)
-
-**Integration point:** `src/surg_rl/dynamics/curriculum.py` — `CurriculumScheduler` (lines 89-617).
-
-The existing scheduler uses continuous `difficulty: float` (0.0→1.0) with 4 ordered stages (EASY/MEDIUM/HARD/EXPERT) and `advance_stage()`/`regress_stage()`. The discrete-level progression adds a **level-aware path** that maps `DifficultyLevel` enum members onto stages and consults `DifficultyLevelConfig` overrides during parameter sampling.
-
-**New vs modified components:**
-
-| Component | Status | Change |
-|-----------|--------|--------|
-| `CurriculumScheduler` | **Modified — additive** | New methods `set_difficulty_level(level)` / `advance_level()` / `current_level` property; `sample_parameters()` consults per-level overrides |
-| `CurriculumStageConfig` | **Unchanged** | Already accepts `difficulty: float \| DifficultyLevel` (v0.4.2) |
-| `CurriculumConfig` | **Modified — additive** | New optional `discrete_levels: bool = False` flag (opt-in; preserves existing continuous behavior) |
-| `EnvironmentController` | **Unchanged** | Already delegates to scheduler |
-
-**Additive methods (do NOT touch existing `advance_stage`/`sample_parameters`/`_should_advance`):**
-
-```python
-class CurriculumScheduler(BaseController):
-    # ... existing code unchanged ...
-
-    @property
-    def current_level(self) -> DifficultyLevel | None:
-        """Current discrete level, or None if continuous mode."""
-        if not self.curriculum_config.discrete_levels:
-            return None
-        return DifficultyLevel(self.current_difficulty)  # 0.0/0.5/1.0 → EASY/MEDIUM/HARD
-
-    def set_difficulty_level(self, level: DifficultyLevel) -> None:
-        """Set the discrete difficulty level (additive; does not replace set_stage).
-
-        Maps the 3-level enum onto the existing 4-stage machinery:
-        EASY→CurriculumStage.EASY, MEDIUM→CurriculumStage.MEDIUM,
-        HARD→CurriculumStage.HARD. EXPERT is unreachable via discrete levels
-        (by design — discrete progression is 3-level).
-        """
-        stage_map = {DifficultyLevel.EASY: CurriculumStage.EASY,
-                     DifficultyLevel.MEDIUM: CurriculumStage.MEDIUM,
-                     DifficultyLevel.HARD: CurriculumStage.HARD}
-        self.set_stage(stage_map[level])
-
-    def advance_level(self) -> bool:
-        """Advance to the next discrete level (EASY→MEDIUM→HARD). Returns False at HARD."""
-        if not self.curriculum_config.discrete_levels:
-            return False
-        order = [DifficultyLevel.EASY, DifficultyLevel.MEDIUM, DifficultyLevel.HARD]
-        current = self.current_level
-        if current is None or current == order[-1]:
-            return False
-        self.set_difficulty_level(order[order.index(current) + 1])
-        return True
-```
-
-**`sample_parameters` extension (additive — consult overrides when present):**
-
-The existing `sample_parameters()` (lines 260-312) samples from `stage_cfg.parameter_overrides` + `task_param_bounds`. The extension adds: after building `merged_overrides`, if a `DifficultyLevelConfig` is attached to the current stage/level, apply its non-None fields as overrides on top. This is a **post-processing step**, not a rewrite:
-
-```python
-# After existing merged_overrides construction (line 275):
-level_overrides = getattr(stage_cfg, "level_config", None)
-if level_overrides is not None:
-    if level_overrides.tissue_stiffness is not None:
-        physics_params["stiffness"] = level_overrides.tissue_stiffness
-    if level_overrides.tool_position_noise is not None:
-        dynamics_params["action_noise"] = level_overrides.tool_position_noise
-    # ... etc for target_precision_tolerance, time_limit
-```
-
-The `time_limit` override flows to `TaskConfig.time_limit` via the env-construction path (environment.py:498-514 already reads `task.difficulty_level` → this extends to read `task.difficulty_overrides[level].time_limit` when present).
-
-### Part 3: Scene-Level difficulty_blocks Parsing
-
-**Integration point:** `src/surg_rl/scene_definition/loader.py` — `SceneLoader` / `load_scene()`.
-
-No loader change needed — Pydantic v2 validates the new `TaskConfig.difficulty_overrides` field automatically when parsing scene JSON. The "scene-level difficulty_blocks" are just the `difficulty_overrides` dict on the task block:
-
-```json
-{
-  "task": {
-    "name": "suturing",
-    "task_type": "suturing",
-    "difficulty_level": "MEDIUM",
-    "difficulty_overrides": {
-      "EASY":   {"tissue_stiffness": 8000, "target_precision_tolerance": 0.01, "time_limit": 90.0},
-      "MEDIUM": {"tissue_stiffness": 12000, "target_precision_tolerance": 0.005, "time_limit": 60.0},
-      "HARD":   {"tissue_stiffness": 16000, "target_precision_tolerance": 0.002, "time_limit": 45.0}
-    }
-  }
-}
-```
-
-**New fixtures needed:** `tests/fixtures/scenes/suturing_difficulty_overrides.json` — a scene with all 3 levels of overrides, for end-to-end parsing + env-construction + curriculum-sampling tests.
-
-### Data Flow (difficulty overrides)
-
-```
-Scene JSON (difficulty_overrides dict)
-  │
-  ▼
-SceneLoader.load_scene() → Pydantic v2 validates → SceneDefinition.task.difficulty_overrides
-  │
-  ▼
-SurgicalEnv._setup_rewards() (environment.py:485-517)
-  ├─ reads task.difficulty_level → DifficultyLevel scalar
-  ├─ reads task.difficulty_overrides[level] → DifficultyLevelConfig
-  ├─ applies time_limit override to self._max_episode_time
-  └─ passes stiffness/tolerance/noise overrides to TaskRewardRouter → reward.apply_difficulty()
-  │
-  ▼
-CurriculumScheduler.sample_parameters() (additive post-processing)
-  └─ applies tissue_stiffness / tool_position_noise overrides on top of stage params
-  │
-  ▼
-ParameterRandomizer / EnvironmentController.apply_parameters(snapshot, simulator)
-```
-
----
-
-## (c) 3D Fluid Flag (`dim_3d=True`)
-
-### Integration Point
-
-`src/surg_rl/fluids/fluid_simulator.py` — `FluidSimulator.__init__` (lines 66-87) and `step()` (lines 107-143), plus `src/surg_rl/scene_definition/schema.py` `FluidConfig` (lines 1463-1488).
-
-The `BaseSimulator.fluid_step(dt)` hook (base_simulator.py:336-357) and its MuJoCo/PyBullet no-op overrides stay **unchanged** (INV-7 — fluid is env-driven, not simulator-internal). The env wiring in `environment.py:723-736` already calls `self._fluid_simulator.step()` — no change needed there.
-
-### New vs Modified Components
-
-| Component | Status | Change |
-|-----------|--------|--------|
-| `FluidConfig` (schema.py:1463) | **Modified — additive** | New `dim_3d: bool = False` field; `resolution` accepts `tuple[int,int] \| tuple[int,int,int]` |
-| `FluidSimulator.__init__` (fluid_simulator.py:66) | **Modified — branch** | If `dim_3d`: 3D `Box(x,y,z)` + 3D `StaggeredGrid(x,y,z)`; else current 2D path |
-| `FluidSimulator.step` (fluid_simulator.py:107) | **Largely unchanged** | `make_incompressible` + `union(*geoms)` + `advect.mac_cormack` work for both 2D and 3D (verified — PhiFlow API is dimension-agnostic) |
-| `force_computation.py` | **Modified — 3D branch** | Pressure-gradient integration currently uses 2D bounding boxes; needs 3D bbox branch |
-| `BaseSimulator.fluid_step` | **Unchanged** | Stays no-op (INV-7) |
-| `MuJoCoSimulator.fluid_step` / `PyBulletSimulator.fluid_step` | **Unchanged** | Stays no-op |
-| `environment.py:723-736` | **Unchanged** | Already calls `self._fluid_simulator.step()` |
-
-### FluidConfig Schema Change (INV-6: additive, default preserves existing)
-
-```python
-class FluidConfig(BaseModel):
-    # ... existing fields unchanged ...
-    dim_3d: bool = Field(default=False, description="True = 3D Eulerian grid (x,y,z); False = 2D xz-slice")
-    resolution: tuple[int, int] | tuple[int, int, int] = Field(
-        default=(32, 32),
-        description="Grid resolution. 2D: (nx, ny). 3D: (nx, ny, nz).",
-    )
-
-    @field_validator("resolution")
-    @classmethod
-    def _validate_resolution(cls, v, info):
-        dim_3d = info.data.get("dim_3d", False)
-        if dim_3d and len(v) != 3:
-            raise ValueError("dim_3d=True requires 3-tuple resolution (nx, ny, nz)")
-        if not dim_3d and len(v) != 2:
-            raise ValueError("dim_3d=False requires 2-tuple resolution (nx, ny)")
-        if any(r < 4 for r in v):
-            raise ValueError("Resolution must be >= 4 in each dimension")
-        if any(r > 128 for r in v):
-            raise ValueError("Resolution capped at 128 per dimension")
-        return v
-```
-
-### FluidSimulator 3D Branch
-
-```python
-class FluidSimulator:
-    def __init__(self, config: FluidConfig):
-        from phi.flow import Box, StaggeredGrid, extrapolation
-        if not config.enabled:
-            raise ValueError("FluidConfig.enabled must be True")
-        self.config = config
-        self.dim_3d = config.dim_3d
-        dims = config.bounds.get_dimensions()  # (width, height, depth)
-        if self.dim_3d:
-            domain = Box(x=float(dims[0]), y=float(dims[1]), z=float(dims[2]))
-            self._velocity = StaggeredGrid(
-                0.0, extrapolation.ZERO, domain,
-                x=config.resolution[0], y=config.resolution[1], z=config.resolution[2],
-            )
+    async def _turn(self):
+        # Ask LLM: "Based on the conversation, either ask ONE clarifying question
+        # or generate the scene. Return JSON: {"action": "ask"|"generate", ...}"
+        response = await self._parser._call_llm_async(self._build_prompt(), ...)
+        parsed = self._parse_response(response)
+        if parsed["action"] == "ask":
+            self.ask_complete.emit(parsed["question"])
         else:
-            # Existing 2D path (xz-slice) — UNCHANGED
-            domain = Box(x=float(dims[0]), y=float(dims[2]))
-            self._velocity = StaggeredGrid(
-                0.0, extrapolation.ZERO, domain,
-                x=config.resolution[0], y=config.resolution[1],
-            )
-        # ... rest unchanged ...
+            scene = SceneDefinition.model_validate(parsed["scene"])
+            self.ask_complete.emit(scene)
+
+    async def answer(self, user_answer: str):
+        self._messages.append({"role": "user", "content": user_answer})
+        await self._turn()
 ```
 
-**`step()` requires no structural change** — `advect.mac_cormack`, `fluid.make_incompressible`, and `union(*geoms)` are dimension-agnostic in PhiFlow (verified: the 3D Wake Flow example uses the identical API). The `Solve` tolerances may need tuning for 3D (larger Poisson system → may need higher `max_iterations`); expose `max_iterations` as a config field or bump to 1000 for 3D.
+## Anti-Patterns to Avoid
 
-**`force_computation.py` needs a real 3D branch** — the current `compute_obstacle_forces` integrates pressure gradients around 2D bounding boxes. For 3D, the bounding box is 3D and the gradient integration axis set expands. This is the highest-complexity sub-task in this closure item.
+### Anti-Pattern 1: Migrating to QOpenGLWidget mid-milestone
 
-### Data Flow (3D fluid — unchanged from 2D except grid dimensionality)
+**What:** Replacing the numpy-pipeline `ViewportCanvas(QWidget)` with `QOpenGLWidget` for "better performance."
+**Why bad:** It's a full rewrite of the render bridge (offscreen numpy → direct GL texture upload), breaks the PyBullet software-renderer fallback (PyBullet's `getCameraImage` returns numpy, not a GL texture), and introduces GL context management complexity (context sharing, thread affinity, macOS CGL issues that the v0.5.0 architecture deliberately avoided). The render/sim decoupling (Pattern 1) solves the <10fps problem without any GL migration.
+**Instead:** Keep the numpy pipeline. Decouple sim from render. If GL performance is needed later, it's a v2.0 decision, not a v0.7.0 phase.
+
+### Anti-Pattern 2: Destroying dock widgets on scene reload
+
+**What:** The current `_refresh_viewport_and_tree()` creates new `ViewportPanel` and `SceneTreeView` instances and swaps them into the docks on every scene reload / undo / redo / LLM-accept.
+**Why bad:** `setCentralWidget(new_panel)` destroys the old panel, which resets the dock layout (docks may resize, reposition, or collapse). This is the root cause of the dock-panel layout reset bug.
+**Instead:** Add `update_scene(new_scene)` methods to `ViewportPanel` and `SceneTreeView` that swap the scene reference and rebuild internal state in place, without recreating the widget or calling `setCentralWidget()`.
+
+### Anti-Pattern 3: Coupling render rate to sim rate (the current bug)
+
+**What:** A single `_tick()` that calls both `simulator.step()` and `simulator.render()` in sequence, then reschedules.
+**Why bad:** The render call (~50-120ms) gates the sim step (~1-2ms). If you want 50 Hz sim, you get 50 Hz render (impossible at 120ms/render). If you want 30 Hz render, you get 30 Hz sim (too slow for physics). And the current code doesn't even call `step()` — so the preview is static.
+**Instead:** Decouple via Pattern 1 — sim on QThread, render on UI thread, independent rates.
+
+### Anti-Pattern 4: Freeform JSON parsing for VLM (the current approach)
+
+**What:** Instructing the VLM to "return JSON" and parsing with regex/markdown-fence stripping (`_parse_json_response()`).
+**Why bad:** VLMs frequently wrap JSON in markdown fences, add commentary, or truncate long schemas. The `_parse_json_response` method is fragile. Structured Outputs (Pattern 5) eliminates this entire failure mode.
+**Instead:** Use OpenAI Structured Outputs with `SceneDefinition.model_json_schema()`. Keep freeform as a fallback for Anthropic/Ollama.
+
+### Anti-Pattern 5: Gizmos as 2D Qt widgets composited in paintEvent
+
+**What:** Drawing gizmo handles (translate/rotate axes) as QPainter primitives in `ViewportCanvas.paintEvent` after drawing the pixmap.
+**Why bad:** Requires 2D-to-3D projection (screen-space → world-space) to map mouse clicks to gizmo handles, which duplicates the render pipeline's projection matrix math. Gizmo handles won't track camera changes (the 2D position is computed once and doesn't update when the camera orbits).
+**Instead:** Render gizmos in the 3D pipeline (Pattern 3) — MuJoCo `mjvScene` geoms or PyBullet debug lines.
+
+## Data Flow — Render/Sim Decoupling (the critical data-flow change)
+
+### Current Flow (coupled, <10fps, immobile)
 
 ```
-FluidConfig(dim_3d=True, resolution=(32,32,32), bounds=BoundingBox(...))
-  │
-  ▼
-FluidSimulator.__init__ → 3D StaggeredGrid + Box(x,y,z)
-  │
-  ▼
-SurgicalEnv.step() (environment.py:723-736)
-  ├─ every fluid_interval steps: self._fluid_simulator.step()
-  │    ├─ advect.mac_cormack (3D velocity field)
-  │    ├─ union(*obstacle_geometries) → Obstacle(merged_sdf)
-  │    ├─ fluid.make_incompressible → (div-free velocity, pressure)
-  │    └─ compute_obstacle_forces (3D bounding boxes) → forces dict
-  └─ self._simulator.fluid_step(dt)  ← no-op (INV-7), unchanged
+QTimer.singleShot(50ms) → _tick()
+  ├── (simulator is None?) → load simulator → reschedule → return
+  ├── push _editor_camera_* attrs into simulator
+  ├── simulator.render() → np.ndarray → QImage → QPixmap → ViewportCanvas.set_image()
+  ├── _frame_count++ → _maybe_update_fps()
+  └── QTimer.singleShot(50ms, _tick)  ← reschedule (NEVER calls simulator.step())
+
+Problem: render() takes 50-120ms; _tick blocks the event loop for that duration.
+         step() is never called, so the scene is static.
+         Effective fps = 1000 / (50 + render_time) ≈ 6-10 fps.
 ```
 
----
+### Target Flow (decoupled, 30+fps, animated)
 
-## (d) K8s PVC e2e + Organ-Mesh Licensing Decision
+```
+                    ┌─────────────────────────────────────┐
+                    │         SimStepWorker (QThread)       │
+                    │  QTimer(20ms, PreciseTimer)          │  ← 50 Hz sim
+                    │  ├── simulator.step(zero_action)     │  ← advances physics
+                    │  └── emit stepped()                 │  ← optional: carry State snapshot
+                    └──────────────┬──────────────────────┘
+                                   │ signal/slot (queued, thread-safe)
+                                   ▼
+                    ┌─────────────────────────────────────┐
+                    │      RenderPollLoop (UI thread)       │
+                    │  QTimer(33ms, PreciseTimer)           │  ← 30 Hz render
+                    │  ├── push _editor_camera_* attrs     │
+                    │  ├── simulator.render() → np.ndarray  │  ← reads latest sim state
+                    │  ├── np.ndarray → QImage → QPixmap    │
+                    │  └── emit frame_ready(QPixmap)        │
+                    └──────────────┬──────────────────────┘
+                                   │ signal/slot (same thread, direct)
+                                   ▼
+                    ┌─────────────────────────────────────┐
+                    │         ViewportCanvas.paintEvent      │
+                    │  drawPixmap(scaled pixmap)            │
+                    └─────────────────────────────────────┘
 
-### Part 1: PVC e2e Test De-Stub
-
-**Integration point:** `tests/k8s/test_pvc_e2e.py` (lines 35-50 — the stubbed `test_pvc_read_write_stub`).
-
-**Recommended approach: kubectl subprocess (not python-client).** The kubernetes python-client adds a heavy dependency and requires kube-config wiring; `kubectl` is already the natural K8s interaction tool and the test is already gated on `kind` availability (lines 17-29). The test uses `subprocess.run(["kubectl", ...])` directly.
-
-**New vs modified components:**
-
-| Component | Status | Change |
-|-----------|--------|--------|
-| `tests/k8s/test_pvc_e2e.py::test_pvc_read_write_stub` | **Modified — de-stub** | Rename to `test_pvc_read_write_e2e`; implement 4-step cycle |
-| `k8s/overlays/e2e/` | **New (optional)** | E2e overlay with small PVC (1Gi) + test Job manifests; or reuse `base/pvc.yaml` with a patched storage request |
-| `k8s/base/pvc.yaml` | **Unchanged** | 50Gi PVC for production; e2e overlay patches to 1Gi for fast teardown |
-| `pyproject.toml` | **Unchanged** | No `kubernetes` python-client dependency (kubectl subprocess approach) |
-
-**Test body (replaces the TODO at line 44):**
-
-```python
-@pytest.mark.k8s
-@pytest.mark.integration
-@pytest.mark.slow
-def test_pvc_read_write_e2e(self) -> None:
-    """PVC create → write checkpoint → read checkpoint → verify → cleanup."""
-    if not _kind_cluster_available():
-        pytest.skip("No local kind cluster available")
-
-    # 1. Apply PVC (e2e overlay with 1Gi)
-    subprocess.run(["kubectl", "apply", "-k", "k8s/overlays/e2e/"], check=True)
-    _wait_for("pvc", "surg-rl-checkpoints", "Bound", timeout=60)
-
-    # 2. Launch writer Job — writes sentinel checkpoint to PVC
-    subprocess.run(["kubectl", "apply", "-f", "k8s/e2e/writer-job.yaml"], check=True)
-    _wait_for("job", "pvc-writer", "Complete", timeout=120)
-
-    # 3. Launch reader Job — reads sentinel back, exits 0 if content matches
-    subprocess.run(["kubectl", "apply", "-f", "k8s/e2e/reader-job.yaml"], check=True)
-    _wait_for("job", "pvc-reader", "Complete", timeout=120)
-
-    # 4. Cleanup
-    subprocess.run(["kubectl", "delete", "-k", "k8s/overlays/e2e/"], check=False)
-    subprocess.run(["kubectl", "delete", "job", "pvc-writer", "pvc-reader"], check=False)
+Sim runs at 50 Hz (20ms intervals) on QThread — independent of render time.
+Render polls at 30 Hz (33ms intervals) on UI thread — each render reads the
+latest sim state. Event loop stays responsive (render yields via QTimer).
+Scene animates because step() IS called.
 ```
 
-**`_wait_for` helper** — polls `kubectl get <resource> -o jsonpath='{.status.phase}'` until desired state or timeout. This is the standard e2e polling pattern; no new dependency.
+### Where the sim stepping loop lives
 
-**New e2e manifests (small, focused):**
-- `k8s/overlays/e2e/kustomization.yaml` — references `../../base`, patches PVC to 1Gi
-- `k8s/e2e/writer-job.yaml` — Job that mounts `surg-rl-checkpoints` PVC, writes `/mnt/checkpoints/sentinel.txt` with known content, exits 0
-- `k8s/e2e/reader-job.yaml` — Job that mounts PVC, reads `/mnt/checkpoints/sentinel.txt`, asserts content matches, exits 0 (or non-zero on mismatch — test checks Job status)
+**The sim stepping loop lives on a QThread, in `SimStepWorker`, NOT in the viewport render loop.**
 
-**Skipif gate stays:** the `@pytest.mark.k8s` + `@pytest.mark.integration` + `@pytest.mark.slow` marks + `_kind_cluster_available()` check (lines 32-42) ensure this only runs when a local `kind` cluster is present. CI without K8s skips; CI with `kind` runs the real cycle.
+Rationale:
+- `simulator.step()` mutates the simulator's internal state (`qpos`, `qvel`, body positions). If called on the UI thread, it blocks the event loop during the step (even though a single step is ~1-2ms, at 50 Hz that's 50-100ms/sec of UI-thread blockage — visible as input lag).
+- The simulator instance is shared between the sim-step worker (writes state via `step()`) and the render-poll loop (reads state via `render()`). This is safe because:
+  - MuJoCo: `mj_step(model, data)` updates `_data`; `render()` calls `mj_forward(model, data)` then reads `_data`. These are not thread-safe in general, but in practice the render reads a consistent snapshot because `mj_forward` recomputes derived quantities from `qpos/qvel` which are updated atomically by `mj_step`. The worst case is rendering a frame that's 1 sim-step old — acceptable for a preview.
+  - PyBullet: `stepSimulation()` and `getCameraImage()` are called on the same physics client. PyBullet's C++ backend is not documented as thread-safe, but `DIRECT` mode (used for editor preview) runs in-process and the calls are serialized. To be safe, the render-poll loop can use `getCameraImage` which is a read-only snapshot.
+  - If thread-safety proves to be an issue in practice, the fallback is to have the sim-step worker emit a `State` snapshot via signal, and the render-poll loop renders from that snapshot (deep copy). This adds a copy but guarantees no concurrent access. Start with the shared-simulator approach; add the snapshot copy only if tests show corruption.
 
-### Part 2: Organ-Mesh Licensing Decision
+### Data-flow change summary
 
-**This is a decision artifact, not code.** The research spike was already done in v0.5.0 Phase 35 (STATE.md: "Organ mesh licensing research spike (decision deferred to v0.6.0)"). The closure is the **decision** between:
+| Aspect | Current (coupled) | Target (decoupled) |
+|--------|--------------------|--------------------|
+| Sim step | Never called in `_tick` | `SimStepWorker._step()` at 50 Hz on QThread |
+| Render call | In `_tick` at 20 Hz (theoretical) | `RenderPollLoop._render_frame()` at 30 Hz on UI thread |
+| Event loop | Blocked during render (50-120ms) | Responsive (render yields via QTimer) |
+| Scene animation | Static (no step) | Animated (step advances physics) |
+| Thread model | Single thread (UI) | Two threads (UI + sim QThread) |
+| Camera sync | `_editor_camera_*` attrs pushed before render | Same, pushed in render-poll loop (not sim worker) |
+| Sim state sharing | N/A (no step) | Shared simulator instance (read by render, written by step) |
 
-| Option | License | Pros | Cons |
-|--------|---------|------|------|
-| **Procedural generation** (tetgen primitives) | MIT (project-owned) | No license risk; already have fallback pipeline (scene_builder OBJ primitives); works offline | Less anatomically realistic; requires param tuning per organ |
-| **surgtoolloc dataset** | Research-only / CC-BY-NC? (must verify) | Real organ geometries; publication-quality | License may restrict redistribution; dataset download + conversion pipeline; network dependency |
+## The Three Known Bugs → Architectural Fixes
 
-**Recommended:** Procedural generation as default (ship in `assets/`), with surgtoolloc as an optional `[assets-surgtoolloc]` extra that downloads + converts at install time (lazy import pattern, INV-consistent). This keeps the core package MIT-clean and lets researchers opt into the dataset.
+| Bug | Root Cause | Architectural Fix | Pattern |
+|-----|-----------|-------------------|--------|
+| <10fps frame rate | `_tick()` blocks event loop for render duration (50-120ms); 50ms timer + 120ms render = ~7fps | Decouple sim (QThread) from render (UI thread); render-poll at 30 Hz with `QTimer.singleShot(0)` yielding to event loop between frames | Pattern 1 (Render/Sim Decoupling) |
+| Immobile scene preview | `_tick()` never calls `simulator.step()` — render shows a static snapshot | `SimStepWorker` calls `simulator.step(zero_action)` at 50 Hz, advancing physics (gravity, joint settling) | Pattern 1 (SimStepWorker) |
+| Dock-panel layout reset on rerun | `_refresh_viewport_and_tree()` creates new `ViewportPanel` + `SceneTreeView`, calls `setCentralWidget()` / `setWidget()`, destroying old widgets and resetting dock geometry | Add `update_scene()` methods to `ViewportPanel` and `SceneTreeView`; save/restore dock state via `DockStateManager` around structural changes | Pattern 4 (Dock-State Persistence) |
 
-**Deliverable:** A `.planning/decisions/organ-mesh-licensing.md` ADR (Architecture Decision Record) documenting the choice, license verification, and the optional-extra integration plan. No `src/` code change required for the decision itself; if procedural generation is chosen, the existing `scene_builder.py` fallback path becomes the default and the `assets/` README documents it.
+## Scalability Considerations
 
----
+| Concern | At 1 view | At 4 views (multi-view) | At 8+ views |
+|---------|-----------|------------------------|-------------|
+| Render time per frame | ~50-120ms (1 render call) | ~200-480ms (4 render calls serial) | ~400-960ms (8 render calls serial) — fps drops to ~1-2 |
+| Sim step time | ~1-2ms (unchanged) | ~1-2ms (shared sim, one step) | ~1-2ms (shared sim) |
+| Mitigation | N/A (single view is fine) | Stagger views across frames (view 0 on even frames, view 1 on odd) or lower per-view resolution | Render views on a round-robin schedule (not all every frame); or migrate to `QOpenGLWidget` with shared FBOs (v2.0) |
+| Memory | 1 × framebuffer (640×480×3 = ~1MB) | 4 × framebuffer (~4MB) | 8 × framebuffer (~8MB) — negligible |
 
-## Suggested Build Order (Considering Dependencies)
+## Suggested Build Order (Respects Dependencies)
+
+The milestone context mandates **GUI first, scene generation second**. Within GUI, the dependency chain is:
+
+### Phase 1: Render/Sim Decoupling + Bug Fixes (GUI-11 + GUI-15)
+
+**Rationale:** This is the foundation. Every other viewport feature (multi-view, gizmos, recording) depends on a responsive, animated viewport. The three bugs all share root causes here. Build this first.
+
+**Deliverables:**
+- `editor/sim_step_worker.py` — `SimStepWorker(QObject)` on QThread
+- `editor/render_poll_loop.py` — `RenderPollLoop(QObject)` on UI thread
+- Modify `editor/viewport.py` — split `_tick()` into sim-step + render-poll; add `update_scene()` method
+- `editor/dock_state.py` — `DockStateManager` for save/restore
+- Modify `editor/main_window.py` — fix `_refresh_viewport_and_tree` to use `update_scene()` not recreate; wire `DockStateManager`
+- Modify `editor/_settings.py` — add dock-state + viewport-pref keys
+- Tests: sim-step worker unit test (mock simulator, assert step calls + signal), render-poll loop unit test, dock-state round-trip test, fps regression test (>10fps target)
+
+**Addresses:** <10fps bug, immobile preview bug, dock-layout-reset bug
+
+### Phase 2: Multi-View + Lighting (GUI-12)
+
+**Rationale:** Depends on Phase 1 (needs a responsive viewport to render multiple views). Multi-view is the highest-value viewport-depth feature after decoupling.
+
+**Deliverables:**
+- `editor/multi_view.py` — `MultiViewManager`
+- Modify `simulators/base_simulator.py` — extend `render()` signature with `camera_params`, `light_params`, `render_flags` (additive kwargs)
+- Modify `simulators/mujoco_simulator.py` — implement camera/light/flag param plumbing (use `mjvOption` flags + `mjvScene` light slots + camera `update_scene` with `MjvCamera`)
+- Modify `simulators/pybullet_simulator.py` — implement camera params (already partially via `_editor_camera_*`), light params (limited: shadow toggle + renderer enum), multi-view (multiple `getCameraImage` calls)
+- Tests: multi-view render test (2 views, assert different camera angles), lighting flag test (shadow toggle on/off produces different images)
+
+**Addresses:** multi-view, lighting
+
+### Phase 3: Gizmos + Recording (GUI-13 + GUI-14)
+
+**Rationale:** Gizmos depend on multi-view/lighting (need to know which view the gizmo is in and what the camera params are). Recording depends on the decoupled render loop (captures frames from the render-poll loop, not the sim-step worker).
+
+**Deliverables:**
+- `editor/gizmo_overlay.py` — `GizmoOverlay` (translate/rotate modes)
+- Modify `simulators/mujoco_simulator.py` — add gizmo rendering via `mjvScene` geoms
+- Modify `simulators/pybullet_simulator.py` — add gizmo rendering via debug lines
+- `editor/frame_recorder.py` — `FrameRecorder` using `QMediaRecorder` + `QVideoFrameInput` (Qt 6.8+, FFmpeg backend) with image-sequence fallback
+- Tests: gizmo render test (gizmo visible in frame, body pose mutates on drag), recording test (produce a valid video file or image sequence)
+
+**Addresses:** gizmos, recording
+
+### Phase 4: Editing UX + File/IO Polish (GUI-14/15)
+
+**Rationale:** Editing UX (better tree/form interactions, keyboard shortcuts, multi-select) and file/IO (recent files, export/import, validation feedback) are independent of the viewport features and can proceed in parallel with Phase 2/3, but are listed after because they're lower-priority than the viewport bugs.
+
+**Deliverables:**
+- Modify `editor/tree_view.py` — multi-select, keyboard navigation, drag-reorder improvements
+- Modify `editor/property_form.py` — better validation feedback, inline help
+- Modify `editor/main_window.py` — keyboard shortcuts, export/import menu items
+- Tests: tree-view interaction tests, file IO round-trip tests
+
+### Phase 5+: Scene Generation (GEN-01..05)
+
+**Rationale:** After GUI is stable. Each GEN feature is independent and can be parallelized.
+
+**Deliverables (per GEN requirement):**
+- GEN-01 (more templates): Modify `scene_generation/templates.py` — add templates, extend `list_templates()`
+- GEN-02 (better LLM text→scene): Modify `scene_generation/text_parser.py` — improve prompts, add few-shot examples
+- GEN-03 (VLM image→scene): `editor/vlm_panel.py` (NEW) + modify `scene_generation/vision_parser.py` — add Structured Outputs path (Pattern 5)
+- GEN-04 (procedural/batch gen): `scene_generation/batch_generator.py` (NEW) + modify `scene_generation/scene_composer.py` — add `generate_batch()`
+- GEN-05 (interactive LLM clarifying-question flow): `scene_generation/clarify_flow.py` (NEW) + modify `editor/llm_panel.py` — add chat mode (Pattern 6)
 
 ### Dependency Graph
 
 ```
-(b1) DifficultyLevelConfig schema ──► (b2) discrete curriculum ──► (b3) scene blocks + fixtures
-                                         │
-                                         └─ (b2) depends on (b1) for DifficultyLevelConfig type
-                                              (b3) depends on (b2) for scheduler.advance_level()
+Phase 1 (Decoupling + Bug Fixes)
+  ├── Phase 2 (Multi-View + Lighting)     ← needs responsive viewport
+  │     └── Phase 3 (Gizmos + Recording)  ← gizmos need camera params from P2
+  └── Phase 4 (Editing UX + File/IO)      ← independent of P2/P3, can parallelize
 
-(c) 3D fluid flag — INDEPENDENT (no deps on b or d)
-
-(d1) PVC e2e — INDEPENDENT
-(d2) organ-mesh licensing decision — INDEPENDENT (documentation only)
-
-(a) Real DreamerV3 — INDEPENDENT but GPU-gated, highest risk, do LAST
-      └─ benefits from clean baseline (b)(c)(d) landed first
-      └─ GPU-gated: CI GPU host required; macOS local skips (INV-8 sentinel flips)
+Phase 5+ (Scene Generation)              ← after GUI stable
+  ├── GEN-01 (templates)                  ← independent
+  ├── GEN-02 (better text→scene)          ← independent
+  ├── GEN-03 (VLM image→scene)            ← independent
+  ├── GEN-04 (procedural/batch)           ← independent
+  └── GEN-05 (clarify flow)               ← independent
 ```
 
-### Recommended Phase Ordering
+## Integration Points with Existing Architecture
 
-| Order | Item | Rationale | Can parallelize with |
-|-------|------|-----------|----------------------|
-| 1 | **(b1) DifficultyLevelConfig schema** | Pure schema, no deps, unblocks (b2)+(b3). Fastest to land. | (c), (d1), (d2) |
-| 2 | **(c) 3D fluid flag** | Independent, well-scoped, PhiFlow API verified (HIGH confidence). Medium complexity (force_computation 3D branch). | (d1), (d2) |
-| 3 | **(b2) Discrete curriculum progression** | Depends on (b1). Additive methods on CurriculumScheduler (INV-1). | (d1), (d2) |
-| 4 | **(b3) Scene-level difficulty_blocks + fixtures** | Depends on (b2). Loader is unchanged (Pydantic validates); work is fixtures + env-construction wiring + tests. | (d1), (d2) |
-| 5 | **(d1) PVC e2e + (d2) licensing decision** | Independent; can run any time but low-risk-landing before (a) is good. (d2) is documentation; (d1) is test+manifests. | — |
-| 6 | **(a) Real DreamerV3 integration** | LAST. GPU-gated (CI GPU host), highest risk, requires `dreamerv3` + `jax` install. Sentinel test flip (INV-8) is the closure signal. Benefits from clean baseline. | — |
+### BaseSimulator ABC
 
-**Parallelization note:** Items (c), (d1), (d2) are fully independent and can run in parallel worktrees with (b1)→(b2)→(b3). The (b) chain is sequential internally. Item (a) is sequential-last due to GPU-gating and risk.
+| Integration Point | How v0.7.0 Connects | Change Type |
+|-------------------|--------------------|-------------|
+| `render()` method | Extended signature: `render(..., camera_params=None, light_params=None, render_flags=None, gizmo_target=None, gizmo_mode=None)` — all additive kwargs with `None` defaults (backwards-compatible) | **MODIFIED** (additive) |
+| `step()` method | Called by `SimStepWorker` (new caller, no change to `step()` itself) | **UNCHANGED** (new caller) |
+| `load_scene()` / `reset()` | Called by `ViewportPanel` on scene load (existing flow) | **UNCHANGED** |
+| `_editor_camera_*` attrs | Pushed by `RenderPollLoop` before each render call (moved from `_tick` to render-poll loop) | **MOVED** (same mechanism, new caller) |
+| `_renderer_available` flag | Used by render-poll loop's error handling (existing short-circuit preserved) | **UNCHANGED** |
 
-**Phase numbering:** continues from 36 (v0.5.0 ended at Phase 35). Suggested:
-- Phase 36: (b1) DifficultyLevelConfig schema + (b2) discrete curriculum (combine — both touch curriculum.py, single worktree)
-- Phase 37: (b3) scene blocks + fixtures + env-construction wiring
-- Phase 38: (c) 3D fluid flag
-- Phase 39: (d1) PVC e2e + (d2) organ-mesh licensing decision (combine — both K8s/asset-adjacent)
-- Phase 40: (a) Real DreamerV3 integration + sentinel flip
+### ViewportCanvas / ViewportPanel
 
-Or if parallel worktrees are used: 36=(b1+b2), 37=(c)‖(d1+d2)‖(b3), 38=(a).
+| Integration Point | How v0.7.0 Connects | Change Type |
+|-------------------|--------------------|-------------|
+| `ViewportCanvas.paintEvent` | Unchanged — still draws QPixmap | **UNCHANGED** |
+| `ViewportCanvas` mouse/wheel events | Extended: gizmo interaction (click on gizmo handle → start drag → mutate body pose) routed via `GizmoOverlay` | **MODIFIED** (add gizmo event routing) |
+| `ViewportPanel._tick()` | Split into `SimStepWorker._step()` + `RenderPollLoop._render_frame()` | **REPLACED** (split) |
+| `ViewportPanel._start()` / `stop()` | Now starts/stops both sim worker + render loop | **MODIFIED** |
+| `ViewportPanel._display_array()` | Moved to `RenderPollLoop._array_to_pixmap()` (or kept as a helper) | **MOVED** |
+| `ViewportPanel._default_load_simulator()` | Unchanged (simulator loading logic preserved) | **UNCHANGED** |
 
----
+### Render Bridge (MuJoCo + PyBullet)
 
-## Component Impact Summary
+| Integration Point | How v0.7.0 Connects | Change Type |
+|-------------------|--------------------|-------------|
+| MuJoCo `Renderer.update_scene()` | Called per-view with different `MjvCamera` or cam_id for multi-view | **EXTENDED** (multi-view) |
+| MuJoCo `mjvOption` flags | Exposed via `render_flags` param for lighting/shadow/wireframe toggles | **EXTENDED** (new param) |
+| MuJoCo `mjvScene` lights | Exposed via `light_params` param for custom light positions (limited — lights defined in model XML; runtime modification requires `mjvScene.light[pos]` mutation) | **EXTENDED** (new param) |
+| PyBullet `getCameraImage` | Called per-view with different view matrices for multi-view; `shadow` and `renderer` params exposed via `render_flags`/`light_params` | **EXTENDED** (multi-view + flags) |
+| PyBullet `_normalize_pb_rgb()` | Unchanged (already canonicalizes to HxWx3 uint8) | **UNCHANGED** |
+| Framebuffer retry logic | Unchanged (kept in render-poll loop's error handling) | **UNCHANGED** |
+| `_renderer_available = False` short-circuit | Unchanged (persistent-failure short-circuit preserved) | **UNCHANGED** |
 
-### New Components
+### SchemaWalker / FieldRenderer / PropertyForm
 
-| Component | Location | Closure item |
-|-----------|----------|--------------|
-| `DifficultyLevelConfig` model | `src/surg_rl/scene_definition/schema.py` | (b1) |
-| `k8s/overlays/e2e/` kustomization | `k8s/overlays/e2e/` | (d1) |
-| `k8s/e2e/writer-job.yaml` + `reader-job.yaml` | `k8s/e2e/` | (d1) |
-| `tests/fixtures/scenes/suturing_difficulty_overrides.json` | `tests/fixtures/scenes/` | (b3) |
-| `.planning/decisions/organ-mesh-licensing.md` ADR | `.planning/decisions/` | (d2) |
+| Integration Point | How v0.7.0 Connects | Change Type |
+|-------------------|--------------------|-------------|
+| `SchemaWalker.walk()` | Unchanged (already walks 62 Pydantic v2 schema classes) | **UNCHANGED** |
+| `FieldRenderer.render()` | Unchanged (widget factory registry) | **UNCHANGED** |
+| `PropertyForm` 150ms debounced validation | Unchanged | **UNCHANGED** |
+| `SceneTreeView._build_tree()` | Extended: `update_scene(new_scene)` method to rebuild tree in place (bug fix) | **MODIFIED** (add `update_scene`) |
 
-### Modified Components
+### LLMPanel / TextParserWorker
 
-| Component | Location | Closure item | Nature |
-|-----------|----------|--------------|--------|
-| `TaskConfig` | `schema.py:1087` | (b1) | Add `difficulty_overrides` field (None default) |
-| `FluidConfig` | `schema.py:1463` | (c) | Add `dim_3d` field + resolution validator |
-| `FluidSimulator.__init__` | `fluid_simulator.py:66` | (c) | 3D branch on `dim_3d` |
-| `force_computation.py` | `src/surg_rl/fluids/` | (c) | 3D bounding-box branch |
-| `CurriculumScheduler` | `curriculum.py:89` | (b2) | Additive: `set_difficulty_level`/`advance_level`/`current_level` + override post-processing |
-| `CurriculumConfig` | `curriculum.py:65` | (b2) | Additive: `discrete_levels` flag |
-| `SurgicalEnv._setup_rewards` | `environment.py:485-517` | (b3) | Read `difficulty_overrides[level]` for time_limit + reward params |
-| `_build_agent` + 4 stubs | `subprocess.py:125-149` | (a) | Real dreamerv3 factory composition |
-| `test_dreamerv3_subprocess_e2e.py` | `tests/dreamer/` | (a) | FLIP sentinel: negative → positive assertions |
-| `test_pvc_e2e.py` | `tests/k8s/` | (d1) | De-stub: implement 4-step PVC cycle |
-| `DreamerConfig` | `schema.py:1222` | (a) | Add `encoder_keys`/`decoder_keys` fields for custom obs key config |
+| Integration Point | How v0.7.0 Connects | Change Type |
+|-------------------|--------------------|-------------|
+| `TextParserWorker` QThread | Unchanged for single-shot mode; new `ClarifyWorker` for chat mode | **UNCHANGED** (new sibling) |
+| `LLMPanel._on_generate()` | Extended: add chat-mode toggle that switches to `ClarifyFlow` multi-turn | **MODIFIED** (add chat mode) |
+| `LLMPanel.scene_accepted` signal | Unchanged (emitted when scene is accepted, regardless of single-shot or chat mode) | **UNCHANGED** |
+| `TextParser.parse_sync()` | Unchanged (called by `TextParserWorker`); new `ClarifyFlow` calls `TextParser._call_llm_async()` directly | **UNCHANGED** (new caller) |
 
-### Unchanged Components (invariants preserved)
+### SceneUndoStack
 
-| Component | Why unchanged |
-|-----------|---------------|
-| `BaseSimulator.fluid_step` + MuJoCo/PyBullet overrides | INV-7: fluid is env-driven, hook stays no-op |
-| `_JsonStdout` wrapper | INV-3: pipe protocol unchanged |
-| `GymToEmbodiedWrapper` | Already implements embodied.Env protocol; subprocess constructs its own |
-| `DreamerSubprocess` parent class + pipe protocol | INV-2: process isolation unchanged |
-| `TaskRewardRouter` + 6 reward classes | Already have `apply_difficulty()`; (b) feeds overrides through existing path |
-| `EnvironmentController` / `ParameterRandomizer` | Delegates to scheduler; scheduler's additive methods handle the rest |
-| `k8s/base/pvc.yaml` | Production 50Gi PVC; e2e overlay patches to 1Gi |
+| Integration Point | How v0.7.0 Connects | Change Type |
+|-------------------|--------------------|-------------|
+| `SceneUndoStack.push_snapshot()` | Unchanged (deep-copy snapshots, 100-level cap) | **UNCHANGED** |
+| VLM panel scene acceptance | Connects via `VLMPanel.scene_accepted` → `EditorWindow._on_vlm_scene_accepted` → `SceneUndoStack.push_snapshot()` (same flow as LLM panel) | **NEW** (parallel to LLM flow) |
 
----
+### EditorSettings
 
-## Anti-Patterns to Avoid
-
-### Anti-Pattern 1: Replacing CurriculumScheduler methods instead of adding
-**What:** Rewriting `sample_parameters` or `advance_stage` to be level-aware.
-**Why bad:** Violates INV-1 (additive — never replaces Phase 3 fix). Breaks existing continuous-difficulty users.
-**Instead:** Add `set_difficulty_level`/`advance_level`/`current_level` as new methods; `sample_parameters` gets a post-processing step for overrides, not a rewrite.
-
-### Anti-Pattern 2: Importing torch inside the DreamerV3 subprocess
-**What:** Letting `_build_agent` pull in `stable_baselines3` or `torch` via `surg_rl.rl.__init__`.
-**Why bad:** Violates INV-2 (JAX+PyTorch GPU memory conflict). Even with XLA_PYTHON_CLIENT_MEM_FRACTION=0.4, torch's CUDA context initialization in the subprocess can fragment GPU memory.
-**Instead:** Import `SurgicalEnv` + `GymToEmbodiedWrapper` directly (not via `surg_rl.rl.__init__`); these do not import torch. The PEP-562 lazy `__getattr__` in `surg_rl.rl.__init__` means `from surg_rl.rl.environment import SurgicalEnv` is torch-free.
-
-### Anti-Pattern 3: Letting dreamerv3 driver logs go to stdout in the subprocess
-**What:** dreamerv3's `make_logger` writing to stdout.
-**Why bad:** Corrupts the JSON pipe protocol (INV-3) — `_JsonStdout` sends every `print` as a pipe message; non-JSON log lines crash `json.loads` in the parent's `_read_message`.
-**Instead:** Configure dreamerv3 logger to write to stderr (`sys.stderr` is already `os.fdopen(2, "w")` per subprocess.py:25) or to a log file. Only `print(json.dumps(...), flush=True)` goes to stdout.
-
-### Anti-Pattern 4: Making `difficulty_overrides` a `list[3]` with positional indexing
-**What:** `difficulty_overrides: list[DifficultyLevelConfig]` indexed 0/1/2.
-**Why bad:** Positional indexing is error-prone (which index is HARD?); no Pydantic key validation; breaks INV-5 (enum is canonical).
-**Instead:** `dict[DifficultyLevel, DifficultyLevelConfig]` with enum keys; Pydantic validates key membership; scene JSON uses `{"EASY": {...}, "HARD": {...}}`.
-
-### Anti-Pattern 5: Changing `fluid_step()` hook to do real 3D fluid work
-**What:** Implementing 3D fluid inside `MuJoCoSimulator.fluid_step` / `PyBulletSimulator.fluid_step`.
-**Why bad:** Violates INV-7 (fluid is env-driven via `FluidSimulator`; hook is no-op for backends without native fluid).
-**Instead:** 3D fluid lives in `FluidSimulator` (PhiFlow); the hook stays no-op; `env.step()` calls `self._fluid_simulator.step()` unchanged.
-
----
+| Integration Point | How v0.7.0 Connects | Change Type |
+|-------------------|--------------------|-------------|
+| `save_window()` / `load_window()` | Unchanged (geometry + state) | **UNCHANGED** |
+| Dock state | NEW: `save_dock_state()` / `load_dock_state()` keys | **MODIFIED** (add keys) |
+| Viewport prefs | NEW: `viewport/target_fps`, `viewport/sim_rate_hz`, `viewport/lighting` keys | **MODIFIED** (add keys) |
+| Recent files / last provider | Unchanged | **UNCHANGED** |
 
 ## Sources
 
-- Codebase inspection (HIGH confidence): `src/surg_rl/dreamer/subprocess.py`, `wrapper.py`, `training.py`, `rl/difficulty.py`, `dynamics/curriculum.py`, `scene_definition/schema.py`, `fluids/fluid_simulator.py`, `simulators/base_simulator.py`, `rl/environment.py`, `k8s/base/pvc.yaml`, `tests/k8s/test_pvc_e2e.py`, `tests/dreamer/test_dreamerv3_subprocess_e2e.py`
-- `.planning/PROJECT.md` Key Architecture Decisions + `.planning/STATE.md` Decisions/Deferred Items (HIGH — primary context)
-- DreamerV3 API (MEDIUM): [danijar/dreamerv3 GitHub](https://github.com/danijar/dreamerv3), [PyPI dreamerv3 v1.5.0](https://pypi.org/project/dreamerv3/), [DeepWiki Getting Started](https://deepwiki.com/danijar/dreamerv3/3-getting-started), [DeepWiki Environment Integration](https://deepwiki.com/danijar/dreamerv3/8-environment-integration) — factory functions `make_agent(obs_space, act_space, config.agent)`, `embodied.envs.from_gym:FromGym`, `encoder.mlp_keys`/`cnn_keys` requirement. Official `example.py` unreachable (404) so exact instantiation code inferred from factory signatures + DeepWiki descriptions.
-- PhiFlow 3D API (HIGH): [PhiFlow StaggeredGrids](https://tum-pbs.github.io/PhiFlow/Staggered_Grids.html), [PhiFlow fluid API](https://tum-pbs.github.io/PhiFlow/phi/physics/fluid.html), [Wake Flow 3D example](https://tum-pbs.github.io/PhiFlow/examples/grids/Wake_Flow.html) — confirms `StaggeredGrid(x,y,z, bounds=Box(x,y,z))` + `make_incompressible` dimension-agnostic.
+- [Qt QThread Documentation](https://doc.qt.io/qtforpython-6/PySide6/QtCore/QThread.html) — worker-object pattern via `moveToThread()`, signal/slot cross-thread communication
+- [MuJoCo + PySide6 Decoupled Render Gist](https://gist.github.com/cherishyuan/e5216d90c53d8281d1db7f0b21718253) — `UpdateSimThread` with `mj_step` in tight loop, QTimer-driven `update()` on main thread
+- [Qt Forum: QTimers vs Threading for Maximum Performance](https://forum.qt.io/topic/162980/qtimers-vs-threading-how-to-achieve-maximum-performance) — QTimer jitter, vsync recommendation, `QElapsedTimer` for delta time
+- [PySide6 QMainWindow Documentation](https://doc.qt.io/qtforpython-6/PySide6/QtWidgets/QMainWindow.html) — `saveState()`/`restoreState()`, objectName requirement, version mismatch behavior
+- [Stack Overflow: How to revert a QDockWidget after restoreState()](https://stackoverflow.com/questions/78958419/how-to-revert-a-qdockwidget-after-calling-restorestate) — no selective undo, manual re-apply needed
+- [PySide6 QOpenGLWidget Documentation](https://doc.qt.io/qtforpython-6/PySide6/QtOpenGLWidgets/QOpenGLWidget.html) — FBO rendering, context sharing, `grabFramebuffer()`
+- [Threaded QOpenGLWidget Example](https://doc.qt.io/qtforpython-6/examples/example_opengl_threadedqopenglwidget.html) — multiple GLWidgets on separate threads, context sharing
+- [florianblume/qt3d-gizmo](https://github.com/florianblume/qt3d-gizmo) — Qt3D translate/rotate gizmo, overlay framegraph
+- [Meshroom TransformGizmo.qml](https://github.com/alicevision/Meshroom/blob/c9d0239f/meshroom/ui/qml/Viewer3D/TransformGizmo.qml) — Blender-style translate/rotate/scale gizmo, constant apparent size, frontLayerComponent
+- [OpenAI Structured Outputs Guide](https://developers.openai.com/api/docs/guides/structured-outputs) — `response_format: json_schema`, schema adherence, Pydantic recommended
+- [OpenAI Cookbook: GPT-4 Vision with Function Calling](https://developers.openai.com/cookbook/examples/multimodal/using_gpt4_vision_with_function_calling/) — image-to-structured-JSON with Pydantic + instructor
+- [MuJoCo Visualization Documentation](https://mujoco.readthedocs.io/en/latest/programming/visualization.html) — offscreen rendering, multiple camera types, `mjvOption` flags, `mjvScene` lights, `mjtRndFlag` render flags
+- [MuJoCo Python Renderer Source](https://github.com/google-deepmind/mujoco/blob/e6354b43/python/mujoco/rendering/classic/renderer.py) — `Renderer` class, `update_scene()` camera switching, depth/segmentation modes
+- [Gymnasium MuJoCo Rendering](https://github.com/Farama-Foundation/Gymnasium/blob/main/gymnasium/envs/mujoco/mujoco_rendering.py) — `OffScreenViewer`, `MujocoRenderer`, visual_options dict
+- [PyBullet getCameraImage View/Projection Matrices](https://stackoverflow.com/questions/60430958/understanding-the-view-and-projection-matrix-from-pybullet) — `computeViewMatrix`, `computeProjectionMatrixFOV`, NDC clipping
+- [AIOZ: Visual Observations for PyBullet Agents](https://blog.ai.aioz.io/guides/robotics/2021-05-19-visual-obs-pybullet/) — `shadow=True`, `renderer=p.ER_BULLET_HARDWARE_OPENGL`
+- [PySide6 QVideoFrameInput (Qt 6.8+)](https://doc.qt.io/qtforpython-6/PySide6/QtMultimedia/QVideoFrameInput.html) — custom numpy frames to `QMediaRecorder`, FFmpeg backend
+- [PySide6 QMediaRecorder](https://doc.qt.io/qtforpython-6/PySide6/QtMultimedia/QMediaRecorder.html) — video encoding, `videoFrameRate`, `videoResolution`, `outputLocation`
+- [ClarQ-LLM Benchmark](https://arxiv.org/html/2409.06097v2) — clarifying questions in task-oriented dialogue, slot tracking
+- [ClarifyAgent](https://api.emergentmind.com/topics/clarifyagent) — modular multi-turn clarification, finite-state slot tracking
+- [SceneReVis](https://github.com/Runder-sun/SceneReVis) — self-reflective scene synthesis with tool calling (add/move/rotate/scale/remove)
+- [Qt Quick Scene Graph](https://doc.qt.io/qtforpython-6/overviews/qtquick-visualcanvas-scenegraph.html) — threaded vs basic render loops, vsync animation driver, `QSG_USE_SIMPLE_ANIMATION_DRIVER`

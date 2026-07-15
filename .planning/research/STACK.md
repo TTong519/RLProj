@@ -1,272 +1,192 @@
-# Technology Stack — v0.6.0 Carried-Forward Debt Closure
+# Stack Research — v0.7.0 GUI Editor Depth & Scene Generation
 
-**Project:** surg-rl
-**Milestone:** v0.6.0 (Real DreamerV3, TASK-02 per-level schema, K8s PVC e2e, 3D fluid flag)
-**Researched:** 2026-06-24
-**Scope:** Stack additions/changes needed to close the four carried-forward debt items only. The existing validated stack (Python >=3.10, MuJoCo 3.x, PyBullet >=3.2.5, Gymnasium >=0.29, Stable-Baselines3 >=2.0, Pydantic v2, PhiFlow 3.4.0, tetgen, trimesh, JAX, K8s/Kustomize manifests) is NOT re-researched.
-
-## Headline Finding
-
-**Three of the four debt items need ZERO new packages.** The existing pins are already current and capable:
-
-- `dreamerv3~=1.5.0` + `jax~=0.4.20` -- v1.5.0 is the latest and only PyPI release; the programmatic `embodied.run.train` / `dreamerv3.Agent` API is already available inside the vendored `embodied` framework.
-- `phiflow>=3.4.0` -- 3D Eulerian grids are natively supported; the `dim_3d=True` path is a constructor/validator change, not a library change.
-- Pydantic v2 -- `DifficultyLevelConfig` is pure schema work reusing the v0.4.2 forward-ref + `model_rebuild()` pattern.
-
-**One new dev-only extra is needed:** `pytest-kind` for the K8s PVC e2e test (replaces the raw-subprocess stub with a session-scoped `kind_cluster` fixture).
+**Domain:** Surgical-robotics RL training system — PySide6 scene editor depth (GUI-11..15) + scene-generation features (GEN-01..05), added to an existing validated app.
+**Researched:** 2026-07-15
+**Confidence:** HIGH
 
 ---
 
-## Recommended Stack Changes
+## Scope of this research
 
-### (a) Real DreamerV3 Integration -- `_build_agent` stub flip
+Only NEW capabilities for v0.7.0 are in scope. The following are already built, validated, and explicitly out of scope for re-research (per milestone context): PySide6 6.8 LTS / custom `ViewportCanvas(QWidget)`, MuJoCo offscreen + PyBullet `getCameraImage` render bridge with framebuffer retry + persistent-failure short-circuit, `QThread` background LLM work, trimesh meshes, tetgen deformable pipeline, Pydantic v2 schema + `SchemaWalker`/`FieldRenderer`, Stable-Baselines3 + Gymnasium, Typer CLI, Rich logging, pydantic-settings, the existing `scene_generation` module (`text_parser` / `vision_parser` / `scene_composer` / `templates` / `base_parser` with OpenAI / Anthropic / Ollama providers), and the optional-dependency groups `[distributed]` `[ros2]` `[llm]` `[vision]` `[assets]` `[benchmark]` `[marl]` `[dreamer]` `[gui]` `[meshing]` `[simulation]` `[tracking]` `[k8s-test]` `[docs]` `[physics]`.
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| `dreamerv3` | `~=1.5.0` (UNCHANGED) | World-model RL agent | v1.5.0 (Feb 22 2023) is the latest + only PyPI release -- no newer version exists. The existing pin is correct. |
-| `jax` | `~=0.4.20` (UNCHANGED) | DreamerV3 backend | Compatible with dreamerv3 v1.5.0; already pinned. |
-| `optax` | `>=0.1.7` (UNCHANGED) | DreamerV3 optimizer | Already in `[dreamer]` extra. |
-| `embodied` (vendored) | bundled in `dreamerv3` | Training orchestration | NOT a separate PyPI install. `embodied.run.train(...)` and `embodied.jax.Agent` ship inside the `dreamerv3` package (same monorepo, `embodied/` subdir). |
+The v0.5.0 architecture decisions that constrain every recommendation below:
+- **GUI stays in the stock interpreter** — no `mjpython` re-exec (mjpython runs Python on a secondary thread, violating PySide6's main-thread requirement and causing the "dock icon, no window" hang).
+- **Editor viewport is a custom `ViewportCanvas(QWidget)`**, not a `QLabel` and not a Qt3D window. The render surface is a CPU-rasterized `QPixmap` produced by the MuJoCo/PyBullet offscreen render bridge. There is **no live OpenGL context** in the editor process on macOS (the existing `_renderer_available = False` short-circuit confirms CGL fails on the main thread under the stock interpreter).
+- **PEP 562 lazy `__getattr__`** in `surg_rl.rl.__init__` keeps heavy `stable_baselines3`/`torch` off the editor import path.
 
-**Programmatic API to wire into `_build_agent` / `_run_subprocess_loop`:**
-
-```python
-# Inside the JAX subprocess (after XLA_PYTHON_CLIENT_MEM_FRACTION is set):
-import dreamerv3
-from dreamerv3 import Agent  # inherits embodied.jax.Agent
-
-# obs_space / act_space probed from one env instance (the GymToEmbodiedWrapper)
-agent = Agent(obs_space, act_space, config)   # config = embodied.Config(dreamerv3.Config)
-
-carry = agent.init_train(batch_size)                # -> carry state
-carry, outs, metrics = agent.train(carry, batch)    # one gradient step on replay batch
-carry, act, out = agent.policy(carry, obs, mode='train')  # env rollout action
-metrics = agent.report(carry, data)                 # periodic diagnostics
-data = agent.save()                                 # checkpoint serialize
-agent.load(data)                                    # checkpoint restore
-```
-
-**Two viable wiring strategies (pick during phase planning, not here):**
-
-1. **Reuse `embodied.run.train(make_agent, make_replay, make_env, make_stream, make_logger, args)`** as the orchestration inside the subprocess. Our existing `GymToEmbodiedWrapper` already produces the `embodied.Env`-compatible dict obs (`is_first`/`is_last`/`is_terminal`). This is the lowest-code path: supply `make_env=lambda: GymToEmbodiedWrapper(SurgicalEnv(...))`, `make_agent=lambda: Agent(obs_space, act_space, cfg)`, and let `embodied.run.train` drive replay/driver/logger/checkpoints. The existing `CONFIG/TRAIN/EVAL/CHECKPOINT` stdin/stdout JSON protocol then wraps `embodied.run.train`'s lifecycle (start/stop/metrics-forward).
-2. **Hand-roll the loop** by instantiating `Agent` directly in `_build_agent` and calling `agent.policy()` / `agent.train()` from the existing `_run_subprocess_loop` branches. More control, more code, re-implements replay buffering and driver logic that `embodied.run.train` already provides.
-
-**Recommendation:** strategy 1 unless the team needs fine-grained control over replay composition. The existing `_JsonStdout` wrapper + `DreamerSubprocess` parent class stay; only `_build_agent`, `_train_loop`, `_evaluate`, `_save_checkpoint`, `_load_checkpoint` get real implementations.
-
-**Sentinel flip:** the Phase 30 E2E test currently asserts `RuntimeError("Agent not configured")` from the stub. Flipping `_build_agent` will make that test START FAILING -- that is the intended signal. The test must be updated in the same phase to assert positive completion (real agent constructed + >=1 train step + checkpoint save/load round-trip) gated on the existing `pytest.mark.skipif(GPU + dreamerv3 + jax)`.
-
-**Do NOT add:** `dreamer` (PyPI v3.3.1, a *different* project -- `rafarodsa/dreamer-v3-purejax`, a pure-JAX reimplementation), `stable-baselines3` DreamerV3 port (does not exist), or a separate `embodied` PyPI install (it is vendored).
-
-### (b) 3D PhiFlow Grid Fluids -- `dim_3d=True`
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| `phiflow` | `>=3.4.0` (UNCHANGED) | 3D Eulerian grid fluid solver | 3D is natively supported in 3.4.0; no version bump. |
-
-**Key API fact:** PhiFlow infers dimensionality from the `Box` + axis kwargs passed to `StaggeredGrid`, NOT from a `dim_3d` library flag. There is no `phi.flow.dim_3d` symbol. The `dim_3d=True` we are implementing is OUR config flag (`FluidConfig`), mapped to a 3D constructor at the `FluidSimulator` level.
-
-**2D -> 3D constructor diff:**
-
-```python
-# Current 2D (fluid_simulator.py):
-domain = Box(x=float(dims[0]), y=float(dims[2]))           # xz-slice
-self._velocity = StaggeredGrid(0.0, extrapolation.ZERO, domain,
-                               x=config.resolution[0], y=config.resolution[1])
-
-# 3D path (dim_3d=True):
-domain = Box(x=float(dims[0]), y=float(dims[1]), z=float(dims[2]))
-self._velocity = StaggeredGrid(0.0, extrapolation.ZERO, domain,
-                               x=config.resolution[0], y=config.resolution[1], z=config.resolution[2])
-```
-
-- `fluid.make_incompressible(velocity, obstacles, Solve(...))` works identically in 3D (pressure Poisson solve generalizes; `rel_tol`/`abs_tol`/`max_iterations` unchanged).
-- The `union(*geoms)` multi-obstacle workaround (DEBT-05) is dimension-agnostic -- carries over unchanged.
-- `compute_obstacle_forces` (force_computation.py) must handle a 3D pressure gradient; verify the per-obstacle bounding-box integration generalizes to a z-axis slice.
-- Reference example: [PhiFlow Wake_Flow](https://tum-pbs.github.io/PhiFlow/examples/grids/Wake_Flow.html) -- full 3D cylinder wake with `Box(x=200, y=100, z=5)`, `infinite_cylinder(inf_dim='z')`, `iterate(step, batch(time=200), ...)`.
-
-**Schema change required:** `FluidConfig.resolution: tuple[int, int]` must accept `tuple[int, int, int]` when `dim_3d=True`. Recommended form:
-
-```python
-dim_3d: bool = Field(default=False, description="Enable 3D Eulerian grid (vs 2D xz-slice)")
-resolution: tuple[int, int] | tuple[int, int, int] = Field(
-    default=(32, 32), description="Grid resolution (nx, ny) or (nx, ny, nz) when dim_3d=True"
-)
-
-@field_validator("resolution")
-@classmethod
-def _validate_resolution(cls, v, info):
-    dim_3d = info.data.get("dim_3d", False)
-    expected_len = 3 if dim_3d else 2
-    if len(v) != expected_len:
-        raise ValueError(f"Resolution must have {expected_len} dims when dim_3d={dim_3d}")
-    if any(d < 4 for d in v):
-        raise ValueError("Resolution must be >= 4 per dimension")
-    if any(d > 128 for d in v):
-        raise ValueError("Resolution capped at 128 per dimension")
-    return v
-```
-
-**Do NOT add:** `mantaflow` (abandoned since 2022), `pyvista`/`vtk` (removed in v0.3.2 for tetgen), a GPU-fluid backend (CPU-first is the established decision; GPU fluids explicitly out of scope).
-
-### (c) DifficultyLevelConfig -- Pydantic v2 Schema
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| `pydantic` | v2 (UNCHANGED) | Schema for per-level difficulty overrides + scene-level blocks | Pure schema work; reuses the v0.4.2 cycle-resolution pattern. |
-
-**No new packages.** The established pattern (PROJECT.md Key Architecture Decisions) applies directly:
-
-```python
-class DifficultyLevelConfig(BaseModel):
-    """Per-level difficulty overrides (TASK-02)."""
-    tissue_stiffness: float | None = Field(default=None, ge=0.0, description="Override FEM stiffness")
-    target_precision_tolerance: float | None = Field(default=None, ge=0.0, description="Success radius override")
-    tool_position_noise: float | None = Field(default=None, ge=0.0, description="Observation noise std")
-    time_limit: float | None = Field(default=None, gt=0.0, description="Episode time cap override (s)")
-```
-
-**Scene-level `difficulty_blocks: list[3]`:**
-
-```python
-# On SceneDefinition or TaskConfig (decide in phase planning):
-difficulty_blocks: list[DifficultyLevelConfig] = Field(
-    default_factory=list, description="Exactly 3 entries: [easy, medium, hard]"
-)
-
-@field_validator("difficulty_blocks")
-@classmethod
-def _exactly_three(cls, v):
-    if len(v) != 0 and len(v) != 3:
-        raise ValueError("difficulty_blocks must have exactly 3 entries [easy, medium, hard] or be empty")
-    return v
-```
-
-**Discrete `CurriculumScheduler` level progression:** indexes into the 3-block list (0=EASY, 1=MEDIUM, 2=HARD) instead of the continuous `current_difficulty: float`. The existing `DifficultyLevel` `_FloatMixin(float, Enum)` stays for the scalar path; the discrete path adds a `current_level: int` (0..2) that selects `difficulty_blocks[current_level]` and feeds `apply_difficulty()` per reward class.
-
-**Cross-package cycle resolution (reuse v0.4.2 pattern):** `from __future__ import annotations` + string forward-ref + late import at module bottom + `Model.model_rebuild()` + lazy local imports inside function bodies. The existing `TaskConfig.model_rebuild()` call at schema.py bottom already handles the `DifficultyLevel` forward ref; add `DifficultyLevelConfig` to the same late-import + rebuild block.
-
-**Do NOT add:** `enum-tools`, a separate `difficulty_schema` package, or a JSON-schema generator (Pydantic v2 native validation is sufficient).
-
-### (d) K8s PVC e2e Test -- `pytest-kind`
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| `pytest-kind` | `>=22.11.1` (**NEW, dev-only**) | Session-scoped `kind_cluster` fixture for PVC e2e | Battle-tested (stable since 2019), lightweight, matches the existing stub's `kind`-detection + `@pytest.mark.k8s` marker. |
-| `pykube-ng` | transitive (via pytest-kind) | Lightweight K8s API client for PVC state polling | Bundled with pytest-kind; avoids the 30+ MB official `kubernetes` client. |
-| `kind` (binary) | external prerequisite | Local Kubernetes cluster | Already detected by the existing stub's `_kind_cluster_available()`. |
-
-**Why `pytest-kind` over alternatives:**
-
-| Framework | Python client | Providers | Scope | Verdict |
-|-----------|--------------|-----------|-------|---------|
-| **pytest-kind** (hjacobs) | `pykube-ng` (lightweight) | kind only | session | **RECOMMENDED** -- stable since 2019, `kubectl(*args)` subprocess helper matches the declarative `kustomize apply` workflow, `load_docker_image` + `port_forward` + `kubeconfig_path` for debugging. |
-| pytest-kubernetes (Blueshoe) | dict/kubectl | k3d/kind/minikube | per-test | More providers than needed; per-test cluster recreation is wasteful for a single PVC test. |
-| pytest-k8s (v1.0.0, Jul 2025) | official `kubernetes>=33.1.0` (30+ MB) | kind only | session/module/class/function | Cleanest official-client integration but adds a heavy runtime dep for a dev-only test. |
-
-**Integration with existing stub (`tests/k8s/test_pvc_e2e.py`):**
-
-```python
-# Add to pyproject.toml [project.optional-dependencies]
-k8s-test = ["pytest-kind>=22.11.1"]
-
-# Test body (replaces the TODO):
-def test_pvc_read_write_cycle(kind_cluster):
-    # kind_cluster fixture is session-scoped, skips if kind unavailable
-    kind_cluster.kubectl("apply", "-f", "k8s/base/pvc.yaml")
-    kind_cluster.kubectl("wait", "--for=condition=Bound",
-                         "pvc/surg-rl-checkpoints", "--timeout=60s")
-    # Launch Job that writes a checkpoint to the PVC mount
-    kind_cluster.kubectl("apply", "-f", "tests/k8s/write-job.yaml")
-    kind_cluster.kubectl("wait", "--for=condition=Complete",
-                         "job/surg-rl-write", "--timeout=120s")
-    # Launch Job that reads the checkpoint back and verifies
-    kind_cluster.kubectl("apply", "-f", "tests/k8s/read-job.yaml")
-    kind_cluster.kubectl("wait", "--for=condition=Complete",
-                         "job/surg-rl-read", "--timeout=120s")
-    # Assert via logs
-    logs = kind_cluster.kubectl("logs", "job/surg-rl-read")
-    assert "CHECKPOINT_OK" in logs
-    # Cleanup
-    kind_cluster.kubectl("delete", "-f", "tests/k8s/write-job.yaml")
-    kind_cluster.kubectl("delete", "-f", "tests/k8s/read-job.yaml")
-```
-
-**Keep `kubectl` subprocess as the primary apply mechanism** (declarative, consistent with the existing `k8s/base/*.yaml` Kustomize workflow). Use the `kind_cluster.api` (pykube) only if polling PVC `.status.phase` programmatically is needed beyond `kubectl wait`.
-
-**Organ-mesh licensing decision (same debt item, no stack impact):** this is a licensing/process decision (procedural generation vs surgtoolloc dataset), NOT a stack addition. Procedural generation reuses the existing `trimesh` + `tetgen` pipeline; surgtoolloc would add a data-download step (no new runtime dep). The decision is deferred to phase planning -- no library research needed here.
-
-**Do NOT add:** the official `kubernetes` Python client (heavy, unnecessary for a PVC round-trip test), `helm` (Kustomize overlays are the established decision; Helm explicitly out of scope), `k3d`/`minikube` providers (`kind` is already the detected cluster).
+Any stack addition that contradicts those three constraints is rejected in "What NOT to Use" below.
 
 ---
 
-## Alternatives Considered
+## Recommended Stack
 
-| Category | Recommended | Alternative | Why Not |
-|----------|-------------|-------------|---------|
-| DreamerV3 agent | `dreamerv3~=1.5.0` (vendored `embodied.run.train`) | `dreamer` PyPI v3.3.1 (pure-JAX reimpl) | Different project, not a successor; would fork the codebase from the danijar reference implementation. |
-| DreamerV3 orchestration | `embodied.run.train(...)` reuse | Hand-rolled `agent.train()` loop in `_run_subprocess_loop` | Hand-roll re-implements replay/driver/logger; only choose if fine-grained control is required. |
-| 3D fluids | `phiflow>=3.4.0` 3D `StaggeredGrid` | Mantaflow / pyvista | Mantaflow abandoned since 2022; pyvista/VTK removed in v0.3.2. PhiFlow 3D is built-in. |
-| 3D fluid flag | `FluidConfig.dim_3d: bool` + `resolution` union | Separate `FluidConfig3D` model | Union + validator is less code and keeps the config single-model; matches Pydantic v2 idiom. |
-| K8s e2e framework | `pytest-kind>=22.11.1` | `pytest-k8s` (official kubernetes client) | Adds 30+ MB dev dep for one PVC test; pykube-ng is sufficient. |
-| K8s e2e framework | `pytest-kind>=22.11.1` | Raw `subprocess.run(["kubectl", ...])` (status quo stub) | Loses fixture lifecycle (session cluster, kubeconfig, load_docker_image, port_forward); the stub already hand-rolls `_kind_cluster_available()` which pytest-kind provides correctly. |
-| Difficulty schema | Pydantic v2 `DifficultyLevelConfig` model | JSON Schema + `jsonschema` validator | Project standard is Pydantic v2; reuses `model_rebuild()` cycle pattern. |
+### Core Technologies — additions for v0.7.0
+
+Only **one** new package is a hard requirement. Everything else is either already covered by an existing extra, or is pure code on top of existing deps.
+
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| `imageio-ffmpeg` | `>=0.6.0` | FFmpeg backend for `imageio.get_writer(..., format="mp4")` — used by the in-app recording feature (GUI-13) to write viewport frames to `.mp4` | `imageio>=2.31.0` is already in the `[gui]` extra, but `imageio` no longer bundles `imageio-ffmpeg` by default — it was moved to an `ffmpeg` extra (verified via `importlib.metadata.requires("imageio")` on the installed 2.37.3). Without `imageio-ffmpeg`, `imageio.get_writer(path, format="mp4")` raises `IndexError: Could not find module "imageio-ffmpeg"`. v0.6.0 (2025-01-16) is the current release and ships pre-built ffmpeg binaries for macOS/Linux/Windows. This is the single mandatory new dep for the whole milestone. |
+
+### Supporting Libraries — optional / decision-dependent
+
+| Library | Version | Purpose | When to Use |
+|---------|---------|---------|-------------|
+| `imageio[ffmpeg]` | `>=2.31.0` | Alternative spelling: pull `imageio-ffmpeg` transitively via imageio's `ffmpeg` extra instead of pinning `imageio-ffmpeg` directly | Either form works; `imageio-ffmpeg>=0.6.0` as a direct pin is clearer and gives us an explicit floor. Prefer the direct pin. |
+| (existing `[vision]` extra) `torch` + `torchvision` + `transformers` | already pinned | Local VLM inference for GEN-03 if a local LLaVA/Qwen-VL-style model is wanted instead of API-based GPT-4o/Claude Vision (the existing `VisionParser` already does the API path) | Only if a phase explicitly chooses local inference over the already-working API VLM path. No new pin needed — the `[vision]` extra already covers it. The HuggingFace model weights are downloaded at runtime, not a pip dep. |
+
+### Development Tools — already in place, no additions
+
+| Tool | Purpose | Notes |
+|------|---------|-------|
+| `ruff` / `black` / `mypy` | lint / format / type-check | Already configured; no changes for v0.7.0 |
+| `pytest` / `pytest-cov` / `pytest-asyncio` | tests | Already configured; the LLM clarifying-question flow and procedural/batch gen add new test surface but need no new pytest plugins |
+
+---
+
+## What each existing dep already covers (do NOT re-add)
+
+This is the load-bearing section for an existing-app milestone. Most v0.7.0 features need **no new packages** — they are code on top of already-installed deps. Calling these out explicitly so the roadmap does not budget redundant dependency work.
+
+### GUI editor depth (GUI-11..15)
+
+| v0.7.0 feature | Already-covered-by | What's actually needed |
+|----------------|--------------------|------------------------|
+| **GUI-11 render/sim-decoupled viewport** | Existing `ViewportCanvas(QWidget)` + MuJoCo offscreen + PyBullet `getCameraImage` render bridge | Architecture change only: move the render call off the main thread (a `QThread` worker that produces `QPixmap` frames, main thread blits). No new dep. The current `QTimer.singleShot(50, self._tick)` self-rescheduling loop is the <10fps root cause — 50 ms cap = 20 fps ceiling, and synchronous render-on-main blocks the event loop. Decoupling is pure refactor. |
+| **GUI-12 multi-view** | Existing render bridge accepts `camera_name`/camera params per call | Instantiate N `ViewportCanvas` panels, each calling the render bridge with a different camera config. Pure code; no dep. |
+| **GUI-12 lighting controls** | MuJoCo: `<light>` element + `model.light_*` arrays + `mjvOption.flags` for shadow; PyBullet: `getCameraImage(lightColor, lightDistance, lightAmbientCoeff, lightDiffuseCoeff, lightSpecularCoeff, shadow)` | Native to both backends. Expose these in the editor as `FieldRenderer` widgets bound to the existing schema. No dep. |
+| **GUI-12 transform gizmos** (translate/rotate/scale manipulators) | Existing `ViewportCanvas` + numpy + the render bridge's camera matrices | Draw gizmo handles as a 2D overlay on the `ViewportCanvas` `QPainter` by projecting 3D handle world-positions to screen space using the camera azimuth/elevation/distance/target offsets already tracked in `_CameraOffset`. Hit-test in 2D. Mutate the selected entity's `Pose`/`scale`. **No new dep.** See "What NOT to Use" for why Qt3D / viser are rejected. |
+| **GUI-13 in-app recording / video capture** | `imageio>=2.31.0` (in `[gui]`) + **NEW** `imageio-ffmpeg>=0.6.0` | `imageio.get_writer(path, format="mp4", mode="I", fps=N)` then `writer.append_data(rgb_frame)` per viewport tick. The render bridge already yields an `(H, W, 3) uint8` ndarray per frame — feed it straight to the writer. The only missing piece is the ffmpeg backend package. |
+| **GUI-14 editing UX, file/IO** | Pydantic v2 schema, `pyyaml`, `tomli-w`, `SchemaWalker`, `FieldRenderer`, existing undo/redo stack, drag-drop | Pure code: dock-state persistence via `QMainWindow.saveState()`/`restoreState()` + `QSettings` for the dock-panel reset bug; file dialogs are `QFileDialog`. No dep. |
+| **GUI-15 perf/stability** | Same render bridge + `QThread` | Same root-cause work as GUI-11. Profiling via `cProfile`/`py-spy` (dev tool, not a runtime dep). No new runtime dep. |
+
+### Scene generation (GEN-01..05)
+
+| v0.7.0 feature | Already-covered-by | What's actually needed |
+|----------------|--------------------|------------------------|
+| **GEN-01 more task templates** | Existing `templates.py` + Pydantic v2 `SceneDefinition` | Pure code: add more template presets. No dep. |
+| **GEN-02 better LLM text→scene** | Existing `TextParser` + `openai` / `anthropic` SDKs (in core deps + `[llm]`) | Prompt-engineering + structured-output (`response_format` / tool-calling) work. The OpenAI and Anthropic SDKs already support multi-turn conversations and tool/function calling natively. No dep. |
+| **GEN-03 VLM image→scene** | Existing `VisionParser` already uses API-based VLMs (OpenAI GPT-4o vision, Anthropic Claude vision, Ollama vision) via base64 image input | The feature largely exists. v0.7.0 work is hardening (better prompt templates, schema-conformance validation, fallback handling). For **local** VLM inference (optional, only if a phase chooses it), the existing `[vision]` extra (`torch` + `torchvision` + `transformers`) already covers it — no new pin. |
+| **GEN-04 procedural / batch gen** | `trimesh` (in `[assets]`) + `numpy` (core) + `pydantic` schema | Procedural scene variation (randomized instrument poses, tissue params, lighting) is pure code on trimesh + numpy + the existing `parameter_randomizer.py`. Batch = loop over parameter sweeps. No dep. |
+| **GEN-05 interactive LLM clarifying-question flow** | `openai` / `anthropic` SDKs (already installed) + existing `QThread` pattern (`TextParserWorker`) | Multi-turn LLM conversation with clarifying questions is supported natively by both SDKs (chat-completions message history). The GUI round-trip reuses the existing `QThread` background-worker pattern from the LLM panel. No dep. |
 
 ---
 
 ## Installation
 
-```bash
-# NEW dev-only extra for K8s PVC e2e (add to pyproject.toml)
-pip install -e ".[k8s-test]"
-
-# Existing extras (UNCHANGED, no re-install needed unless upgrading):
-#   [dreamer]  -> dreamerv3~=1.5.0, jax~=0.4.20, optax>=0.1.7
-#   [assets]   -> trimesh, tetgen
-#   fluids     -> phiflow>=3.4.0 (already a core dep, not optional)
-
-# External prerequisite for the PVC e2e test:
-#   kind (Kubernetes in Docker) -- already detected by tests/k8s/test_pvc_e2e.py
-```
-
-**pyproject.toml diff (the only dependency change in v0.6.0):**
+### Change to `pyproject.toml` (the ONLY required edit)
 
 ```toml
-[project.optional-dependencies]
-# ... existing extras unchanged ...
-k8s-test = ["pytest-kind>=22.11.1"]
+# In [project.optional-dependencies]
+gui = [
+    "PySide6>=6.8.0,<7.0",
+    "markdown-it-py>=3.0.0",
+    "imageio>=2.31.0",
+    "imageio-ffmpeg>=0.6.0",   # NEW — imageio 2.37 no longer bundles ffmpeg; needed for GUI-13 recording
+]
+```
+
+### Install command for a developer bringing up the editor with the new recording feature
+
+```bash
+pip install -e ".[gui]"           # adds imageio-ffmpeg alongside PySide6 + imageio
+# Optional, only if a phase chooses local VLM inference for GEN-03:
+pip install -e ".[gui,vision]"    # adds torch + torchvision + transformers (heavy)
 ```
 
 ---
 
-## Integration Notes with Existing Stack
+## Alternatives Considered
 
-1. **DreamerV3 subprocess isolation is unchanged.** `DreamerSubprocess` (multiprocessing spawn context, `_JsonStdout` pipe wrapper, `XLA_PYTHON_CLIENT_MEM_FRACTION=0.4`, `XLA_PYTHON_CLIENT_PREALLOCATE=false`) stays. Only `_build_agent` / `_train_loop` / `_evaluate` / `_save_checkpoint` / `_load_checkpoint` get real bodies. The `CONFIG/TRAIN/EVAL/CHECKPOINT/SHUTDOWN` stdin/stdout JSON protocol stays.
+| Category | Recommended | Alternative | Why Not (this project) |
+|----------|-------------|-------------|------------------------|
+| Video recording backend | `imageio-ffmpeg>=0.6.0` | `PyAV` (`av>=14`) | imageio-ffmpeg is already the implicit default for `imageio.get_writer(format="mp4")`; PyAV is faster (C-level ffmpeg bindings) but adds a second ffmpeg stack and a heavier wheel. The render bridge already produces ndarray frames at low fps (editor viewport), so PyAV's throughput advantage is irrelevant. Stick with imageio-ffmpeg for dep economy. |
+| Video recording backend | `imageio-ffmpeg>=0.6.0` | `QVideoFrameInput` + `QMediaRecorder` (Qt 6.8+ native) | Requires the FFmpeg multimedia backend at runtime (not guaranteed on all Linux distros), forces a `QMediaCaptureSession` pipeline that is awkward to feed from a render bridge that produces ndarray frames, and is more code than `imageio.get_writer`. imageio-ffmpeg is simpler and matches the ndarray-in/ndarray-out shape of the existing render bridge. |
+| Transform gizmo (translate/rotate/scale manipulator) | **2D overlay on `ViewportCanvas`** via `_CameraOffset` projection — no dep | `PySide6.Qt3DExtras` + community `qt3d-gizmo` / `qt3d-transform-gizmo` | Qt3D is a separate rendering framework (its own scene graph, its own OpenGL context). Adopting it means running a parallel 3D pipeline alongside the existing MuJoCo/PyBullet→QPixmap bridge — a major architectural reversal of the v0.5.0 decision and a likely regression of the macOS stock-interpreter / no-OpenGL-context constraint. The community gizmo libs (`florianblume/qt3d-gizmo`, `fferri/qt3d-transform-gizmo`) are C++/QML, low-stars, and unmaintained. The 2D-overlay approach reuses the existing `_CameraOffset` camera params already tracked in `viewport.py` and the existing `QPainter` on `ViewportCanvas`. |
+| Transform gizmo | 2D overlay (no dep) | `viser` (`scene.add_transform_controls()`) | viser is web-based: it runs a WebSocket server and renders in a browser via React/three.js. Embedding it in the PySide6 desktop app would require `QWebEngineView` (Chromium, ~100 MB) and running a parallel web stack — directly contradicting the native-desktop architecture. It is the right tool for a notebook/SSH workflow, not for an integrated Qt editor. |
+| Local VLM for GEN-03 | (only if a phase chooses local) existing `[vision]` extra (`torch`+`transformers`) | LLaVA-specific pip package | There is no maintained "LLaVA" pip package; weights are downloaded from HuggingFace at runtime into the `transformers` ecosystem already in `[vision]`. No new pin. |
+| LLM multi-turn clarifying flow (GEN-05) | `openai` + `anthropic` SDKs already in core deps | `langchain` / `llamaindex` | Those frameworks add a heavy abstraction layer over SDKs the project already uses directly and well (per the existing `TextParser`/`VisionParser`). Multi-turn clarification is 20 lines of message-history management on top of the existing SDK clients. Adding a framework would contradict the project's established "thin SDK wrapper" pattern. |
 
-2. **`GymToEmbodiedWrapper` is already `embodied.Env`-compatible** (`is_first`/`is_last`/`is_terminal` dict obs, reset-in-action protocol). No wrapper change needed for the real agent wiring.
+---
 
-3. **3D fluids are additive.** `dim_3d=False` (default) preserves the existing 2D xz-slice path bit-for-bit. The `FluidSimulator.step()` body branches on `config.dim_3d` for the `Box`/`StaggeredGrid` construction only; `make_incompressible` + `union(*geoms)` + `compute_obstacle_forces` are shared. Existing 2D tests stay green.
+## What NOT to Use
 
-4. **`DifficultyLevelConfig` is additive to the schema.** Existing `TaskConfig.difficulty_level: DifficultyLevel | None` (scalar enum) stays for backwards compat; `difficulty_blocks: list[DifficultyLevelConfig]` is a new optional field defaulting to empty. Existing scenes without `difficulty_blocks` load unchanged.
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| **`mjpython` re-exec** | Violates PySide6 main-thread requirement; produces the silent "dock icon, no window" hang already fixed in v0.5.0 (commit `3031ed9` F-01). Re-introducing it would regress GUI-15 stability. | Stock interpreter; MuJoCo offscreen renderer (CPU rasterization → QPixmap). |
+| **Qt3D (`PySide6.Qt3D*`)** | Separate rendering stack with its own OpenGL context — conflicts with the existing render-bridge architecture and the macOS no-live-GL-context constraint. Community gizmo libs are unmaintained. | 2D `QPainter` overlay on `ViewportCanvas` for gizmo handles. |
+| **`viser`** | Web-based (WebSocket + browser/three.js); would require `QWebEngineView` and a parallel web stack alongside the native Qt editor. | Native `ViewportCanvas` + render bridge. |
+| **`langchain` / `llamaindex`** | Heavy abstraction over the OpenAI/Anthropic SDKs already used directly and well in `TextParser`/`VisionParser`. The clarifying-question flow (GEN-05) is a thin message-history loop. | Direct `openai`/`anthropic` SDK usage, consistent with existing parsers. |
+| **`qimage2ndarray`** | Tiny convenience for QImage→ndarray; would be a new dep for 5 lines that are already expressible via `np.frombuffer(qimg.constBits(), dtype=np.uint8).reshape(...)` with strides. | Manual `np.frombuffer` reshape (already the idiom in the render bridge). |
+| **`pyqtgraph`** | Plotting library; not needed for editor perf work. Profiling is `py-spy`/`cProfile` at dev time, not a runtime dep. | None (no in-editor perf plots in scope). |
+| **`PyOpenGL` / `moderngl`** | Would introduce a live OpenGL context into the editor process — the exact thing the `_renderer_available = False` short-circuit already defends against on macOS. | Keep the CPU-rasterized QPixmap approach; decouple render to a `QThread` worker for perf. |
+| **`av` (PyAV)** as the recording backend | Second ffmpeg stack alongside `imageio-ffmpeg`; throughput gain is irrelevant at editor-viewport fps. | `imageio-ffmpeg>=0.6.0` via `imageio.get_writer`. |
 
-5. **K8s PVC e2e is dev-only.** `pytest-kind` is in `[k8s-test]` extra, never imported at runtime. The `@pytest.mark.k8s` + `@pytest.mark.integration` + `@pytest.mark.slow` markers already exist in `pytest.ini`. The test stays skipped locally (no `kind` cluster) and runs in CI with a `kind` provisioner.
+---
 
-6. **GPU gating preserved.** The DreamerV3 real-integration E2E (flipped Phase 30 test) keeps the existing `pytest.mark.skipif` on (GPU + `dreamerv3` + `jax`); macOS local skips, CI GPU host validates. The 3D fluid test and K8s PVC test are NOT GPU-gated.
+## Stack Patterns by Variant
+
+**If recording is wanted in the headless CLI too (not just the GUI):**
+- Promote `imageio-ffmpeg>=0.6.0` from the `[gui]` extra into core `dependencies` instead. Currently recording is GUI-13 only, so `[gui]` is the right home. Re-evaluate if a `surg-rl record` CLI subcommand is added.
+
+**If a phase chooses local VLM inference for GEN-03:**
+- Use `pip install -e ".[vision]"` (already-defined extra: `torch>=2.0.0`, `torchvision>=0.15.0`, `transformers>=4.35.0`). Download weights (e.g. `llava-hf/llava-1.5-7b-hf` or a Qwen-VL model) via `transformers` at runtime. No new pip pin. Add a `LocalVisionParser` subclass next to the existing API-based `VisionParser`.
+
+**If GUI-15 perf work concludes that the render bridge MUST be hardware-accelerated:**
+- That is a v0.8.0+ architectural decision, not a v0.7.0 dep addition. It would require revisiting the `mjpython` / Qt3D / `QOpenGLWidget` rejection — out of scope for this milestone. For v0.7.0, decouple render to a `QThread` worker (no dep) and raise the fps ceiling that way first.
+
+---
+
+## Version Compatibility
+
+| Package A | Compatible With | Notes |
+|-----------|-----------------|-------|
+| `imageio-ffmpeg>=0.6.0` | `imageio>=2.31.0` (already in `[gui]`) | imageio discovers `imageio-ffmpeg` as the ffmpeg backend automatically once installed; no API change needed in the writer call. |
+| `imageio-ffmpeg>=0.6.0` | Python 3.10–3.13 | Ships pre-built ffmpeg binaries for macOS (arm64 + x86_64), Linux x86_64, Windows x86_64. Matches the project's 3.10+ floor. |
+| `PySide6>=6.8.0,<7.0` (existing; installed 6.11.1) | `imageio` recording path | No conflict — recording uses `QWidget.grab()` or the render-bridge ndarray, never a Qt multimedia type. |
+| `mujoco>=3.0.0` (installed 3.7.0) | Native `<light>` edits + `model.light_*` array mutation | Stable across 3.x; no API break for lighting controls. |
+| `pybullet>=3.2.5` (in `[physics]`) | `getCameraImage` lighting kwargs (`lightColor`, `lightDistance`, `lightAmbientCoeff`, `lightDiffuseCoeff`, `lightSpecularCoeff`, `shadow`) | These kwargs are stable since PyBullet 3.x; lighting controls (GUI-12) on the PyBullet backend require no new dep. |
+| `openai>=1.0.0` / `anthropic>=0.18.0` (existing) | Multi-turn clarifying-question flow (GEN-05) | Both SDKs support chat-completions message history natively; no new client class needed. |
+
+---
+
+## Summary table — v0.7.0 stack delta at a glance
+
+| Capability | New dep? | What |
+|------------|----------|------|
+| GUI-11 render/sim decoupling | No | `QThread` refactor of existing render bridge |
+| GUI-12 multi-view | No | N × `ViewportCanvas` |
+| GUI-12 lighting controls | No | MuJoCo `<light>` / PyBullet `getCameraImage` kwargs |
+| GUI-12 transform gizmos | No | 2D `QPainter` overlay via `_CameraOffset` projection |
+| GUI-13 in-app recording | **YES** | `imageio-ffmpeg>=0.6.0` (extend `[gui]` extra) |
+| GUI-14 editing UX / file-IO / dock persistence | No | `QMainWindow.saveState`/`restoreState` + `QSettings` + existing undo stack |
+| GUI-15 perf / stability | No | Same `QThread` decoupling as GUI-11 |
+| GEN-01 more templates | No | Pure code in `templates.py` |
+| GEN-02 better LLM text→scene | No | Prompt engineering on existing SDKs |
+| GEN-03 VLM image→scene | No (API path) / optional `[vision]` (local path) | Existing `VisionParser`; local VLM uses existing extra |
+| GEN-04 procedural / batch gen | No | `trimesh` + `numpy` + existing `parameter_randomizer` |
+| GEN-05 LLM clarifying-question flow | No | Multi-turn on existing `openai`/`anthropic` SDKs + `QThread` |
+
+**Net new pip dependencies for v0.7.0: exactly one — `imageio-ffmpeg>=0.6.0`, added to the existing `[gui]` extra.**
 
 ---
 
 ## Sources
 
-- [dreamerv3 v1.5.0 on PyPI](https://pypi.org/project/dreamerv3/) -- latest + only release (Feb 22 2023); confidence MEDIUM (web).
-- [danijar/dreamerv3 README](https://github.com/danijar/dreamerv3/blob/main/README.md) -- CLI entrypoint `python -m dreamerv3.main`, YAML config, `--jax.platform` flag; confidence MEDIUM (web).
-- [danijar/dreamerv3 agent.py](https://github.com/danijar/dreamerv3/blob/b65cf81a/dreamerv3/agent.py) -- `Agent(embodied.jax.Agent)` with `init_train/train/policy/report/save/load`; confidence MEDIUM (web).
-- [danijar/dreamerv3 embodied/run/train.py](https://github.com/danijar/dreamerv3/blob/b65cf81a/embodied/run/train.py) -- `train(make_agent, make_replay, make_env, make_stream, make_logger, args)` orchestration; confidence MEDIUM (web).
-- [danijar/dreamerv3 embodied/core/base.py](https://github.com/danijar/dreamerv3/blob/b65cf81a/embodied/core/base.py) -- abstract `Agent` interface contract; confidence MEDIUM (web).
-- [DeepWiki: DreamerV3 Agent Architecture](https://deepwiki.com/danijar/dreamerv3/4-agent-architecture) -- component breakdown (enc/dyn/dec/rew/con/pol/val/slowval); confidence MEDIUM (web).
-- [DeepWiki: DreamerV3 Agent Interface](https://deepwiki.com/danijar/dreamerv3/7.1-agent-interface) -- `train(carry,data)->(carry,out,metrics)` lifecycle; confidence MEDIUM (web).
-- [PhiFlow Wake_Flow 3D example](https://tum-pbs.github.io/PhiFlow/examples/grids/Wake_Flow.html) -- `Box(x=,y=,z=)`, `StaggeredGrid(x=,y=,z=)`, `make_incompressible` in 3D; confidence MEDIUM (web).
-- [PhiFlow Staggered Grids docs](https://tum-pbs.github.io/PhiFlow/Staggered_Grids.html) -- MAC grid, 2D + 3D support; confidence MEDIUM (web).
-- [PhiFlow fluid API](https://tum-pbs.github.io/PhiFlow/phi/physics/fluid.html) -- `make_incompressible(velocity, obstacles, Solve())` signature; confidence MEDIUM (web).
-- [pytest-kind v22.11.1 on PyPI](https://pypi.org/project/pytest-kind/) -- session-scoped `kind_cluster` fixture, `kubectl(*args)`, `load_docker_image`, `port_forward`; confidence MEDIUM (web).
-- [pytest-k8s v1.0.0 on PyPI](https://pypi.org/project/pytest-k8s/) -- official `kubernetes` client alternative (rejected -- heavy dep); confidence MEDIUM (web).
-- [Blueshoe/pytest-kubernetes](https://github.com/blueshoe/pytest-kubernetes) -- k3d/kind/minikube alternative (rejected -- over-provisioned); confidence MEDIUM (web).
-- Local codebase: `src/surg_rl/dreamer/subprocess.py` (`_build_agent` stub at L125-129, sentinel at L83/88/98), `src/surg_rl/fluids/fluid_simulator.py` (2D `Box(x=,y=)` constructor), `src/surg_rl/scene_definition/schema.py` (`FluidConfig` L1463-1488, `TaskConfig.model_rebuild()` L1506), `tests/k8s/test_pvc_e2e.py` (stub body), `pyproject.toml` (`[dreamer]` extra L128-133), `pytest.ini` (markers L8-11); confidence HIGH (read directly).
+- `importlib.metadata.requires("imageio")` on installed imageio 2.37.3 — confirmed `imageio-ffmpeg` is now gated behind an `ffmpeg` extra, not bundled by default (HIGH confidence, direct observation).
+- `pip show imageio-ffmpeg` — confirmed NOT currently installed in this env (HIGH).
+- imageio/imageio-ffmpeg GitHub (https://github.com/imageio/imageio-ffmpeg/) — v0.6.0 (2025-01-16) is current; ships pre-built ffmpeg binaries; recommends PyAV for higher throughput but imageio-ffmpeg is sufficient for editor-viewport fps (HIGH).
+- imageio v3 docs — examples (https://imageio.readthedocs.io/en/stable/examples.html) — `imageio.get_writer(path, format="mp4", mode="I", fps=N)` + `writer.append_data(ndarray)` API (HIGH).
+- Record a Qt window with PySide6 + imageio (https://www.loekvandenouweland.com/content/record-window-pyside-python.html) — pattern for capturing `QWidget.grab()` → ndarray → `imageio.get_writer` (MEDIUM; community blog but matches the project's existing render-bridge ndarray shape).
+- PySide6.Qt3DCore.QTransform (https://doc.qt.io/qtforpython-6/PySide6/Qt3DCore/QTransform.html) — Qt3D exists but is a separate rendering stack (MEDIUM).
+- florianblume/qt3d-gizmo (https://github.com/florianblume/qt3d-gizmo) and fferri/qt3d-transform-gizmo (https://github.com/fferri/qt3d-transform-gizmo) — community Qt3D gizmo libs, C++/QML, low-stars, unmaintained (MEDIUM — rejection evidence).
+- viser docs / GitHub (https://github.com/viser-project/viser/) — web-based (WebSocket + browser/three.js), not a native Qt widget; would require `QWebEngineView` to embed (HIGH — rejection evidence).
+- personalrobotics/mj_viser (https://github.com/personalrobotics/mj_viser) — Viser `scene.add_transform_controls()` is the gizmo source, confirming the gizmo lives in the web stack, not in PySide6 (MEDIUM).
+- MuJoCo Python docs (https://mujoco.readthedocs.io/en/3.3.7/python.html) — native `mujoco.viewer` has mouse-drag perturbation but no DCC-style transform gizmo; lighting via `<light>`/`model.light_*` (HIGH).
+- Project files (HIGH confidence, direct inspection): `pyproject.toml` (dep groups), `src/surg_rl/editor/viewport.py` (existing `ViewportCanvas` + `_CameraOffset` + `QTimer.singleShot(50,...)` = the 20 fps ceiling), `src/surg_rl/scene_generation/vision_parser.py` (existing API-based VLM via OpenAI/Anthropic/Ollama), `src/surg_rl/scene_generation/text_parser.py` (existing LLM parser), `.planning/PROJECT.md` (v0.5.0 architecture decisions: no `mjpython`, PEP 562 lazy imports, custom `ViewportCanvas`).
+
+---
+
+*Stack research for: surgical-robotics RL editor depth + scene generation (v0.7.0)*
+*Researched: 2026-07-15*

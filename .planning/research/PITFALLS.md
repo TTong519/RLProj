@@ -1,398 +1,213 @@
-# Pitfalls Research — v0.6.0: Carried-Forward Debt Closure
+# Pitfalls Research
 
-**Domain:** Closing 4 carried-forward tech-debt items in an existing surgical-robotics RL system (Surg-RL v0.6.0): real DreamerV3 integration, TASK-02 per-level difficulty schema, K8s PVC e2e + organ-mesh licensing, 3D fluid flag.
-**Researched:** 2026-06-24
-**Confidence:** HIGH (built on verified codebase state + 9 milestones of documented prior pitfalls; extended, not re-discovered)
+**Domain:** Adding GUI editor depth (render/sim-decoupled viewport, multi-view, lighting, gizmos, recording, editing UX, file/IO, perf/stability) + scene generation (VLM image→scene, LLM clarifying-question flow, procedural/batch gen, templates) to an existing PySide6 surgical-scene editor that already ships (v0.5.0+).
+**Researched:** 2026-07-15
+**Confidence:** HIGH (Qt dock/thread pitfalls cross-checked against Qt 6 docs + Qt mailing list; render/sim and VLM pitfalls derived from reading the existing `editor/viewport.py`, `editor/llm_panel.py`, `scene_generation/vision_parser.py` and the documented v0.5.0 lessons).
 
-## Scope Note
-
-This file extends — not re-discovers — the known prior pitfalls documented in `PROJECT.md` (Key Architecture Decisions), `STATE.md` (Blockers/Concerns), and `MILESTONES.md`. The following are treated as established facts and are NOT re-litigated here:
-
-- JAX+PyTorch GPU memory conflict → mitigated by process isolation + `XLA_PYTHON_CLIENT_MEM_FRACTION=0.4`
-- Pydantic v2 cross-package cycle resolution pattern → `from __future__ import annotations` + string forward-ref + late import + `model_rebuild()` + lazy local imports
-- PhiFlow multi-obstacle `union()` bug → merged-SDF workaround, documented at module level in `fluid_simulator.py`
-- Cutting is discrete trigger with 500ms cooldown (PyBullet uses RESET_USE_DEFORMABLE_WORLD + full reload)
-- Phase 30 sentinel test asserts the EXPECTED `RuntimeError("Agent not configured")` and MUST flip when real dreamerv3 is integrated
-- CurriculumScheduler extension must be ADDITIVE (never replace Phase 3 fix)
-- `DifficultyLevel` uses `_FloatMixin(float, Enum)` so `level.value` is duck-typed
-
-This file covers the **common mistakes when CLOSING these 4 items on top of the existing system** — the integration/regression hazards specific to flipping stubs to real implementations.
-
----
+The hard-won v0.5.0 lessons (mjpython main-thread hang, PEP 562 lazy `surg_rl.rl` re-exports, `ViewportCanvas(QWidget)` not `QLabel`, offscreen-renderer short-circuit, `_normalize_pb_rgb()`, OBJ primitive fallbacks) are RESPECTED here and NOT repeated. This document covers only NEW pitfalls introduced by adding the v0.7.0 feature set to that baseline.
 
 ## Critical Pitfalls
 
-### Pitfall 1: Sentinel-test flip done as a deletion instead of an inversion
+### Pitfall 1: Render/sim coupling — the viewport `render()` call and `simulator.step()` share one QTimer loop, so "decouple" by adding a second timer usually doubles the bug instead of fixing it
 
 **What goes wrong:**
-The Phase 30 E2E test (`tests/dreamer/test_dreamerv3_subprocess_e2e.py:72,91`) currently asserts `pytest.raises(RuntimeError, match="Agent not configured")` against the `_build_agent` stub at `subprocess.py:125-131` which returns `None`. When real DreamerV3 is wired in, that stub stops returning `None`, the subprocess stops emitting `{"type": "ERROR", "error": "Agent not configured"}`, and these two tests START FAILING — which is the designed sentinel. The mistake is to delete the sentinel tests (or skip them) to make CI green, losing the regression signal entirely.
+The known bugs "<10 fps" and "scene preview immobile (sim not stepping in editor viewport)" share a root cause: the current `_tick` (viewport.py:189-290) calls `self._simulator.render(...)` every 50 ms but NEVER calls `simulator.step()`. The preview is a frozen single frame of the loaded scene. A naive "fix" is to add `simulator.step()` into the same `_tick` before `render()`. That gets the preview moving but couples sim cadence (2 ms physics timestep) to render cadence (50 ms), producing a preview that runs ~25x too slow and makes cutting/fluid look broken. A second naive fix is to spin a SECOND `QTimer` for stepping at a different interval — but two self-rescheduling `QTimer.singleShot` loops racing on the main thread re-enter `render()` while a prior `render()` is mid-framebuffer-acquire, producing CGL/EGL context contention and the exact <10 fps stutter the bug is trying to fix.
 
 **Why it happens:**
-The test names and bodies read like negative-path tests ("asserts the stub raises"). A developer closing the debt sees red tests that "test the old stub" and deletes them as obsolete, rather than inverting them into positive-path tests that assert real training produces `{"type": "READY"}` / metrics within the step budget.
+The editor viewport was designed as a static scene preview (D-01..D-04), not a live sim playback. The simulator's `step()` advances physics by `dt`; the renderer's `render()` only samples current state. There is no shared clock, no accumulator, and no concept of "preview time" vs "wall time."
 
 **How to avoid:**
-- FLIP, do not delete. Rewrite each sentinel test to assert the positive contract: subprocess sends `READY`, training loop yields at least one `{"step": N, "loss": ...}` dict, evaluation returns a non-stub dict, checkpoint save/load round-trips. Keep the module-level `@pytest.mark.skipif` gating on (GPU + `dreamerv3` + `jax`) so macOS still skips cleanly.
-- Add a NEW guard test that fails LOUDLY if `_build_agent` ever returns `None` again — `assert agent is not None, "_build_agent reverted to stub"` — so the sentinel inverts to protect the real implementation.
-- Keep the `_JsonStdout` wrapper and `DREAMER_COLOR` assertions from Phase 26 — those fixes must still hold under the real agent.
+Decouple along the correct axis: keep ONE render timer on the main thread (the existing `_tick`), and run the sim step loop on a `QThread` worker (or a `QThreadPool` task) that advances the simulator and publishes state snapshots via a queued signal `state_ready(snapshot)`. The main-thread `_tick` renders the LATEST published snapshot only — it never calls `step()` and never blocks on physics. This is the render/sim-decoupled viewport (GUI-11). Use a fixed-step accumulator inside the sim worker (`accum += wall_dt; while accum >= sim_dt: step(); accum -= sim_dt`) so preview speed is independent of render rate. Cap the snapshot publish rate (e.g. 30 Hz) so a fast sim doesn't flood the main thread with queued signals.
 
 **Warning signs:**
-- `tests/dreamer/test_dreamerv3_subprocess_e2e.py` is removed or fully `pytest.skip`'d without replacement.
-- A new test asserts only "subprocess didn't crash" instead of "subprocess trained ≥1 step and saved a checkpoint."
-- macOS collection still works (heavy imports inside test bodies, not at module top) — if collection starts crashing on macOS after the flip, the lazy-import discipline was broken.
+- FPS drops when scene has fluids/cutting (sign `step()` got injected into `_tick`).
+- Preview runs in slow-motion or fast-forward (sign timestep mismatch, no accumulator).
+- Two `QTimer.singleShot` chains both calling into the simulator (grep for `singleShot` — there should be one render chain).
+- CGL/EGL "context already current on another thread" warnings in the log.
 
 **Phase to address:**
-Real DreamerV3 integration phase (the phase that replaces `_build_agent`). This is the single highest-risk flip in the milestone — it is both the integration proof AND the regression guard.
+GUI-11 (render/sim-decoupled viewport). This is THE phase that fixes the immobile-preview + <10fps bugs — do not split them into a separate bug-fix phase; they are the decoupling proof-of-criterion.
 
 ---
 
-### Pitfall 2: Real DreamerV3 agent built outside the process-isolated JAX subprocess
+### Pitfall 2: Dock-state restore silently no-ops because `objectName` is missing/changed or restore runs before docks exist; "reset layout" only re-adds to areas and ignores tabification/floating/closed state
 
 **What goes wrong:**
-The entire point of the `DreamerSubprocess` architecture (`subprocess.py`) is that JAX and PyTorch never share a process — `XLA_PYTHON_CLIENT_MEM_FRACTION=0.4` only means something if JAX is the only thing in that process. The mistake is to import `dreamerv3` / `jax` into the parent process (e.g., in `rl/training.py` or the CLI) to "peek" at the agent, validate config, or build a wrapper, which re-introduces the GPU OOM / CUDA-init conflict that process isolation was designed to prevent.
+The existing `_action_reset_layout` (main_window.py:256-262) re-adds the three docks to their default areas and calls `.show()`. That handles a simple left/right/bottom layout but does NOT restore tabified docks, floating docks, or docks the user closed via the dock context menu — and critically, the known bug "layout does NOT reset on rerun" is that `_refresh_viewport_and_tree` (called on New/Open/undo/redo/LLM-accept) swaps the central widget and re-points the tree dock's widget but never touches dock layout, so a user-rearranged layout persists across scene loads when the user expected a reset. Meanwhile `restoreState()` (main_window.py:370-371) runs once in `__init__` — but Qt requires all docks to exist with unique `objectName` BEFORE `restoreState()` is called, and `saveState()` only captures docks/ toolbars whose `objectName` is non-empty. The current docks DO have objectNames (`dock_scene_tree`, `dock_properties`, `dock_llm`), so restore should work — but the moment v0.7.0 adds new docks (multi-view, lighting, gizmo, recording) WITHOUT setting `objectName`, those new docks are invisible to `saveState`/`restoreState` and their position is lost across launches.
 
 **Why it happens:**
-The parent needs to pass config to the subprocess and read metrics back. It's tempting to import the agent class in the parent for type hints, config validation, or to construct a `GymToEmbodiedWrapper` before spawning. Any `import jax` or `import dreamerv3` in the parent loads the XLA runtime into the PyTorch process.
+`QMainWindow.saveState()`/`restoreState()` identify widgets solely by `objectName` — this is documented but easy to forget when adding a dock in a hurry. `restoreState()` called in the constructor before all docks are added (or before the window is shown) silently returns `true` while applying nothing. And "reset layout" is hand-rolled per-dock instead of restoring a known-good baseline `QByteArray`.
 
 **How to avoid:**
-- Parent process talks to the subprocess ONLY via the existing `_JsonStdout` JSON-over-stdio protocol. Config goes in as a plain `dict[str, Any]`; metrics come back as JSON dicts. No typed agent object crosses the boundary.
-- `_build_agent`, `_train_loop`, `_evaluate`, `_save_checkpoint`, `_load_checkpoint` stay inside `subprocess.py` (the child side) — they are the only place `dreamerv3`/`jax` imports live, and those imports must be lazy (inside the function body, not at module top), so importing `subprocess.py` in the parent for the `DreamerSubprocess` controller class does not pull JAX into the parent.
-- Keep `XLA_PYTHON_CLIENT_MEM_FRACTION=0.4` set in the child's env BEFORE `import jax` — JAX reads it at first import. Setting it after import is a no-op.
-- The `GymToEmbodiedWrapper` (reset-in-action protocol) stays in the child; the parent never instantiates it.
+1. Every new `QDockWidget` MUST call `setObjectName("dock_<unique>")` before `addDockWidget`. Add a lint/test that asserts every dock added to `EditorWindow` has a non-empty, unique `objectName`.
+2. Save a factory-default layout `QByteArray` once (`saveState()` right after `_build_dock_widgets` in `__init__`) and have "Reset Layout" restore THAT baseline via `restoreState(default_state)`, not a hand-rolled re-add. This also fixes the "reset on rerun" bug: call `restoreState(default_state)` inside `_refresh_viewport_and_tree` if a "reset on open" preference is on, OR leave layout untouched (current behavior) but make it a clear preference — do not leave it ambiguous.
+3. Defer the user `restoreState()` to `showEvent` (guarded against re-entry) or a `QTimer.singleShot(0, ...)` so docks exist and the window is laid out before state is applied.
+4. For "reset on rerun": decide explicitly. Recommended = do NOT reset layout on scene open (users hate losing their arrangement), but DO provide the menu item AND a "Reset on open" preference. Fix the real bug (layout not resetting when the user explicitly asks) by using `restoreState(default_state)`.
 
 **Warning signs:**
-- `import jax` or `import dreamerv3` appears at the top of any module other than the child side of `subprocess.py`.
-- Parent-process tests start failing with CUDA OOM or "XLA could not allocate" on the CI GPU host.
-- `XLA_PYTHON_CLIENT_MEM_FRACTION` is set after a `jax` import has already run.
+- New docks always open in their default area ignoring the saved position.
+- `restoreState()` returns `true` but nothing visually changes.
+- "Reset Layout" leaves tabified/floating docks in their old spot.
+- `_refresh_recent_menu` is duplicated (main_window.py:352-362 rebuilds twice) — a pre-existing sign that this file has copy-paste debt; audit the whole file when touching dock logic.
 
 **Phase to address:**
-Real DreamerV3 integration phase. Add a lint/test guard: grep-assert that `import jax`/`import dreamerv3` only appears in `dreamer/subprocess.py` (or a child-only helper module), and add a parent-process import test that asserts `surg_rl.rl.training` imports without `jax` in `sys.modules`.
+GUI-15 (perf/stability + editing UX) owns the dock-state persistence fix. New docks added in GUI-12/13/14 must set `objectName` in the SAME phase they are introduced, not "later."
 
 ---
 
-### Pitfall 3: World-model training instability masked by the spike's MSE<0.01 / reward-MAE<0.5 thresholds
+### Pitfall 3: `QThread` worker leak and signal/slot race on window close — `closeEvent` stops the viewport but does NOT stop the LLM/VLM `QThread`
 
 **What goes wrong:**
-The Phase 24 feasibility spike validated against `MSE < 0.01` and `reward MAE < 0.5` on a forceps + liver tet-mesh suturing scene. The mistake is to treat those thresholds as the real-integration acceptance bar. Real DreamerV3 on the full 6-task suite with domain randomization + curriculum + cutting dynamics (discrete trigger, 500ms cooldown, tet remeshing) is a much harder distribution, and the world model can quietly diverge (loss explodes, recon MSE rises, reward MAE drifts) while the subprocess still reports "training proceeded" — because the stub `_train_loop` just yielded `{"loss": 0.0}`.
+`LLMPanel._on_generate` (llm_panel.py:114-125) creates a `QThread` + `TextParserWorker`, connects `finished`/`failed`->`thread.quit`->`thread.deleteLater`, and starts it. The `EditorWindow.closeEvent` (main_window.py:373-382) calls `self._viewport_panel.stop()` but NEVER asks the LLM panel to tear down its thread. If the user closes the window mid-LLM-call, the worker thread is still running an HTTP request to OpenAI/Anthropic; when it finishes it emits `finished`/`failed` into a deleted `LLMPanel` -> `RuntimeError: wrapped C/C++ object of type LLMPanel has been deleted`, or a silent segfault. v0.7.0 makes this worse: VLM image->scene calls are slower (multi-second vision inference) and the clarifying-question flow may chain multiple round-trips, so the window-close-during-call window is wider.
+
+Compounding: per Qt 6 docs, `finished()` is emitted BEFORE the thread is truly terminated — `isRunning()` can still return `true` inside a `finished`-connected slot, and `deleteLater` on the thread before `wait()` returns can crash ("Deleting a running QThread ... will result in a program crash").
 
 **Why it happens:**
-The stub returns constant zeros. Replacing it with a real loop that yields real metrics means CI either (a) passes because the thresholds aren't checked at all, or (b) fails flakily because a 1-step GPU smoke test doesn't converge. The thresholds from the spike were for a converged model, not a smoke test.
+The v0.5.0 panel was added with the happy path only; teardown was deferred because the LLM call was assumed short. `closeEvent` only knew about the viewport. The worker-object pattern's teardown ordering (`quit` -> `wait` -> `deleteLater`) is easy to get wrong.
 
 **How to avoid:**
-- Separate SMOKE from CONVERGENCE. The CI GPU test should assert structural properties (loss is finite, decreasing-ish over a tiny budget, recon MSE is finite, checkpoint file exists and is non-empty, eval dict has the expected keys with finite values) — NOT the spike's converged thresholds.
-- The spike's `MSE < 0.01 / reward MAE < 0.5` belongs in a LONG-running acceptance test (marked `@pytest.mark.slow` + `@pytest.mark.gpu`, not in the default CI gate), or in a manual `dreamer-spike` CLI run that writes a report artifact.
-- Log per-step metrics to a JSONL file in `models/dreamerv3/{task}_{obs_type}/` so divergence is inspectable post-hoc, not just pass/fail.
-- Cutting dynamics: DreamerV3's ability to model tet-mesh cutting is explicitly flagged as UNCERTAIN in `STATE.md` (Phase 24 blocker). Do not include cutting tasks in the real-integration smoke test initially — start with suturing (the spike scene), then expand.
+1. Give `LLMPanel` (and the new VLM panel + clarifying-question controller) a `stop()` method: set a cooperative cancel flag on the worker (`_cancelled` property, already half-wired at llm_panel.py:129), call `thread.quit()`, then `thread.wait(3000)` to block until the thread actually terminates (this is the step the current code skips). Only then let `deleteLater` run.
+2. `EditorWindow.closeEvent` MUST call `self._llm_panel.stop()` (and every new panel's `stop()`) BEFORE `self._viewport_panel.stop()` and before `super().closeEvent()`. Keep `closeEvent` best-effort (broad suppress) but ensure every long-running subsystem is enumerated.
+3. For VLM: the worker's HTTP call must check the cancel flag between round-trips (clarifying-question flow has multiple LLM calls — check between each, not only at start).
+4. Never `deleteLater` a thread you haven't `wait()`ed on. Wire `thread.finished`->`thread.deleteLater` (already done) but DO NOT additionally call `deleteLater` synchronously in `stop()`.
+5. Add an `aboutToClose` signal from `EditorWindow` that panels subscribe to, so new panels auto-wire teardown without `closeEvent` being edited each time.
 
 **Warning signs:**
-- CI GPU test asserts `mse < 0.01` on a 50-step budget → guaranteed flaky or guaranteed pass-by-stub-residual.
-- `loss` values are `inf`/`nan` but the test passes because it only checks "no exception."
-- Test covers all 6 task types but only runs for N steps where N << convergence time.
+- Intermittent segfault on window close while an LLM/VLM call is in flight.
+- "RuntimeError: Internal C++ object already deleted" in stderr after close.
+- `QThread: Destroyed while thread is still running` warning.
+- A `QThread` shows in a debugger after the window is gone.
 
 **Phase to address:**
-Real DreamerV3 integration phase (smoke test design) + a downstream/long-run acceptance phase (convergence thresholds). Split the two explicitly in the roadmap.
+GUI-15 (perf/stability) for the `closeEvent` teardown harness + `aboutToClose` signal; GEN-02 (VLM) and GEN-05 (clarifying-question flow) must each implement `stop()` with cooperative cancel + `wait()` as a first-class deliverable, not an afterthought.
 
 ---
 
-### Pitfall 4: Per-level `DifficultyLevelConfig` re-introduces the Pydantic v2 cross-package cycle
+### Pitfall 4: VLM image->scene — base64 payload size, image-format/mime, token cost, and "respond ONLY with JSON" non-determinism produce unparseable or hallucinated scenes
 
 **What goes wrong:**
-TASK-02 per-level schema adds `DifficultyLevelConfig` (tissue_stiffness / target_precision_tolerance / tool_position_noise / time_limit) as a new Pydantic v2 model, and wires it into `TaskConfig` (scene_definition) AND into `CurriculumStageConfig` / `CurriculumScheduler` (dynamics) AND into the reward classes (rl). The existing cycle (scene_definition ↔ rl ↔ dynamics) was broken in v0.4.2 with the `from __future__ import annotations` + string forward-ref + late import + `model_rebuild()` pattern. The mistake is to add `DifficultyLevelConfig` as a typed field referencing a model from another package at class-definition time, re-introducing the import cycle that crashes collection.
+`VisionParser` (vision_parser.py) base64-encodes images and ships them to OpenAI/Anthropic/Ollama. Four failure modes: (a) Large images (4K endoscope frame, PNG) base64 to ~5-10 MB and blow past provider payload limits or cost $0.01-0.05 per call — a batch/procedural gen run of 100 images is real money. (b) The prompt (vision_prompts.py:22-43) says "Respond ONLY with the JSON object" but VLMs routinely wrap JSON in ```` ```json ```` fences or prepend prose; the existing `_JSON_CODE_BLOCK_RE` + `_JSON_OBJ_RE` fallback (vision_parser.py) catches code fences but `_JSON_OBJ_RE = re.compile(r"\{[\s\S]*?\}")` is NON-GREEDY and matches the FIRST `{...}` block — which on a nested scene JSON is the first inner object, not the whole scene, producing a truncated parse. (c) VLMs hallucinate instruments/URDF paths that don't exist (the codebase already has the "assets don't exist, OBJ primitive fallback" lesson — but the VLM will emit `urdf_path: "path/to/robot.urdf"` verbatim from the schema example, which then 404s at sim load). (d) Non-determinism: same image, two calls, two different scenes — acceptable for ideation but catastrophic for batch/procedural gen where reproducibility is expected.
 
 **Why it happens:**
-The pattern that fixed it is non-obvious and spread across 3 files. A new model is naturally added where it "belongs" (e.g., `difficulty.py` or `schema.py`), and then referenced eagerly elsewhere, creating a new edge in the import graph that closes a cycle.
+VLMs are probabilistic; the schema example in `_get_visual_schema_example` (vision_prompts.py:80-202) literally contains placeholder paths (`"path/to/robot.urdf"`, `"sky.hdr"`) that the model copies. The regex fallback was written for the text parser's smaller payloads and hasn't been re-validated against nested scene JSON.
 
 **How to avoid:**
-- `DifficultyLevelConfig` lives in a LEAF module (no in-project imports), like `difficulty.py` already is. It must not import from `schema.py`, `curriculum.py`, or `rewards.py`.
-- In `schema.py`'s `TaskConfig`, declare `difficulty_blocks: list["DifficultyLevelConfig"] | None = None` as a STRING forward-ref (exactly like the existing `difficulty_level: "DifficultyLevel | None"`), and call `TaskConfig.model_rebuild()` at the bottom of `schema.py` AFTER the late import of `DifficultyLevelConfig`.
-- In `curriculum.py` and `rewards.py`, use the same string-forward-ref + `model_rebuild()` discipline; keep the `DifficultyLevel` scalar as the cross-package currency (do not pass `DifficultyLevelConfig` objects across package boundaries where a scalar suffices).
-- Re-run the existing cycle-resolution regression tests from v0.4.2 (the HARD-fixture `SurgicalEnv`-construction integration test from Phase 35) — if those still pass after the schema addition, the cycle has not re-formed.
-- `model_rebuild()` must be called AFTER every late import that resolves a forward-ref; calling it once at the top and then adding a new forward-ref below it leaves the new ref unresolved.
+1. Downscale images before base64 (e.g. 1024px max edge, JPEG q85) — VLMs don't need 4K, and it cuts cost ~10x. Add a `preprocess_image(path) -> bytes` helper.
+2. Replace the non-greedy `_JSON_OBJ_RE` with a brace-balanced JSON extractor (count `{`/`}` depth, ignore braces inside strings) OR demand the model return JSON via the provider's structured-output / JSON mode (OpenAI `response_format={"type":"json_object"}`, Anthropic tool-use with a scene-schema tool) and skip regex entirely.
+3. Post-process the VLM scene through a "path sanitizer" that nulls out non-existent `urdf_path`/mesh paths so the simulator falls back to OBJ primitives (reuse the existing `scene_builder` fallback). Never trust a VLM-emitted filesystem path.
+4. For batch/procedural gen (GEN-04): fix `temperature=0` (or provider equivalent) AND record a `generation_seed`/`system_fingerprint` in the scene metadata so a run is reproducible/diagnosable. Do NOT claim reproducibility without it.
+5. Cost guard: add a `max_image_bytes` and a per-run cost estimator that warns before batch runs.
 
 **Warning signs:**
-- `ImportError: cannot import name 'X' from 'surg_rl.rl.difficulty'` (or similar) during pytest collection.
-- `PydanticUndefinedAnnotation: 'DifficultyLevelConfig' is not fully defined` at model validation time — forward-ref was never resolved.
-- Tests pass when run as a single file but fail when run as a suite (import-order-dependent cycle).
+- `ParseValidationError: field required` on VLM-generated scenes (truncated JSON from non-greedy regex).
+- Sim load fails on `urdf_path: path/to/robot.urdf` (hallucinated path).
+- Two batch runs on the same image set produce wildly different scenes.
+- API bill spikes after a batch-gen run.
 
 **Phase to address:**
-TASK-02 per-level difficulty schema phase. Add a regression test that imports `surg_rl.scene_definition.schema` and `surg_rl.dynamics.curriculum` and `surg_rl.rl.environment` in every order and asserts no `ImportError`.
+GEN-02 (VLM image->scene) owns image preprocessing + JSON extraction fix + path sanitizer. GEN-04 (procedural/batch gen) owns the reproducibility/seed/cost-guard layer.
 
 ---
 
-### Pitfall 5: Override-vs-base-parameter precedence ambiguity in `DifficultyLevelConfig`
+### Pitfall 5: LLM clarifying-question flow — state machine without explicit states races itself when the user clicks "Generate" twice or answers out of order
 
 **What goes wrong:**
-`DifficultyLevelConfig` provides per-level overrides (tissue_stiffness, target_precision_tolerance, tool_position_noise, time_limit). But the existing system already has FOUR sources of difficulty: (1) `TaskConfig.difficulty_level` (enum/scalar), (2) `SurgicalEnvConfig.difficulty` (getattr fallback), (3) `CurriculumScheduler.current_difficulty` (curriculum-driven), (4) `PARAM_BOUNDS` + `interpolate_params()` in each reward class. Adding a 5th source without a documented precedence order produces silent conflicts: e.g., scene says `difficulty_level=EASY` with a `difficulty_blocks[EASY]` override, but curriculum is at stage 3 (HARD) and overwrites the override at env-construction.
+The interactive clarifying-question flow (GEN-05) is a multi-turn conversation: user prompt -> LLM asks N clarifying questions -> user answers -> LLM emits final scene. Implemented naively as a sequence of `QThread` calls (reusing the `LLMPanel` pattern), each call's `finished`/`failed` triggers the next. Race 1: user clicks "Generate" while a clarifying-question round-trip is in flight -> a second `QThread` is spawned (llm_panel.py:114 overwrites `self._thread` and `self._worker` without stopping the old ones) -> two workers emit `finished` into the same slots -> the panel's `_current_scene` flips between two concurrent generations. Race 2: the conversation state (questions asked, answers so far) lives only in closure variables / instance attrs with no explicit state machine, so an out-of-order answer (user edits the prompt and re-answers Q1 after Q3 was asked) silently produces a scene built from a mixed question/answer set. Race 3: non-determinism — the same prompt + answers yields different scenes across runs (no seed pinned), so "regenerate" gives a different scene and the user can't tell if their answer or the model caused the change.
 
 **Why it happens:**
-`environment.py:_setup_rewards()` (line 484-517) already implements a precedence chain: `task.difficulty_level` → `config.difficulty` → `curriculum.current_difficulty` → default 0.5. The new per-level overrides plug into that chain, but it's unclear whether the override is a function of the LEVEL (enum) or of the resolved SCALAR (float). If the override dict is keyed by level but the resolved difficulty is a curriculum-driven 0.37 (between EASY and MEDIUM), which override applies? Naive code picks the nearest level and silently drops the curriculum's continuous value.
+The current `LLMPanel` is single-shot (one prompt -> one scene); it has no concept of a conversation. Reusing its `_thread`/`_worker` slots for a multi-turn flow without a state machine is the mistake.
 
 **How to avoid:**
-- Decide and DOCUMENT one precedence rule. Recommended: `difficulty_blocks` overrides apply ONLY when the resolved difficulty is exactly one of the 3 enum levels (EASY/MEDIUM/HARD scalar); for continuous (curriculum-driven) values, fall back to `interpolate_params()` (the existing continuous path). This keeps discrete and continuous paths orthogonal and ADDITIVE.
-- Make the override application a single function with a clear contract: `resolve_params(difficulty_scalar, task_config) -> (stiffness, tolerance, noise, time_limit)`. One function, one precedence, tested with a truth table.
-- The override should MUTATE the reward params via the existing `apply_difficulty()` hook (Phase 29 pattern), NOT bypass it. Do not introduce a parallel param-construction path.
-- `DifficultyLevelConfig` fields must have the SAME names as the reward `PARAM_BOUNDS` keys they override, or the mapping is implicit and breaks silently when a reward class renames a field.
+1. Model the flow as an explicit state machine: `IDLE -> AWAITING_QUESTIONS -> AWAITING_ANSWERS -> GENERATING -> DONE/FAILED`. Store the state in a `ConversationState` dataclass (questions, answers, history, seed). Only allow `Generate` to transition from `IDLE` or `DONE`; disable the button (or route to "Cancel") in `AWAITING_*`/`GENERATING`.
+2. Guard against double-spawn: before starting a new `QThread`, call `stop()` on the previous one (cooperative cancel + `wait()`). Reuse Pitfall 3's `stop()`.
+3. Pin the model `seed`/`temperature` for the WHOLE conversation so a "regenerate" with the same answers is reproducible and diffs are attributable to the user's edits, not the model.
+4. Send the FULL conversation history (system prompt + original user prompt + Q/A pairs) on every round-trip, not just the latest answer — stateless APIs don't remember. This is the #1 LLM multi-turn bug.
+5. Validation gate between `GENERATING` and `DONE`: run the scene through `SceneDefinition.model_validate` before showing it; if it fails, route back to `AWAITING_ANSWERS` with a targeted re-question rather than dumping a ValidationError on the user.
 
 **Warning signs:**
-- Two tests pass individually (one asserts EASY override applies, one asserts curriculum scalar applies) but fail when run together (shared mutable reward params).
-- A `difficulty_blocks` override for `time_limit` has no effect because `time_limit` is read from `TaskConfig`, not from reward params — field ownership mismatch.
-- Curriculum regression: existing v0.4.2 tests for continuous `interpolate_params()` start failing because the discrete override path intercepts them.
+- "Generate" button is clickable mid-generation.
+- `_thread`/`_worker` reassigned while a prior thread is still running.
+- Same prompt + answers -> different scenes on regenerate (no seed).
+- Clarifying questions reference answers the user never gave (history not sent).
+- ValidationError shown to user instead of a useful follow-up question.
 
 **Phase to address:**
-TASK-02 per-level difficulty schema phase. Write the precedence truth-table test BEFORE the implementation (TDD the precedence rule).
+GEN-05 (interactive LLM clarifying-question flow). Build the state machine FIRST, then wire the LLM calls onto it; do not bolt the state machine onto the existing single-shot `LLMPanel`.
 
 ---
 
-### Pitfall 6: CurriculumScheduler discrete-level progression breaks the ADDITIVE invariant
+### Pitfall 6: Recording — capture thread reads from the same GL framebuffer the render thread writes, producing torn/missing frames; writing video on the main thread drops fps
 
 **What goes wrong:**
-TASK-02 asks for discrete `CurriculumScheduler` level progression (EASY → MEDIUM → HARD). The existing `CurriculumScheduler` (v0.4.0 Phase 21 + v0.4.2 Phase 29) uses continuous `difficulty: float` with `advance_stage`/`regress_stage` over `DEFAULT_STAGES` (4 stages at 0.25/0.5/0.75/1.0). The mistake is to REPLACE the continuous stage progression with a discrete 3-level progression, regressing the Phase 3 + Phase 21 fixes that `STATE.md` explicitly flags as "must be ADDITIVE — never replace."
+The recording feature (GUI-13) needs to save the viewport as an image sequence or video. Two coupling mistakes: (a) The capture reads `simulator.render()` output (or the `QPixmap` on the canvas) from a second thread while the main-thread `_tick` is mid-`render()` — GL contexts are thread-affine, so the offscreen framebuffer can only be touched from one thread; the capture either gets a stale frame, a torn frame, or crashes the GL context. (b) Encoding frames to video (imageio/ffmpeg/cv2 writer) is CPU-heavy and runs for 10s of seconds; doing it on the main thread freezes the render loop (the <10fps bug comes back) and the close-during-encode path leaks the encoder.
 
 **Why it happens:**
-Discrete EASY/MEDIUM/HARD feels like a cleaner API than 4 continuous stages, and the new `difficulty_blocks: list[3]` aligns naturally with 3 levels. A developer "refactors" the scheduler to be 3-level-native.
+GL framebuffers are not shareable across threads without an explicit shared-context. Video encoding is synchronous and slow. The natural "grab the pixmap and write it" instinct collides with both.
 
 **How to avoid:**
-- Discrete progression is an ADDITIONAL mode, not a replacement. Add `progression_mode: "continuous" | "discrete" = "continuous"` to `CurriculumStageConfig` (or the scheduler config), and a `advance_level()`/`regress_level()` method pair that snaps to the nearest of {EASY, MEDIUM, HARD} WITHOUT touching the existing `advance_stage()`/`regress_stage()` continuous path.
-- `DEFAULT_STAGES` stays 4-stage continuous; do NOT mutate it. `copy.deepcopy()` the existing pattern (mutable dataclass values — never `dict.copy()`).
-- The discrete path maps levels to stages: EASY→stage0 (0.25), MEDIUM→stage1-2 (0.5), HARD→stage3 (1.0), or define a separate `DEFAULT_LEVELS` that is purely additive.
-- Keep `current_difficulty` returning the scalar (the existing duck-typed contract); discrete mode just constrains WHICH scalars are reachable.
+1. Capture on the MAIN thread only, inside `_tick`, by copying the just-rendered `QPixmap`/`np.ndarray` into a `frame_queue` (a `queue.Queue` or `collections.deque(maxlen=N)`). The render thread never touches the encoder.
+2. Encode on a SEPARATE `QThread` `RecorderWorker` that drains `frame_queue` and writes via imageio-ffmpeg / cv2 VideoWriter. This keeps the main thread free.
+3. Bound the queue (`maxlen`) and drop frames if the encoder falls behind — better a 30fps recording with dropped frames than a 5fps live preview.
+4. Teardown: `closeEvent` calls `recorder.stop()` which signals the worker to flush+close the video file, then `thread.quit()` + `thread.wait(5000)`. Failing to `wait()` on the encoder leaves a half-written, un-closed MP4 (moov atom missing -> unplayable).
+5. Do NOT hold the GL context open across frames for recording — copy bytes out and release.
 
 **Warning signs:**
-- `CurriculumScheduler.DEFAULT_STAGES` is rewritten from 4 stages to 3.
-- Existing v0.4.0/v0.4.2 curriculum tests (continuous interpolation, hysteresis, advance/regress on success rate) start failing.
-- `current_difficulty` type-lie (flagged MEDIUM in Phase 29 code review WR-02) is "fixed" by narrowing the return type to `DifficultyLevel`, breaking float consumers.
+- Recorded video is torn (top half of one frame, bottom half of another).
+- Live fps drops to <5 while recording.
+- MP4 files unplayable / "moov atom not found" (encoder not flushed on close).
+- "framebuffer" GL errors appear only while recording.
 
 **Phase to address:**
-TASK-02 per-level difficulty schema phase. The additive-invariant regression test (run the full v0.4.0+v0.4.2 curriculum test suite unchanged) is the gate.
+GUI-13 (recording). The recorder worker + bounded queue + `closeEvent` flush is a first-class deliverable, not a "nice to have."
 
 ---
 
-### Pitfall 7: Scene-level `difficulty_blocks: list[3]` schema migration breaks existing scene JSON
+### Pitfall 7: Multi-view + lighting edits mutate live simulator state, so undo/redo and "revert" corrupt the scene
 
 **What goes wrong:**
-Adding `difficulty_blocks: list[3]` (or `difficulty_levels: list[3]` per STATE.md) to `TaskConfig` is optional with `None` default — that's safe. The mistake is making it REQUIRED for new scenes, or validating that the list length matches the number of difficulty levels in a way that rejects the existing 6 task scene JSONs (which don't have the field), or naming the field inconsistently with the v0.4.2 fixtures (`tests/fixtures/scenes/suturing_difficulty_hard.json`).
+Multi-view (GUI-12) and lighting/gizmo edits (GUI-12/13) are tempting to implement by poking attrs directly onto the live `self._simulator` (the existing viewport already does this: `_editor_camera_*` attrs pushed via `object.__setattr__` at viewport.py:222-234). The pitfall: those editor-only camera/light parameters drift out of the `SceneDefinition` (the single source of truth per the architecture decision), so (a) undo/redo (which operates on `SceneDefinition` snapshots via `SceneUndoStack`) does NOT undo camera/light changes — the user moves a light, hits undo, and nothing visibly changes; (b) "revert" reloads the scene and the light snaps back, contradicting what the user just did; (c) save writes the `SceneDefinition` without the live edits, so the saved file is missing the light the user just placed.
 
 **Why it happens:**
-The field seems like a natural required field ("every task should define its 3 levels"). But all existing scene JSONs predate the field.
+It's far easier to mutate a simulator attr than to round-trip through the Pydantic `SceneDefinition`, re-validate, and reload. The existing `_editor_camera_*` hack was acceptable for a preview-only viewport but becomes wrong the moment edits are meant to persist.
 
 **How to avoid:**
-- `difficulty_blocks: list["DifficultyLevelConfig"] | None = None` — optional, `None` default, exactly like the v0.4.2 `difficulty_level` field. Existing scenes load unchanged.
-- If the list is present, validate length == 3 AND that the 3 entries correspond to EASY/MEDIUM/HARD in order (add a `model_validator(mode="after")` that checks this and raises a clear error). If absent, fall back to `PARAM_BOUNDS` + `interpolate_params()` (the existing path).
-- Do NOT rename the field between `difficulty_blocks` (PROJECT.md target) and `difficulty_levels` (STATE.md target). Pick ONE — `difficulty_blocks` matches the PROJECT.md milestone target — and update STATE.md if needed. Naming drift here will cause fixture/test mismatches.
-- Update the existing `suturing_difficulty_hard.json` fixture to include a `difficulty_blocks` array so the coercion test covers both the enum field AND the new blocks field.
+1. Edits that should persist (lights, camera, gizmo placements, object transforms) MUST be written to the `SceneDefinition` first (via `model_copy(update={...})` per the Pydantic v2 rule), pushed onto `SceneUndoStack`, THEN applied to the live simulator. The simulator is a VIEW of the scene, not the source of truth.
+2. Editor-only ephemeral state (orbit camera offset for inspection, gizmo hover highlight) stays on the panel/simulator as before and is explicitly NOT undoable — tag it so the undo stack ignores it.
+3. For multi-view: each view is a camera config in `SceneDefinition.environment.cameras`; editing a view edits that camera entry. Do not invent a parallel "view state" outside the schema.
+4. Test: edit a light, undo, assert the light reverts in both the tree view AND the render. Edit a light, save, reload, assert the light persists.
 
 **Warning signs:**
-- One of the 6 existing task scene JSONs fails to load after the schema change.
-- A `model_validator` raises on a scene that doesn't set `difficulty_blocks` (should be `None`, not required).
-- Tests reference `difficulty_levels` but the schema field is `difficulty_blocks` (or vice versa).
+- Undo does nothing for camera/light/gizmo edits.
+- Saved file missing edits the user just made.
+- Tree view and render disagree about a value.
+- `_editor_camera_*` style hacks multiply beyond camera offset.
 
 **Phase to address:**
-TASK-02 per-level difficulty schema phase. Add a "load all 6 existing task scene JSONs" regression test to the schema phase.
+GUI-12 (multi-view/lighting) and GUI-13 (gizmos) — the schema-first edit contract must be established in the FIRST of these phases and reused.
 
 ---
 
-### Pitfall 8: 3D fluid `dim_3d=True` flips PhiFlow grid memory 2D→3D (NxNxN) without perf gating
+### Pitfall 8: `QTimer.singleShot` self-rescheduling + Python object lifetime — `stop()` sets `_running=False` but a queued callback can still fire after `deleteLater`/close, and `__del__` during interpreter shutdown raises from the GL context
 
 **What goes wrong:**
-The current `FluidSimulator` (`fluid_simulator.py`) operates on a 2D xz-slice (Nx×Nz). Flipping `dim_3d=True` makes the grid (Nx×Ny×Nz) — a cubic blow-up. A 128² 2D grid becomes a 128³ 3D grid = 2M cells × 4+ fields (velocity, pressure, SDF) × float32 = hundreds of MB to GB, and the per-step PhiFlow solve cost scales ~N³. Running with the same resolution as 2D silently OOMs or turns a 20Hz fluid step into a 0.5Hz stall.
+The existing `_tick` (viewport.py:189-290) guards with `self._running` at top and before reschedule (the UAT Gap 2 fix), which is correct for the normal close path. But v0.7.0 adds more self-rescheduling timers (sim worker heartbeat, recorder frame poll, clarifying-question timeout, gizmo animation). Each one inherits the same hazard: (a) a `QTimer.singleShot` callback queued before `stop()` still fires after `stop()` if the event loop hasn't drained — the `_running` guard handles this, but only if EVERY self-rescheduling callback checks the guard; a new timer that forgets the guard leaks forever. (b) `__del__` (viewport.py:182-187) suppresses broadly during interpreter shutdown, but new panels that hold GL/render/sim resources and don't define `__del__` will crash on shutdown with "CGL context already destroyed" or "wrapped C++ object deleted." (c) `closeEvent` ordering: if `stop()` is called after the GL context is torn down (e.g. after `super().closeEvent()`), `simulator.close()` raises inside the suppressed block — currently OK because of broad suppress, but new resources without the suppress will surface it.
 
 **Why it happens:**
-The flag is a boolean; it's tempting to just branch on `dim_3d` and keep the same `grid_size`. The 2D resolution was tuned for surgical bleeding/irrigation; 3D needs a different (smaller) default.
+The self-rescheduling `singleShot` pattern (D-03) is correct but viral — every new timer must re-implement the guard. Python object lifetime doesn't match Qt object lifetime (`deleteLater` defers deletion), so "the Python object exists" doesn't mean "the C++ widget is valid."
 
 **How to avoid:**
-- `dim_3d=True` MUST come with a separate (smaller) default `grid_size` for 3D, or a validation that rejects 3D + large grid. Recommended: 3D default = 32³ or 48³, NOT the 2D default.
-- Add a `FluidConfig` validator: if `dim_3d and grid_size > MAX_3D_GRID`, raise or warn (Rich warning). Document the memory cost in the field docstring.
-- Gate the 3D path behind the `[fluids]` extra (if one exists) or at minimum a lazy `import phi.flow` inside the 3D branch only — 2D users should not pay the 3D import cost.
-- The two-way solid coupling (obstacle SDF) in 3D is more expensive than 2D: the merged-SDF `union(*geoms)` workaround (documented at module level) still applies but `union` over 3D SDFs is slower; cap the number of coupled obstacles in 3D.
+1. Centralize the self-rescheduling pattern into a `RenderLoop` / `PollLoop` helper that owns the `_running` guard and exposes `start()`/`stop()`. New timers use the helper, never raw `QTimer.singleShot` with a hand-rolled guard.
+2. Every panel holding GL/sim/thread resources defines BOTH `stop()` (called from `closeEvent`, best-effort) and `__del__` (broad suppress, shutdown-only). Audit new panels for both.
+3. `closeEvent` ordering must be: stop all long-running panels FIRST -> stop viewport -> save settings -> `super().closeEvent()`. Never call `super().closeEvent()` before stops (Qt may tear down child widgets).
+4. For the sim-worker thread (Pitfall 1): its `stop()` must signal the worker to exit its loop, then `thread.wait()` — a worker that ignores the signal and is still running when `closeEvent` returns will crash.
 
 **Warning signs:**
-- `FluidSimulator.step()` time goes from <50ms (2D) to >2s (3D at same resolution) — step budget blown.
-- RAM usage spikes when `dim_3d=True` is set on an existing scene with no other changes.
-- Tests that run fluid for N steps start timing out in CI.
+- Callbacks fire after window close (log "tick after stop" or use a counter).
+- `AttributeError` from `__del__` on shutdown mentioning GL/CGL/EGL.
+- New timer's callback runs once and stops (forgot to reschedule) OR runs forever (forgot guard).
 
 **Phase to address:**
-3D fluid flag phase. The resolution/memory gating is the FIRST thing to implement, before any 3D physics correctness work.
-
----
-
-### Pitfall 9: 3D two-way solid-coupling stability — the `union()` workaround in 3D
-
-**What goes wrong:**
-The documented PhiFlow multi-obstacle `union()` bug (module-level note in `fluid_simulator.py:13-41`) was worked around in 2D by merging all obstacle geometries into one SDF via `union(*geoms)`. In 3D, the same `union()` call is more likely to hit the bug (more SDF samples, larger arrays), and two-way coupling (solid→fluid and fluid→solid force transfer) is conditionally unstable in 3D: pressure projection can produce non-physical forces on thin surgical instruments, launching them out of the scene.
-
-**Why it happens:**
-The 2D slice is forgiving — pressure errors average out over the thin dimension. 3D exposes full pressure gradients on thin geometries (needle, forceps jaws), and the coupling force = pressure_gradient × surface_area is large and noisy on thin features.
-
-**How to avoid:**
-- Default 3D coupling to ONE-WAY (solid→fluid only; fluid does not push back on instruments) until two-way is explicitly validated. Add `coupling_mode: "one_way" | "two_way" = "one_way"` for 3D; keep two-way default for 2D (existing behavior).
-- Keep the `union(*geoms)` merged-SDF workaround in 3D, and add a regression test that constructs a scene with 2+ obstacles in 3D and asserts the SDF is finite everywhere (the bug produces NaN/Inf at obstacle boundaries).
-- For thin instruments in 3D, consider voxelizing the instrument into the SDF grid at a coarser resolution than the visual mesh (avoid sub-cell features that the grid can't represent).
-- Cap `dt` for 3D two-way coupling via CFL condition on the fluid velocity; document the CFL check.
-
-**Warning signs:**
-- Instruments drift/launch when fluid is active in 3D (coupling instability).
-- `union()` in 3D returns NaN at obstacle surfaces (re-introduced multi-obstacle bug in 3D).
-- 2D fluid tests still pass but 3D tests fail with diverging pressure.
-
-**Phase to address:**
-3D fluid flag phase. The coupling-mode default + `union()`-in-3D regression test is part of the phase's must-haves.
-
----
-
-### Pitfall 10: K8s PVC e2e test flakiness from PVC binding race + CI-without-cluster
-
-**What goes wrong:**
-The current stub (`tests/k8s/test_pvc_e2e.py`) skips unless `kind get clusters` returns non-empty. De-stubbing means actually creating a PVC, writing a checkpoint, reading it back, and deleting. The common failures: (1) PVC binding race — `PersistentVolumeClaim` is `Pending` because no `PersistentVolume` provisioner is ready, and the test reads before bind completes; (2) the test passes locally against `kind` but is flaky in CI because CI spins up a fresh `kind` cluster per run and the local-path provisioner takes 5-15s to initialize; (3) checkpoint path mounting mismatch — the test writes to `/models/...` in the pod but the PVC is mounted at `/data` and the checkpoint path isn't reconciled.
-
-**Why it happens:**
-PVC binding is asynchronous. `kubectl get pvc` returning the object doesn't mean it's `Bound`. CI environments rarely have a real cluster, so the test either (a) always skips (no coverage) or (b) runs against an ephemeral `kind` cluster with slow provisioner startup.
-
-**How to avoid:**
-- Poll `kubectl get pvc <name> -o jsonpath='{.status.phase}'` until `Bound` with a timeout (e.g., 60s), BEFORE writing the checkpoint. Do not sleep a fixed amount — poll.
-- Separate the test into two layers: (a) a UNIT test that validates the manifest YAML (`pvc.yaml`, the checkpoint `volumeMounts`, `volumeClaimTemplates`) without a cluster — runs everywhere, no skip; (b) an INTEGRATION test (`@pytest.mark.k8s` + `@pytest.mark.integration` + `@pytest.mark.slow`) that requires `kind` and does the real read/write/delete cycle.
-- Reconcile the checkpoint path: assert that `DreamerConfig.checkpoint_dir` (or wherever checkpoints are saved) is the SAME path mounted from the PVC. The current `auto-discovery checkpoints from models/dreamerv3/{task}_{obs_type}/` path must match the PVC mount. Add a manifest-level test that grep-asserts the mountPath equals the configured checkpoint root.
-- Use `kind` with the built-in local-path provisioner explicitly; document the `kind create cluster` command in the test module docstring so CI can reproduce.
-- Add cleanup (`kubectl delete pvc`) in a `finally`/fixture teardown so failed runs don't leak PVCs and cause the next run to fail with name collision.
-
-**Warning signs:**
-- Test fails intermittently with "PVC Pending" then passes on retry (binding race).
-- Test passes locally but skips in CI (no `kind` in CI) — de-stubbing achieved no coverage gain.
-- Checkpoint written successfully in pod but read-back returns empty (mount path mismatch).
-
-**Phase to address:**
-K8s PVC e2e phase. Split unit (manifest validation, always runs) from integration (`kind`-gated) as the first task of the phase, so the unit coverage lands even if the integration test remains `kind`-gated.
-
----
-
-### Pitfall 11: Organ-mesh licensing — surgtoolloc license terms vs procedural generation fidelity
-
-**What goes wrong:**
-The organ-mesh licensing decision (procedural vs surgtoolloc) was deferred from v0.4.0 Phase 20. The two failure modes: (a) choose surgtoolloc without reading the license terms, ship organ meshes under a license incompatible with the project's MIT/Apache stance (surgtoolloc / EndoVis datasets often have non-commercial / research-only / attribution clauses that don't transfer to a downstream user); (b) choose procedural generation to "stay clean" but the generated organs are too low-fidelity to serve the realism goal of v0.4.0's real-assets pipeline, silently regressing the tetgen deformable + cutting pipeline.
-
-**Why it happens:**
-The decision is framed as binary (procedural OR surgtoolloc). It's actually two separate questions: (1) what license terms does surgtoolloc impose, and (2) what fidelity does procedural gen achieve. Neither has been documented yet (Phase 20 research spike deferred the decision, not the research).
-
-**How to avoid:**
-- DO THE LICENSE RESEARCH FIRST, as a documented artifact (a `LICENSE-NOTES.md` or phase research note), NOT in a commit message. Cite the specific surgtoolloc/dataset license text (EndoVis MICCAI sub-challenge data typically has a research-only, non-redistribution, attribution-required clause). Decision must cite the clause that blocks redistribution, if any.
-- Recommended: procedural generation for SHIPPED organs (clean license, deterministic, matches the existing `scene_builder` primitive-fallback philosophy), with surgtoolloc as an OPTIONAL `[assets-research]` extra that users download themselves and sign the dataset EULA. This mirrors the existing "primitive fallback when real assets missing" pattern.
-- If procedural is chosen, define a fidelity bar: organ mesh must (a) be watertight, (b) tetgen-able without degenerate tets, (c) deform plausibly under `<flex>`, (d) cut without producing non-manifold geometry. Add a regression test that runs each organ through the tetgen + cut pipeline.
-- Document the decision in `PROJECT.md` Key Architecture Decisions and update the "Organ mesh source licensing" line in STATE.md Deferred Items to "Closed."
-
-**Warning signs:**
-- Decision commit message says "chose procedural, cleaner" with no license-citation artifact.
-- Organ meshes shipped in `assets/` without a `LICENSE` file covering them.
-- Procedural organs fail tetgen/cut silently (falls back to primitives) — fidelity regression masked by fallback.
-
-**Phase to address:**
-K8s PVC e2e + organ-mesh licensing phase (the licensing sub-task can run in parallel with the PVC work). The license-citation artifact is a phase must-have, not a post-hoc doc.
-
----
-
-## Moderate Pitfalls
-
-### Pitfall 12: DreamerV3 checkpoint format mismatch with SB3 auto-discovery
-
-**What goes wrong:**
-Real DreamerV3 saves checkpoints in its own format (JAX/Orbax checkpoint, not `.zip`). The existing `ExperimentRunner` and `evaluate` CLI expect SB3 `.zip` checkpoints at `models/{algo}_{task}/`. The auto-discovery path (`models/dreamerv3/{task}_{obs_type}/`) was designed for the stub. Mixing the two formats in the same evaluation pipeline produces "could not load model" errors or silent evaluation of the wrong format.
-
-**Prevention:**
-Keep DreamerV3 checkpoints in a separate directory namespace (`models/dreamerv3/...`) with a distinct loader; do not route them through `stable_baselines3.common.save.load`. The `ExperimentRunner` must dispatch on algo family (SB3 vs DreamerV3) before loading.
-
-**Phase to address:** Real DreamerV3 integration phase.
-
----
-
-### Pitfall 13: `GymToEmbodiedWrapper` action/obs contract drift under real agent
-
-**What goes wrong:**
-The wrapper (reset-in-action protocol, 64×64 RGBA pixel + low-dim state) was validated against the STUB agent which accepts any obs/action shape. A real DreamerV3 agent has strict obs space requirements (e.g., pixel obs must be `uint8 [H,W,C]`, state obs must match a registered vector). Contract mismatch surfaces only when the real agent runs.
-
-**Prevention:**
-Pin the wrapper's `observation_space` / `action_space` to the exact `gymnasium.spaces.Box` the DreamerV3 config declares, and add a contract test that asserts `wrapper.observation_space == agent.obs_space` before training. Validate the reset-in-action protocol against the real agent's expected `obs` dict keys.
-
-**Phase to address:** Real DreamerV3 integration phase.
-
----
-
-### Pitfall 14: macOS local skip masquerading as pass in CI gate
-
-**What goes wrong:**
-The DreamerV3 E2E test skips on macOS (no GPU/dreamerv3/jax). If CI also lacks a GPU host, the test skips EVERYWHERE and the "real integration" milestone closes with zero real coverage — the sentinel was flipped but never run.
-
-**Prevention:**
-Add a CI-matrix entry with a GPU runner that RUNS the DreamerV3 tests (no skip). Add a coverage-gate check: if the DreamerV3 test module is 100% skipped across ALL CI jobs, fail the milestone audit. The `audit-uat` skill should flag "all GPU tests skipped" as a partial, not a pass.
-
-**Phase to address:** Real DreamerV3 integration phase (CI matrix) + milestone audit.
-
----
-
-### Pitfall 15: `dim_3d` flag default safety — scenes silently flip to 3D
-
-**What goes wrong:**
-If `dim_3d` defaults to `True` (or is read from an env var that's set on a dev machine), existing 2D scenes start running 3D fluid, hitting Pitfall 8/9. If it defaults to `False` and the 3D path is never exercised in tests, the 3D code rots.
-
-**Prevention:**
-Default `dim_3d=False` (preserves all existing 2D behavior). Add a parametrized test that runs the fluid suite with BOTH `dim_3d=False` and `dim_3d=True` at a SMALL 3D grid size, so the 3D path is always exercised. Never read `dim_3d` from a raw env var without going through `FluidConfig` validation.
-
-**Phase to address:** 3D fluid flag phase.
-
----
-
-### Pitfall 16: `DifficultyLevel` scalar-vs-enum precedence flip in `TaskRewardRouter`
-
-**What goes wrong:**
-v0.4.2 established `TaskRewardRouter` with strict `type() is float` check (not `==`) to avoid float-mixin false-positives. Adding `DifficultyLevelConfig` may introduce a new code path that passes a `DifficultyLevel` enum to the router where a scalar is expected, and the strict check rejects it, or worse, a new path bypasses the router's normalization and applies the enum directly.
-
-**Prevention:**
-Keep `TaskRewardRouter` as the single normalization point; ALL difficulty inputs (scalar, enum, or config-with-overrides) funnel through `build()` which calls `apply_difficulty(float(difficulty.value))`. Do not add a second apply path for `DifficultyLevelConfig` — it feeds INTO the router as resolved params, not as a parallel router.
-
-**Phase to address:** TASK-02 per-level difficulty schema phase.
-
----
-
-## Minor Pitfalls
-
-### Pitfall 17: DreamerV3 `XLA_PYTHON_CLIENT_MEM_FRACTION` set too late
-
-Set the env var in the child's `os.environ` BEFORE any `import jax`. JAX reads it at first import. Setting it in `_build_agent` after JAX is already imported (e.g., via a transitive import) is a no-op. Set it at the very top of the child entry, before importing `dreamerv3`/`jax`.
-
-**Phase to address:** Real DreamerV3 integration phase.
-
----
-
-### Pitfall 18: `CurriculumStageConfig.difficulty` union not normalized at env-construction for the new discrete path
-
-Phase 29 code review WR-03 (closed in v0.5.0) normalized `difficulty: float | DifficultyLevel` at env-construction. The new discrete-progression path adds a third type (`DifficultyLevelConfig`-derived scalar). Ensure the same normalization point (`environment.py:_setup_rewards`) handles the new path, rather than normalizing in a second place.
-
-**Phase to address:** TASK-02 per-level difficulty schema phase.
-
----
-
-### Pitfall 19: Organ-mesh `assets/` directory shipped without `.gitignore` for large binaries
-
-If procedural organs are generated, commit the GENERATOR (deterministic, seeded), not the output meshes. Committing generated `.obj`/`.tet` bloats the repo. Add `assets/generated/` to `.gitignore` and document the regeneration command.
-
-**Phase to address:** K8s PVC e2e + organ-mesh licensing phase.
-
----
-
-### Pitfall 20: K8s PVC test leaks resources on failure
-
-If the PVC-creation step succeeds but the read/write assertion fails, the PVC and PV are left around. Next run: name collision (`pvc-xxx already exists`). Use a pytest fixture with `yield` + `finally` that `kubectl delete` ignores-not-found, and generate a unique PVC name per run (`pvc-e2e-{uuid4}`).
-
-**Phase to address:** K8s PVC e2e phase.
-
----
-
-## Phase-Specific Warnings
-
-| Phase Topic | Likely Pitfall | Mitigation |
-|-------------|---------------|------------|
-| Real DreamerV3 integration | Sentinel test deleted instead of flipped (P1); JAX imported in parent (P2); smoke test asserts converged thresholds (P3); checkpoint format mismatch (P12); wrapper contract drift (P13) | Flip-not-delete; parent-import guard test; split smoke vs convergence; separate DreamerV3 checkpoint namespace; pin obs/action space contract test |
-| Real DreamerV3 integration (CI) | All GPU tests skip everywhere (P14) | CI matrix GPU job + coverage-gate that fails audit if 100% skipped |
-| TASK-02 per-level difficulty schema | Pydantic v2 cycle re-introduced (P4); override precedence ambiguity (P5); additive-invariant broken (P6); scene JSON migration breaks (P7); router bypass (P16) | Leaf-module placement + `model_rebuild()` regression test; precedence truth-table TDD; additive-mode flag; optional `None` default + load-all-6-scenes test; single router normalization |
-| 3D fluid flag | 2D→3D memory blow-up (P8); two-way coupling instability in 3D (P9); default safety (P15) | Separate 3D default grid_size + validator; one-way default for 3D + `union()`-in-3D regression test; `dim_3d=False` default + parametrized dual-mode test |
-| K8s PVC e2e | PVC binding race + CI-without-cluster (P10); resource leak (P20) | Poll-until-Bound; split unit (manifest) vs integration (kind); checkpoint-path reconciliation; unique-name fixture with teardown |
-| Organ-mesh licensing | License terms unread / procedural fidelity regression (P11); binary bloat (P19) | License-citation artifact FIRST; procedural-as-default + optional research extra; commit generator not output; tetgen+cut fidelity regression test |
+GUI-11 (introduce the `RenderLoop` helper) and GUI-15 (audit all new panels for `stop()`+`__del__` and enforce `closeEvent` ordering).
 
 ---
 
@@ -400,25 +215,123 @@ If the PVC-creation step succeeds but the read/write assertion fails, the PVC an
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Delete Phase 30 sentinel tests | Makes CI green after flip | Loses regression guard; stub can return silently | Never — flip, don't delete |
-| Import `jax` in parent for config validation | Type-safe config in parent | Re-introduces GPU OOM; breaks process isolation | Never — use JSON-over-stdio dict |
-| Assert spike's MSE<0.01 in CI smoke | Reuses existing threshold | Flaky on short budgets or masks divergence | Only in a `@slow @gpu` long-run acceptance test |
-| Replace `CurriculumScheduler.DEFAULT_STAGES` with 3 discrete levels | Cleaner discrete API | Regresses Phase 3/21 continuous fixes | Never — add a `progression_mode`, don't replace |
-| Make `difficulty_blocks` required | "Every task should define 3 levels" | Breaks all 6 existing scene JSONs | Never — optional with `None` default |
-| Reuse 2D `grid_size` for 3D fluid | One config field | Cubic memory blow-up, step budget blown | Never — separate 3D default + validator |
-| Choose procedural organs without fidelity test | Clean license, fast decision | Realism regression masked by primitive fallback | Only with a tetgen+cut fidelity regression test |
-| Skip PVC unit tests because "needs a cluster" | Less test code | Zero coverage when CI has no cluster | Never — split manifest-unit (always runs) from kind-integration |
+| Mutating simulator attrs instead of round-tripping through `SceneDefinition` | Fast to implement, responsive UI | Undo/save/revert silently wrong (Pitfall 7); saved files missing edits | Never for persistent edits; only for ephemeral editor-only camera offset (current `_editor_camera_*`) |
+| Reusing the single-shot `LLMPanel._thread` slot for the multi-turn clarifying-question flow | Less code | Double-spawn races + mixed question/answer state (Pitfall 5) | Never — build a state machine |
+| Non-greedy `_JSON_OBJ_RE` fallback for VLM JSON extraction | Reused from text parser | Truncated nested scene JSON (Pitfall 4) | Never for nested scene JSON; use brace-balanced extraction or provider JSON mode |
+| Injecting `simulator.step()` into the render `_tick` | One-line "fix" for immobile preview | Coupled cadence, wrong playback speed, <10fps (Pitfall 1) | Never — decouple via sim worker thread |
+| `deleteLater` on a `QThread` without `wait()` | Less blocking on close | Crash "destroyed while still running" (Pitfall 3) | Never — always `quit()`->`wait()`->`deleteLater` |
+| Hand-rolled "Reset Layout" re-adding docks to areas | Quick | Ignores tabification/floating/closed; "reset on rerun" bug persists (Pitfall 2) | Never for final; acceptable as a stub until `restoreState(default_state)` lands |
+| Two `QTimer.singleShot` chains both touching the simulator | Decouple by brute force | GL context contention + stutter (Pitfall 1) | Never |
+| Recording by calling `render()` from the encoder thread | Reuses render code | GL thread-affinity crash + torn frames (Pitfall 6) | Never — copy frames on main thread, encode off-main |
+
+## Integration Gotchas
+
+Common mistakes when connecting to external services.
+
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| OpenAI Vision (GPT-4o) | Sending full-res PNG (~10MB base64); trusting "ONLY JSON" prose; non-greedy regex parse | Downscale to <=1024px JPEG; use `response_format={"type":"json_object"}` or function tool; brace-balanced parse fallback |
+| Anthropic Claude Vision | Passing image as text base64 instead of `image` content block; wrong media type | Use `{"type":"image","source":{"type":"base64","media_type":"image/jpeg","data":...}}` content block; JPEG preferred |
+| Ollama vision models | Assuming `llava` handles multi-turn clarifying questions like GPT-4o | Local models are weaker at structured multi-turn; send full history each turn; fall back to single-shot if quality drops |
+| `QSettings` (dock persistence) | Adding docks without `objectName`; calling `restoreState` in `__init__` before show | Set unique `objectName` on every dock; restore in `showEvent` (guarded) or `QTimer.singleShot(0,...)` |
+| `QThread` worker-object pattern | Subclassing `QThread` and adding slots (slots run in main thread); `deleteLater` before `wait()` | Use `moveToThread`; wire `finished`->`quit`->`deleteLater`; `quit()`+`wait()` in controller `stop()` |
+| MuJoCo offscreen GL on macOS | Re-probing CGL every frame after a failure (v0.5.0 already short-circuits — must preserve this when adding multi-view) | Reuse the existing `_renderer_available=False` short-circuit; multi-view must share ONE GL context or fall back to PyBullet preview per the v0.5.0 macOS fallback |
+| PyBullet `getCameraImage` for multi-view | Calling it per-view per-frame without honoring `_normalize_pb_rgb()` (v0.5.0 lesson) | Every `getCameraImage` result MUST go through `_normalize_pb_rgb()` before display; multi-view multiplies the surface area for the HxWx4-vs-3 bug |
+| imageio-ffmpeg / cv2 VideoWriter | Opening encoder on main thread; not flushing on close | Open on recorder worker thread; `close()` flushes moov atom; `closeEvent` must `wait()` for flush |
+| LLM/VLM API keys | Storing keys in `QSettings` for convenience | `QSettings` is explicitly NOT for secrets (per `_settings.py` docstring + D-20); keys stay in `.env` via `Settings()`; UI reads via `get_settings()` |
+
+## Performance Traps
+
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| `step()` in the render loop | <10 fps on fluid/cutting scenes | Sim worker thread + accumulator (Pitfall 1) | Immediately on any non-trivial scene |
+| Unbounded frame queue in recorder | Memory grows, then OOM | `maxlen` on `deque`, drop oldest when encoder lags (Pitfall 6) | ~30s recording at 1080p |
+| Per-frame full `SceneDefinition.model_dump` for undo | UI jank on every edit | Coalesce edits; push undo snapshots on commit, not per-keystroke | Large scenes with many tissues |
+| Synchronous VLM call on main thread | Whole UI frozen 5-15s per image | Always on `QThread` (already done for text; VLM must follow) | First VLM call |
+| `restoreState` of a huge layout every open | Open feels slow | Restore once at show, not per scene load | 10+ dock widgets |
+| Re-probing MuJoCo offscreen GL every frame after failure | Log spam + fps 0 | Reuse `_renderer_available=False` short-circuit (v0.5.0) | macOS stock Python |
+| Multi-view rendering 4 views at full res in one `_tick` | fps / 4 | Render secondary views at lower res / on a slower cadence | 4 views at 1080p |
+
+## Security Mistakes
+
+| Mistake | Risk | Prevention |
+|---------|------|------------|
+| Storing LLM/VLM API keys in `QSettings` or scene JSON | Key leakage via shared config files | Keys only in `.env` via `Settings()` (D-20); `QSettings` docstring already forbids secrets — enforce for new panels |
+| Sending user's surgical image to a cloud VLM without consent | Privacy/PHI exposure; images may contain patient data | Explicit opt-in dialog before first VLM call; document data flows; offer Ollama (local) as default for sensitive images |
+| Trusting VLM-emitted `urdf_path`/mesh paths | Path traversal / loading arbitrary files | Sanitize/null non-existent paths -> OBJ fallback (reuse `scene_builder`); never `open()` a VLM-emitted path directly |
+| `safe_error_message` not applied to VLM/clarifying-question errors | API key / internal path leakage in error dialogs | All user-facing errors go through `safe_error_message` (already used in `llm_panel` — extend to new VLM/clarifying panels) |
+| Logging full VLM prompts/images | PHI + cost data in logs | Log metadata only (provider, model, token count, timing), redact image bytes; never log base64 payloads |
+
+## UX Pitfalls
+
+| Pitfall | User Impact | Better Approach |
+|---------|-------------|-----------------|
+| "Generate" stays enabled during clarifying-question flow | Double-spawn races, mixed state (Pitfall 5) | Disable/relabel to "Cancel" during `AWAITING_*`/`GENERATING` |
+| Undo silently ignores camera/light/gizmo edits (Pitfall 7) | User loses trust in undo | All persistent edits round-trip through `SceneDefinition` + undo stack |
+| Reset Layout only partially resets (Pitfall 2) | User rearranges, hits reset, layout half-reverts | Restore a saved default `QByteArray` via `restoreState(default_state)` |
+| VLM returns a scene that fails sim load (hallucinated paths) (Pitfall 4) | "Accept" produces a broken preview | Validate + sanitize before "Accept" is enabled; show targeted errors |
+| Recording with no progress indicator | User doesn't know it's recording or how big | Status-bar frame counter + file-size estimate; red dot in viewport |
+| Clarifying questions asked all at once vs. one-by-one | Overwhelming or tedious | Ask the top 2-3 highest-uncertainty questions first; let model prioritize |
+| Multi-view with no per-view camera label | User can't tell which view is which | Label each view (top/front/side/user); sync selection across views |
+
+## "Looks Done But Isn't" Checklist
+
+- [ ] **Render/sim decoupling (GUI-11):** Often missing the accumulator (preview runs at wrong speed) — verify wall-clock 10s of sim time = 10s of preview for a known scene.
+- [ ] **Dock persistence (GUI-15):** Often missing `objectName` on NEW docks — verify a rearranged layout survives close/reopen for every dock, including ones added in GUI-12/13/14.
+- [ ] **closeEvent teardown (GUI-15):** Often missing `wait()` on LLM/VLM/recorder threads — verify closing mid-call does not segfault or leak a thread (check `ps`/Activity Monitor).
+- [ ] **VLM JSON parse (GEN-02):** Often missing brace-balanced extraction — verify a nested scene JSON wrapped in ```` ```json ```` fences parses to the FULL scene, not the first inner object.
+- [ ] **VLM path sanitizer (GEN-02):** Often missing — verify a VLM scene with `urdf_path: "path/to/robot.urdf"` loads via OBJ fallback, not a 404 crash.
+- [ ] **Clarifying-question state machine (GEN-05):** Often missing the double-spawn guard — verify clicking Generate twice doesn't spawn two threads.
+- [ ] **Recorder flush (GUI-13):** Often missing `wait()` on close — verify the produced MP4 plays (moov atom present) after closing mid-record.
+- [ ] **Undo for lighting/gizmos (GUI-12/13):** Often missing the schema round-trip — verify undo reverts a light edit in both tree and render.
+- [ ] **Multi-view GL sharing (GUI-12):** Often missing the macOS fallback — verify multi-view still renders on macOS stock Python (no mjpython) via the PyBullet preview fallback path.
+- [ ] **Batch gen reproducibility (GEN-04):** Often missing seed/fingerprint — verify two runs of the same image set with `temperature=0` produce byte-identical scene JSON (modulo model nondeterminism documented).
+
+## Recovery Strategies
+
+| Pitfall | Recovery Cost | Recovery Steps |
+|---------|---------------|----------------|
+| Render/sim coupled (Pitfall 1) | HIGH | Introduce sim worker thread + accumulator; re-baseline fps; re-validate cutting/fluid preview |
+| Dock layout not resetting (Pitfall 2) | MEDIUM | Capture default `QByteArray` at init; replace hand-rolled reset with `restoreState(default)`; add `objectName` to all docks |
+| QThread leak on close (Pitfall 3) | MEDIUM | Add `stop()`+`wait()` to every panel; wire `aboutToClose`; broad-suppress in `closeEvent` |
+| VLM truncated JSON (Pitfall 4) | MEDIUM | Swap regex for brace-balanced extractor or provider JSON mode; add path sanitizer; add cost guard |
+| Clarifying-question race (Pitfall 5) | HIGH | Rebuild as explicit state machine; disable Generate during flow; pin seed; send full history |
+| Recording torn frames (Pitfall 6) | MEDIUM | Move encode to worker thread; bounded frame queue; flush on close |
+| Edits bypass schema (Pitfall 7) | HIGH | Refactor all persistent edits through `SceneDefinition` + undo stack; add undo-covers-edit test |
+| Timer guard leak (Pitfall 8) | LOW | Centralize into `RenderLoop` helper; audit all new timers for guard + `__del__` |
+
+## Pitfall-to-Phase Mapping
+
+How roadmap phases should address these pitfalls. Phase numbers continue from 41 (v0.6.0 ended at 40.1). GUI features map to GUI-11..15; scene gen to GEN-01..05. The three known bugs fold into GUI-11 + GUI-15.
+
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| 1 — Render/sim coupling (fixes immobile-preview + <10fps bugs) | GUI-11 (render/sim-decoupled viewport) | Wall-clock test: 10s sim = 10s preview; fps > 10 on a cutting scene; only ONE `singleShot` render chain |
+| 2 — Dock-state persistence (fixes layout-not-reset-on-rerun bug) | GUI-15 (perf/stability + editing UX) | Rearrange + close + reopen -> layout preserved; Reset Layout -> full restore incl. tabified/floating; every dock has unique `objectName` |
+| 3 — QThread leak on close | GUI-15 (closeEvent harness) + GEN-02/GEN-05 (panel `stop()`) | Close window mid-LLM/VLM/clarifying call -> no segfault, no leaked thread (Activity Monitor check) |
+| 4 — VLM payload/cost/JSON/path | GEN-02 (VLM image->scene) + GEN-04 (batch) | Nested JSON in code fences parses to full scene; hallucinated path -> OBJ fallback; cost estimator warns; reproducible with seed |
+| 5 — Clarifying-question state race | GEN-05 (interactive LLM flow) | Double-click Generate -> only one thread; regenerate same answers -> same scene (seed pinned); ValidationError -> targeted re-question |
+| 6 — Recording thread/render contention | GUI-13 (recording) | 30s recording -> playable MP4 (moov present); fps stays >10 during record; close mid-record -> valid file |
+| 7 — Edits bypass schema (undo/save/revert wrong) | GUI-12 (multi-view/lighting) + GUI-13 (gizmos) | Edit light -> undo -> reverts in tree AND render; edit light -> save -> reload -> light persists |
+| 8 — Timer guard + `__del__` shutdown | GUI-11 (RenderLoop helper) + GUI-15 (panel audit) | No callbacks after close; no `__del__` GL errors on shutdown; every new timer uses helper |
 
 ## Sources
 
-- `.planning/PROJECT.md` — Key Architecture Decisions, Accepted Tech Debt, Active v0.6.0 requirements (HIGH confidence, project source-of-truth)
-- `.planning/STATE.md` — Phase 24 DreamerV3 uncertainty, Phase 29 WR-02/WR-03, Phase 30 sentinel, Deferred Items table (HIGH confidence, project source-of-truth)
-- `.planning/MILESTONES.md` — v0.4.0 Phase 24 DreamerV3 spike decisions, v0.4.2 Phase 29/30 decisions (HIGH confidence)
-- `src/surg_rl/dreamer/subprocess.py:125-131` — verified `_build_agent` stub returns `None` (HIGH, direct code inspection)
-- `tests/dreamer/test_dreamerv3_subprocess_e2e.py:64-91` — verified sentinel asserts `RuntimeError("Agent not configured")` at two sites (HIGH, direct code inspection)
-- `src/surg_rl/rl/difficulty.py:17-50` — verified `_FloatMixin(float, Enum)` + EASY/MEDIUM/HARD scalars (HIGH, direct code inspection)
-- `src/surg_rl/rl/environment.py:484-517` — verified `_setup_rewards` precedence chain (HIGH, direct code inspection)
-- `src/surg_rl/dynamics/curriculum.py:89-260` — verified `CurriculumScheduler` + `DEFAULT_STAGES` 4-stage continuous (HIGH, direct code inspection)
-- `src/surg_rl/scene_definition/schema.py:1087-1505` — verified `TaskConfig.difficulty_level` string forward-ref + `model_rebuild()` pattern (HIGH, direct code inspection)
-- `src/surg_rl/fluids/fluid_simulator.py:1-118` — verified 2D xz-slice + `union(*geoms)` workaround (HIGH, direct code inspection)
-- `tests/k8s/test_pvc_e2e.py:1-40` — verified stub + `kind`-gated skip (HIGH, direct code inspection)
+- [Qt 6 QThread docs — `finished()`/`isFinished()`/`wait()` semantics and destructor warning](https://doc.qt.io/QT-6/qthread.html)
+- [Qt mailing list: QThread::finished() race condition (finish emits before isRunning=false)](https://lists.qt-project.org/pipermail/development/2011-November/000280.html)
+- [Qt Forum: QThread relation between quit/finished/deleteLater](https://forum.qt.io/topic/32578/qthread-relation-between-quit-finished-and-deletelater)
+- [Qt Forum: Proper handling of QThread on main window close](https://forum.qt.io/topic/54037/solved-proper-handling-of-qthread-on-main-window-close)
+- [Stack Overflow: QDockWidgets closed state not restored by restoreDockWidget](https://stackoverflow.com/questions/2171347/closed-state-of-qdockwidgets-not-restored-by-restoredockwidget)
+- [Stack Overflow: restoreDockWidget not working as expected](https://stackoverflow.com/questions/52115700/restoredockwidget-not-working-as-expected)
+- [Qt Forum: restoreDockWidget reports true but doesn't restore (restore before show)](https://forum.qt.io/topic/157100/restoredockwidget-reports-true-but-doesn-t-restore)
+- [Qt Docs: QMainWindow::saveState() objectName requirement](https://www.qthub.com/static/doc/qt5/qtwidgets/qmainwindow.html)
+- Codebase: `src/surg_rl/editor/viewport.py` (existing render loop, `_tick`, `_editor_camera_*`, `_normalize_pb_rgb` usage, macOS PyBullet fallback)
+- Codebase: `src/surg_rl/editor/main_window.py` (`_action_reset_layout`, `_refresh_viewport_and_tree`, `closeEvent`, duplicated `_refresh_recent_menu`)
+- Codebase: `src/surg_rl/editor/llm_panel.py` (`TextParserWorker`, `_thread`/`_worker` slot reuse, `_cancelled` flag half-wired)
+- Codebase: `src/surg_rl/editor/_settings.py` (QSettings INI, no-secrets docstring, `save_window`/`load_window`)
+- Codebase: `src/surg_rl/scene_generation/vision_parser.py` + `prompts/vision_prompts.py` (base64 path, `_JSON_OBJ_RE` non-greedy, placeholder `urdf_path` in schema example)
+- Project context: `.planning/PROJECT.md` (v0.5.0 lessons, v0.7.0 target features GUI-11..15 / GEN-01..05, three known GUI bugs)
+
+---
+*Pitfalls research for: adding GUI editor depth + scene-generation features to the existing PySide6 surg-rl scene editor (v0.7.0)*
+*Researched: 2026-07-15*
