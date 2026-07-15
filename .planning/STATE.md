@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v0.6.0
 milestone_name: Carried-Forward Debt Closure
-current_phase: 40.1
-status: verifying
+status: Awaiting next milestone
 stopped_at: Completed 40.1-02-PLAN.md (Phase 40.1 ready_for_verification)
-last_updated: "2026-07-14T23:43:05.722Z"
-last_activity: 2026-07-14
-last_activity_desc: Phase 40.1 complete
+last_updated: "2026-07-15T20:00:28.826Z"
+last_activity: 2026-07-15
+last_activity_desc: Milestone v0.6.0 completed and archived
 progress:
   total_phases: 6
   completed_phases: 6
   total_plans: 18
   completed_plans: 18
   percent: 100
+current_phase: 40.1
 current_phase_name: close-gap-dmv3-08-thread-checkpoint-dir-into-find-latest-che
 ---
 
@@ -21,21 +21,19 @@ current_phase_name: close-gap-dmv3-08-thread-checkpoint-dir-into-find-latest-che
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-07-11 — Phase 39 complete)
+See: .planning/PROJECT.md (updated 2026-07-15 — v0.6.0 shipped)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation — with automatic primitive fallbacks when real assets are missing, and a benchmarking framework for systematic RL research comparisons.
-**Current focus:** Phase 40.1 — close-gap-dmv3-08-thread-checkpoint-dir-into-find-latest-che
+**Current focus:** v0.6.0 Carried-Forward Debt Closure SHIPPED 2026-07-15. Next milestone not yet planned — run `/gsd-new-milestone` (deferred candidate: v0.7.0 GUI editor depth GUI-11..15 + scene generation GEN-01..05).
 
-> **Note:** Phase 40 remains VERIFIED (human_needed). Phase 40.1 is a post-verification gap-closing insertion — DMV3-08 checkpoint_dir was never threaded into `_find_latest_checkpoint` (resume path gap), plus advisory Phase 38 cleanups from code review (CR-01 3D force units, inert `coupling_mode`/`coupling_substeps` fields). Now planned (2 plans, Wave 1, TDD) — ready to execute.
+> **Note:** v0.6.0 closed as a verified closeout. Phase 40 was re-verified `passed` (5/5 truths) on 2026-07-15 after the `dreamer-gpu` GitHub Actions job was observed GREEN on `ubuntu-latest-4-core-gpu` — DMV3-07/08/10 runtime GREEN certified (previously `human_needed` per INV-8). Phase 40.1 closed the DMV3-08 parent-side resume gap and the Phase 38 advisories (CR-01 magnitude test + real TWO_WAY feedback + substep loop). All 6 v0.6.0 phases VERIFIED `passed`; 13/13 requirements closed.
 
 ## Current Position
 
-Phase: 40.1
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-07-14 — Phase 40.1 complete
-
-Progress: [████████████░░] 80% (4/5 phases, 9/13 requirements closed)
+Phase: Milestone v0.6.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-15 — Milestone v0.6.0 completed and archived
 
 ## Performance Metrics
 
@@ -198,16 +196,24 @@ Items acknowledged and carried forward from previous milestone close:
 | Process | REQUIREMENTS.md BENCH-02..05 body checkboxes remain `[ ]` | Acknowledged (v0.4.0) |
 | Testing | Linux-only ROS2 subscriber e2e tests | Acknowledged (v0.3.1) |
 
+### Acknowledged at v0.6.0 close (2026-07-15)
+
+Pre-v0.6.0 cross-milestone debt flagged by pre-close `audit-open`. None are v0.6.0 scope; all acknowledged and carried forward (not blockers for the v0.6.0 verified closeout).
+
+| Category | Item | Status | Note |
+|----------|------|--------|------|
+| verification | Phase 09 ros2-bridge `09-VERIFICATION.md` gaps_found | Acknowledged | Older v0.3.0 verification debt; out of v0.6.0's 13 requirements |
+| uat | Phase 24 DreamerV3 `24-UAT.md` partial | Effectively closed | GPU-gated; closed by the Phase 40 sentinel flip + `dreamer-gpu` CI GREEN (2026-07-15); stale `partial` marker left as-is |
+| quick_task | `demo-rework` (20260617) | Stale marker | Work was complete at v0.5.0 close; `audit-open` flag is a stale completion marker |
+
 ## Session Continuity
 
-Last session: 2026-07-13T04:55:11.737Z
-Stopped at: Completed 40.1-02-PLAN.md (Phase 40.1 ready_for_verification)
+Last session: 2026-07-15 — v0.6.0 milestone close
+Stopped at: Milestone v0.6.0 completed and archived
 Resume file: None
 
-*Updated: 2026-07-13 — Phase 40.1 planned (2 plans, 1 wave, TDD); ready to execute (CPU-runnable, autonomous)*
+*Updated: 2026-07-15 — v0.6.0 SHIPPED (verified closeout). Phase 40 re-verified `passed` after `dreamer-gpu` CI GREEN observed; all 6 phases VERIFIED; 13/13 requirements closed. Phase dirs archived to `.planning/milestones/v0.6.0-phases/`. Next: `/gsd-new-milestone`.*
 
 ## Operator Next Steps
 
-- **Phase 40 VERIFIED (human_needed)** — all 4 plans complete; source + CPU guards GREEN; 3 PRESENT_BEHAVIOR_UNVERIFIED truths (DMV3-07 runtime, DMV3-08 resume, DMV3-10 CI GREEN) deferred to the `dreamer-gpu` CI job per INV-8 by design. See `.planning/phases/40-real-dreamerv3-integration-sentinel-flip/40-VERIFICATION.md`.
-- **USER ACTION ITEM (ops):** Enable GitHub-hosted GPU Actions runners on the repo account (`ubuntu-latest-4-core-gpu` label per D-01), then trigger the `dreamer-gpu` job (merge-to-main / `v*` tag / Actions tab Run workflow). Confirm the first GREEN run within `timeout-minutes: 15` — all 5 tests in `tests/dreamer/` PASS. This is the authoritative closure for DMV3-07 runtime + DMV3-08 resume + DMV3-10 CI GREEN.
-- **Milestone closure:** once the GPU GREEN is observed, run `/gsd-complete-milestone v0.6.0` to close the v0.6.0 milestone. Phase 40 is the LAST phase; the milestone audit should treat DMV3-10 as 'implemented, pending GPU runner enablement' rather than '100%-skipped' (the job exists and will run on the first merge-to-main after the runner is enabled).
+- Start the next milestone with `/gsd-new-milestone` (deferred candidate: v0.7.0 GUI editor depth GUI-11..15 + scene generation GEN-01..05)

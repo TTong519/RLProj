@@ -1,5 +1,25 @@
 # Milestones: Surg-RL
 
+## v0.6.0 Carried-Forward Debt Closure (Shipped: 2026-07-15)
+
+**Phases completed:** 6 phases (36–40.1), 18 plans, 36 tasks
+**Requirements:** 13/13 closed (DMV3-07..10, TASK-06..09, FLUID-01..03, DEPLOY-01, ASET-06)
+**Audit:** `gaps_found` at 2026-07-12 audit (pre-40.1, GPU-runtime GREEN outstanding) → closed 2026-07-15. Phase 40 re-verified `passed` after the `dreamer-gpu` CI job was observed GREEN. Verified closeout.
+
+**Key accomplishments:**
+
+- **Real DreamerV3 integration (Phase 40 + 40.1)** — replaced the 5 `_build_agent`/`_train_loop`/`_evaluate`/`_save_checkpoint`/`_load_checkpoint` stubs with real `dreamerv3.Agent` (PyPI 1.5.0 object API, manual `embodied.Driver` + `agent.train()` batch loop — NOT `embodied.run.train`); flipped the Phase 30 sentinel negative→positive with a CPU-runnable AST regression guard; retired `.pt` for `embodied.Checkpoint` native `*.ckpt`; threaded `task`+`checkpoint_dir` to the child and (Phase 40.1) into `_find_latest_checkpoint` + both call sites so the parent resume path finds custom-dir checkpoints. `dreamer-gpu` GitHub Actions job observed GREEN on `ubuntu-latest-4-core-gpu` (2026-07-15) — DMV3-07/08/10 runtime GREEN certified.
+- **TASK-02 per-level difficulty schema (Phases 36–37)** — `DifficultyLevelConfig` leaf model (tissue_stiffness / target_precision_tolerance / tool_position_noise / time_limit) composing additively over `interpolate_params()`; additive `CurriculumScheduler.progression_mode` with `set_difficulty_level`/`advance_level` (continuous `advance_stage` byte-identical); scene-level `difficulty_blocks: dict[DifficultyLevel, DifficultyLevelConfig] | None` with a 4-level precedence truth-table (blocks > task.difficulty_level > config.difficulty > 0.5) wired into `SurgicalEnv._setup_rewards`.
+- **3D fluid flag `dim_3d=True` (Phase 38 + 40.1)** — 3D Eulerian grid fluids via PhiFlow 3D `Box`/`StaggeredGrid` + `make_incompressible` pressure projection; separate smaller 3D `grid_size` + validator prevents cubic memory blow-up; 2D xz-slice path byte-identical (SHA256-pinned). Phase 40.1 closed the Phase 38 advisories: CR-01 3D force-unit magnitude regression test (green) + real TWO_WAY obstacle-velocity feedback with a `dt/coupling_substeps` substep loop (the previously-inert `coupling_mode`/`coupling_substeps` knobs now behave as documented).
+- **K8s PVC e2e + organ-mesh licensing ADR (Phase 39)** — checkpoint-persistence e2e de-stubbed via `pytest-kind`'s session-scoped `kind_cluster` fixture (write → pod restart → read on a bound PVC, `kubectl wait --for=condition=Bound`); dedicated CPU-only `k8s-e2e` CI job observed GREEN. Organ-mesh licensing decision recorded as ADR-0001 (MADR, accepted): procedural generation is the DEFAULT, SurgToolLoc REJECTED (modality mismatch primary + MICCAI/EndoVis non-commercial clause secondary, quoted verbatim with public URLs).
+- **Additive-regression invariant held throughout** — v0.4.0 + v0.4.2 + v0.5.0 baseline passes unchanged (1,438 passed baseline sweep); every closure item additive (`dim_3d=False` default, `difficulty_overrides | None = None`, new methods alongside not replacing). Test baseline grew 1,325 → 1,513 passing.
+
+**Decisions:** See `.planning/milestones/v0.6.0-ROADMAP.md` for full phase goals, success criteria, and plan lists; `.planning/PROJECT.md` Key Architecture Decisions for the v0.6.0 entries.
+
+**Known deferred items at close:** 2 pre-v0.6.0 cross-milestone items acknowledged and carried forward (see STATE.md Deferred Items) — Phase 09 ros2-bridge `09-VERIFICATION.md` gaps_found (v0.3.0 debt, out of v0.6.0 scope), Phase 24 DreamerV3 `24-UAT.md` partial (GPU-gated; effectively closed by the Phase 40 sentinel flip + `dreamer-gpu` CI GREEN). The `demo-rework` quick-task marker is stale (work was complete at v0.5.0 close).
+
+---
+
 ## v0.5.0 Scene Editor & UX Polish (Shipped: 2026-06-24)
 
 **Phases completed:** 5 phases, 22 plans, 22 tasks

@@ -2,6 +2,45 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v0.6.0 — Carried-Forward Debt Closure
+
+**Shipped:** 2026-07-15
+**Phases:** 6 (36–40.1) | **Plans:** 18 | **Requirements:** 13/13 v0.6.0 complete
+
+### What Was Built
+- Real DreamerV3 integration (Phases 40 + 40.1): the 5 stub functions replaced with real `dreamerv3.Agent` (PyPI 1.5.0 object API); Phase 30 sentinel flipped negative→positive with a CPU-runnable AST regression guard; `.pt` retired for `embodied.Checkpoint` native `*.ckpt`; `checkpoint_dir` threaded into `_find_latest_checkpoint` + both call sites. `dreamer-gpu` CI job observed GREEN on `ubuntu-latest-4-core-gpu`.
+- TASK-02 per-level difficulty schema (Phases 36–37): `DifficultyLevelConfig` leaf + additive `CurriculumScheduler.progression_mode` + scene-level `difficulty_blocks` with a 4-level precedence truth-table wired into `SurgicalEnv._setup_rewards`.
+- 3D fluid flag `dim_3d=True` (Phases 38 + 40.1): 3D Eulerian grid fluids via PhiFlow 3D `Box`/`StaggeredGrid`; 2D byte-identical (SHA256-pinned); Phase 40.1 closed the inert `coupling_mode`/`coupling_substeps` knobs (real TWO_WAY feedback + substep loop) + CR-01 magnitude regression test.
+- K8s PVC e2e + organ-mesh licensing ADR (Phase 39): `pytest-kind` de-stubbed PVC e2e + CPU-only `k8s-e2e` CI job (GREEN) + ADR-0001 (procedural default, SurgToolLoc rejected).
+
+### What Worked
+- **Pure-closure scope held** — no new user-facing features crept in; GUI depth + scene generation stayed deferred to v0.7.0. Four unrelated debt items shipped in one focused milestone.
+- **Additive-regression invariant held throughout** — `dim_3d=False` default, `difficulty_overrides | None = None`, new methods alongside (not replacing) `advance_stage`. The v0.4.0 + v0.4.2 + v0.5.0 baseline passed unchanged (1,438 passed sweep); 2D fluid path pinned byte-identical by SHA256.
+- **CPU-runnable guards for GPU-gated work** — the regression guard (AST `_build_agent` return-None walk), the JAX-leak guard, and the `.ckpt` glob unit tests all run on CPU, so the GPU-gated Phase 40 stayed Green-able on macOS without blocking local dev. The CPU-runnable `checkpoint_dir` subprocess-stub test (Phase 40.1) verified the parent resume path without needing a GPU.
+- **Post-verification gap-close phase (40.1)** — the milestone audit's own flagged follow-ups (DMV3-08 threading + Phase 38 advisories) were closed by a small inserted phase rather than left to drift; the audit drove the close.
+- **GPU-runtime deferral by design (INV-8)** — GPU-gated tests SKIP cleanly on macOS; the `dreamer-gpu` CI job is the single authoritative GREEN for DMV3-07/08/10. Enabling the runner + observing GREEN was a clean ops action item, not a code gap.
+
+### What Was Inefficient
+- **The milestone audit went stale before close.** Audited 2026-07-12 with `gaps_found`, it predated Phase 40.1 (which closed 2 of its flagged code-level follow-ups) and predated the GPU GREEN. At close time the audit status and the on-disk Phase 40 `human_needed` verification both lagged reality, so the close required a manual re-verification step to flip Phase 40 to `passed`. The audit should be re-run (or its status field refreshed) when its drivers change.
+- **`STATE.md` status lagged artifacts.** STATE.md frontmatter still read `status: verifying` after VERIFICATION.md had `passed` — the smart-entry / progress routing keyed off the stale STATE status. Verification status should propagate back to STATE.md at verify time.
+- **Summary one-liners are too noisy for milestone accomplishments.** The `summary-extract` one-liners fed into the auto-generated MILESTONES.md entry were rule-fix notes ("Rephrased module docstring..."), not milestone-level achievements — they had to be rewritten by hand at close. Plan summaries should carry a one-line *outcome* (what shipped), not a one-line *fix note*.
+
+### Patterns Established
+- **CPU-runnable regression guards for externally-gated behavior** — when a behavior can only execute on special infra (GPU, real ROS2, K8s), ship a CPU-runnable structural guard (AST walk, glob check, stub subprocess) so the gate is observable locally and the full test only runs where it can.
+- **Smoke-vs-convergence split for world-model CI** — CI asserts structural properties (finite/non-explosive loss, checkpoint exists), NOT converged `MSE<0.01` thresholds; the `dreamer-gpu` job is a smoke gate, not a training-quality gate.
+- **`embodied.Checkpoint` native `*.ckpt` (no `.pt` shim, no dual-glob)** — single checkpoint format, single glob, signature-UNCHANGED parent helper; `task`+`checkpoint_dir` threaded to the child so the parent resume path honors custom dirs.
+- **Post-verification insertion phase for audit-driven follow-ups** — a small `40.1` phase with two disjoint-module parallel plans is the right shape for closing an audit's own flagged code-level gaps without reopening the milestone scope.
+
+### Key Lessons
+- **Re-run the audit (or refresh its status) when its drivers change.** An audit with `gaps_found` that predates the work closing those gaps is misleading at close — the close then needs a manual reconciliation step that should have been automatic.
+- **Verification status is the source of truth for phase-complete, not STATE.md `status:`.** Routing that keys off STATE.md's `status` field will lag a passed VERIFICATION.md. The canonical `verification.status` query is the right gate.
+- **A human_needed verification item with a clear ops action is closeable.** The Phase 40 GPU GREEN was a documented user action item (enable runner → observe GREEN), not a code gap; once performed and recorded, the phase flips to `passed` cleanly. Designing the deferral (INV-8 SKIP-by-design) made the close a one-step ops action instead of a re-build.
+
+### Cost Observations
+- v0.6.0 spanned 2026-06-24 → 2026-07-15 (planning through close); 6 phases / 18 plans / 36 tasks.
+- Test baseline grew 1,325 → 1,513 passing (+188).
+- Model mix: planner/executor per config; Phase 40 GPU runtime observed on GitHub-hosted GPU runner (ops step, not a token cost).
+
 ## Milestone: v0.5.0 — Scene Editor & UX Polish
 
 **Shipped:** 2026-06-24
