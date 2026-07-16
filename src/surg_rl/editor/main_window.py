@@ -84,6 +84,13 @@ class EditorWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(self._viewport_panel)
 
         self._build_dock_widgets()
+        # CR-01: capture the factory-default snapshot from the CODE-BUILT layout
+        # BEFORE _restore_geometry re-applies the user's saved QSettings layout,
+        # so Reset Layout restores the factory arrangement, not the user's
+        # last-saved (e.g. tabified) layout. saveState() is valid pre-show because
+        # the dock widgets are already added; the one-shot _captured guard makes
+        # the later showEvent capture a defensive no-op (D-01).
+        self._dock_state.capture_factory_default(self)
         self._build_menu_bar()
         self._build_status_bar()
         self._wire_drag_drop()
