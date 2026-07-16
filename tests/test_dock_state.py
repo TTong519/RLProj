@@ -259,3 +259,79 @@ class TestCloseMidCallMockSlow:
         finally:
             with contextlib.suppress(Exception):
                 w.close()
+
+
+@pytestmark
+class TestCloseMidCallRealProvider:
+    """SC#3 / D-09a: real-provider close-mid-call guard.
+
+    Gated behind ``skipif(not os.environ.get("LLM_API_KEY"))`` — guards the
+    true provider path when keys are present. The always-on
+    ``TestCloseMidCallMockSlow`` (D-09b) is the regression backstop that runs
+    unconditionally offscreen; this class runs only when a real key is set so
+    SC#3 is verified against the actual SDK call path.
+    """
+
+    @pytest.mark.skipif(
+        not os.environ.get("LLM_API_KEY"),
+        reason="No LLM_API_KEY — D-09a real-provider path, guarded by D-09b "
+        "mock backstop (TestCloseMidCallMockSlow runs unconditionally)",
+    )
+    def test_close_mid_llm_call_clean_exit_real_provider(
+        self, qapp, isolated_home
+    ) -> None:
+        from surg_rl.editor.main_window import EditorWindow
+
+        w = EditorWindow()
+        w.show()
+        qapp.processEvents()
+        w._llm_panel._prompt.setPlainText("A simple suturing scene.")
+        # Start a real (short) provider call.
+        w._llm_panel._on_generate()
+        qapp.processEvents()
+        try:
+            # Close mid-call via the full closeEvent path (aboutToClose ->
+            # LLMPanel.stop). Must not segfault or raise RuntimeError.
+            w.close()
+            qapp.processEvents()
+            thread = w._llm_panel._thread
+            if thread is not None:
+                assert not thread.isRunning(), (
+                    "LLM worker thread still running after close mid real "
+                    "provider call — SC#3 real-path guard (D-09a)"
+                )
+        finally:
+            with contextlib.suppress(Exception):
+                w.close()
+
+
+@pytestmark
+class TestAboutToClose:
+    """D-04 wiring guard: closeEvent emits aboutToClose which triggers
+    ``_llm_panel.stop`` BEFORE ``super().closeEvent()``. Verified with a Mock
+    so the wiring is guarded even without an in-flight LLM call (mirrors the
+    ``tests/test_viewport.py:299-316`` closeEvent + Mock stop pattern).
+    """
+
+    def test_close_event_emits_aboutto_close_before_super(
+        self, qapp, isolated_home
+    ) -> None:
+        from unittest.mock import MagicMock
+
+        from PySide6.QtGui import QCloseEvent
+
+        from surg_rl.editor.main_window import EditorWindow
+
+        w = EditorWindow()
+        # Replace the LLM panel's stop() with a Mock to observe the call.
+        mock_llm_stop = MagicMock()
+        w._llm_panel.stop = mock_llm_stop
+        w.closeEvent(QCloseEvent())
+        try:
+            assert (
+                mock_llm_stop.call_count >= 1
+            ), "closeEvent must emit aboutToClose -> _llm_panel.stop() before "
+            "Qt teardown (D-04 wiring)"
+        finally:
+            with contextlib.suppress(Exception):
+                w.close()

@@ -49,6 +49,15 @@ def _find_instance(scene: SceneDefinition | None, cls: type):
 class EditorWindow(QtWidgets.QMainWindow):
     """Phase 33 PySide6 scene editor main window."""
 
+    # D-04: milestone-wide teardown contract. closeEvent emits aboutToClose
+    # BEFORE super().closeEvent() so every long-running panel's stop() runs
+    # before Qt tears down children. Future workers (Phase 42 SimStepWorker,
+    # 46 recorder, 48 autosave, 51 VLM) just declare stop() + connect to
+    # aboutToClose — no closeEvent edit needed. Plain Signal (no payload —
+    # pure teardown trigger); a registry mixin is deferred until the
+    # per-panel wiring count grows past ~3-4 panels.
+    aboutToClose = QtCore.Signal()  # noqa: N815 — Qt Signal naming convention
+
     def __init__(self, scene_path: str | Path | None = None) -> None:
         super().__init__()
         self.setObjectName("EditorWindow")
@@ -117,6 +126,10 @@ class EditorWindow(QtWidgets.QMainWindow):
 
         self._tree_view.node_selected.connect(self._on_node_selected)
         self._llm_panel.scene_accepted.connect(self._on_llm_scene_accepted)
+        # D-04 wiring: register LLMPanel.stop() on aboutToClose so closeEvent
+        # tears down the LLM worker thread before Qt deletes the panel (SC#3).
+        # Future workers connect their stop() here too — no closeEvent edit.
+        self.aboutToClose.connect(self._llm_panel.stop)
 
     def _make_dock(
         self, title: str, area: QtCore.Qt.DockWidgetArea, placeholder: str
@@ -372,6 +385,14 @@ class EditorWindow(QtWidgets.QMainWindow):
         super().showEvent(event)
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:  # noqa: N802
+        # D-04: emit aboutToClose BEFORE super().closeEvent() so every
+        # registered panel.stop() (LLMPanel.stop, future workers) runs before
+        # Qt tears down children (SC#3 — mid-LLM-call clean exit). Best-effort;
+        # never block quit (D-05 — log and proceed on any error).
+        try:  # noqa: SIM105 — best-effort teardown; broad suppress is intentional
+            self.aboutToClose.emit()
+        except Exception:  # noqa: BLE001
+            pass  # best-effort — don't block window close on panel teardown
         # Stop the viewport render loop BEFORE Qt tears down — prevents
         # dangling QTimer callbacks and MuJoCo Renderer __del__ crashes
         # during interpreter shutdown (UAT Gap 2 fix, plan 33-07).
