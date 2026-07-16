@@ -140,3 +140,9 @@ None — `LLMPanel.stop()` and the `aboutToClose` wiring are fully implemented a
 | `9bf272f` | feat | `feat(41-02): aboutToClose signal + closeEvent wiring + real-provider test` |
 
 GUI-18 fully delivered: SC#1/SC#2/SC#4 by Plan 01; SC#3 by Plan 02. The `aboutToClose` teardown contract is established for Phase 42 (SimStepWorker), 46 (recorder), 48 (autosave), and 51 (VLM) workers — they declare `stop()` + connect to `aboutToClose`, no `closeEvent` edit needed.
+
+## Self-Check: PASSED
+
+- All created/modified files exist on disk: `src/surg_rl/editor/llm_panel.py`, `src/surg_rl/editor/main_window.py`, `tests/test_dock_state.py`, `.planning/phases/41-dock-layout-reset-closeevent-teardown/41-02-SUMMARY.md`.
+- All commits present in git log: `fd50ddb` (RED), `d78f8b9` (GREEN Task 1), `9bf272f` (Task 2), `9167ad4` (SUMMARY).
+- No off-limits files modified (`dock_state.py`, `viewport.py`, `tree_view.py`, `.claude/settings.local.json` untouched by this plan's commits).
