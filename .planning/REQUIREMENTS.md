@@ -67,7 +67,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GUI-18 | Phase 41 | In Progress |
+| GUI-18 | Phase 41 | Complete |
 | GUI-11 | Phase 42 | Pending |
 | GUI-12 | Phase 43 | Pending |
 | GUI-13 | Phase 44 | Pending |

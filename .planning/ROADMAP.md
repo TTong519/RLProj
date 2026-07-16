@@ -28,7 +28,7 @@ For the historical record of shipped milestones, see `.planning/milestones/v0.X.
 
 **Phase numbering continues from v0.6.0 (ended at 40.1).** Build order is user-confirmed: GUI-18 → GUI-11 → GUI-12 → GUI-13 → GUI-14 → GUI-15 → GUI-16 → GUI-17 → GEN-01 → GEN-02 → GEN-03/04/05. One phase per GUI requirement (no GUI grouping against the build order); GEN-03/04/05 grouped (tightly coupled — share the GEN-02 bounded repair loop + structured-output protocol).
 
-- [ ] **Phase 41: Dock Layout Reset & CloseEvent Teardown** - GUI-18 — fixes bug #3 (dock panels not reset on rerun) + closeEvent teardown harness
+- [x] **Phase 41: Dock Layout Reset & CloseEvent Teardown** - GUI-18 — fixes bug #3 (dock panels not reset on rerun) + closeEvent teardown harness (completed 2026-07-15)
 - [ ] **Phase 42: Render/Sim Decoupling & Animated Viewport** - GUI-11 — fixes bugs #1 (immobile preview) + #2 (<10fps) via SimStepWorker + RenderPollLoop
 - [ ] **Phase 43: Multi-View Layout** - GUI-12 — synchronized N-view layout sharing one sim-state source
 - [ ] **Phase 44: Lighting Controls** - GUI-13 — add/move/intensity/color lights, persisted + undoable
@@ -54,7 +54,7 @@ For the historical record of shipped milestones, see `.planning/milestones/v0.X.
   3. User closes the editor mid-LLM-call (or mid-any long-running panel operation) — the editor exits cleanly without segfault or `RuntimeError: Internal C++ object already deleted`
   4. Every dock panel has a unique `objectName` so `saveState()`/`restoreState()` round-trip correctly (not silently no-op)
 
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 Plans:
 **Wave 1**
 
