@@ -18,8 +18,10 @@ so QSettings does not pollute the developer's real
 
 from __future__ import annotations
 
+import contextlib
 import os
 import sys
+import time
 
 import pytest
 
@@ -202,3 +204,58 @@ class TestUpdateScene:
             )
         finally:
             w.close()
+
+
+@pytestmark
+class TestCloseMidCallMockSlow:
+    """SC#3 / D-09b: closing mid-LLM-call exits cleanly (always-on backstop).
+
+    Monkeypatches ``TextParser.parse_sync`` to ``time.sleep(2)`` so the test
+    always runs offscreen without an API key. It triggers ``_on_generate``,
+    then calls ``LLMPanel.stop()`` (the canonical teardown used by
+    ``aboutToClose``) and asserts the worker thread is no longer running and
+    no ``RuntimeError: Internal C++ object already deleted`` was raised.
+
+    RED in Task 1: ``LLMPanel.stop`` does not exist yet (AttributeError — the
+    honest RED baseline). Task 1 GREEN implements ``stop()`` (cooperative
+    cancel + ``thread.quit()`` + ``thread.wait(3000)`` + timeout log).
+    """
+
+    def test_close_mid_llm_call_clean_exit_mock_slow(
+        self, qapp, isolated_home, monkeypatch
+    ) -> None:
+        from surg_rl.editor.main_window import EditorWindow
+        from surg_rl.scene_definition import SceneDefinition
+        from surg_rl.scene_generation import text_parser as tp
+
+        # Monkeypatch the slow parser path — always runs offscreen (no key).
+        def slow_parse_sync(self, input_data, **kwargs):  # noqa: ANN001, ANN002, ANN003
+            time.sleep(2)  # simulate a multi-second provider call
+            return SceneDefinition()
+
+        monkeypatch.setattr(tp.TextParser, "parse_sync", slow_parse_sync)
+
+        w = EditorWindow()
+        w.show()
+        qapp.processEvents()
+        w._llm_panel._prompt.setPlainText("a test prompt")
+        # Start the worker thread (worker calls the monkeypatched slow parse).
+        w._llm_panel._on_generate()
+        qapp.processEvents()
+        try:
+            # Close mid-call via the canonical teardown used by aboutToClose.
+            # Task 1: stop() does not exist yet -> AttributeError (honest RED).
+            # Task 1 GREEN: stop() cancels + thread.quit() + thread.wait(3000).
+            w._llm_panel.stop()
+            qapp.processEvents()
+            # Worker thread must have exited cleanly (no segfault, no
+            # RuntimeError: Internal C++ object already deleted).
+            thread = w._llm_panel._thread
+            if thread is not None:
+                assert not thread.isRunning(), (
+                    "LLM worker thread still running after stop() — "
+                    "close mid-LLM-call must exit cleanly (SC#3 / D-05)"
+                )
+        finally:
+            with contextlib.suppress(Exception):
+                w.close()
