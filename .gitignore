@@ -101,6 +101,7 @@ results/
 *.tmp
 .opencode/
 .claude/worktrees/
+.planning/research/.cache/
 
 # Stray training artifacts
 MUJOCO_LOG.TXT

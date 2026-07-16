@@ -12,9 +12,22 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 
 **Shipped v0.6.0** (2026-07-15) — Carried-Forward Debt Closure. All v0.1.0 through v0.6.0 milestones shipped (10 milestones, 41 phases, 127 plans, 13/13 v0.6.0 requirements satisfied). v0.6.0 was pure closure — no new user-facing features (GUI editor depth + scene generation deferred to v0.7.0). It closed the four carried-forward tech-debt items from v0.4.0–v0.5.0: real DreamerV3 integration, the TASK-02 per-level difficulty schema, K8s PVC e2e + organ-mesh licensing ADR, and the 3D fluid flag. Every item additive — the v0.4.0 + v0.4.2 + v0.5.0 baseline passes unchanged. Test baseline grew 1,325 → 1,513 passing.
 
-**Next:** v0.7.0 (not yet planned) — the deferred candidate is GUI editor depth (render/sim-decoupled viewport, multi-view/lighting/gizmos/recording, editing UX, file/IO, perf/stability: GUI-11..15) + scene generation (more task templates, better LLM text→scene, VLM image→scene, procedural/batch gen, interactive LLM clarifying-question flow: GEN-01..05). Run `/gsd-new-milestone` to plan it.
+**Next:** v0.7.0 (being planned now) — GUI editor depth (render/sim-decoupled viewport, multi-view/lighting/gizmos/recording, editing UX, file/IO, perf/stability: GUI-11..15) + scene generation (more task templates, better LLM text→scene, VLM image→scene, procedural/batch gen, interactive LLM clarifying-question flow: GEN-01..05), plus a GUI bug-fix pass (dock-panel layout reset on rerun, <10fps, immobile scene preview). GUI first, scene gen second.
 
 **v0.6.0 outcome:** Phases 36 (difficulty schema), 37 (scene-level `difficulty_blocks` + env wiring), 38 (3D fluid flag `dim_3d=True`), 39 (K8s PVC e2e + organ-mesh licensing ADR), 40 (real DreamerV3 integration + sentinel flip), and 40.1 (post-verification gap-close: DMV3-08 `checkpoint_dir` threading + Phase 38 advisories) all complete and VERIFIED `passed`. 6 phases / 18 plans; 13/13 v0.6.0 requirements closed. **Phase 40 re-verified `passed` 2026-07-15** after the `dreamer-gpu` GitHub Actions job was observed GREEN on `ubuntu-latest-4-core-gpu` — DMV3-07 real-agent runtime, DMV3-08 resume, and DMV3-10 CI GREEN are now certified (previously deferred to CI per INV-8). **Phase 40.1** closed the DMV3-08 parent-side resume gap (`checkpoint_dir` threaded into `_find_latest_checkpoint` + both call sites) and landed the Phase 38 advisories (CR-01 3D force-unit magnitude regression test green + real TWO_WAY obstacle-velocity feedback with a `dt/coupling_substeps` substep loop, 2D byte-identical). Test baseline 1,513 passing (Phase 39's e2e test is CI-only; macOS local skips by design; Phase 40's GPU-gated tests SKIP cleanly on macOS per INV-8).
+
+## Current Milestone: v0.7.0 GUI Editor Depth & Scene Generation
+
+**Goal:** Deepen the PySide6 scene editor with a render/sim-decoupled viewport, multi-view/lighting/gizmos/recording, editing UX, and file/IO — fixing the known GUI bugs (dock-panel layout reset on rerun, <10fps frame rate, immobile scene preview) — then expand scene generation (more task templates, better LLM text→scene, VLM image→scene, procedural/batch gen, interactive LLM clarifying-question flow).
+
+**Target features:**
+- GUI editor depth (GUI-11..15): render/sim-decoupled viewport, multi-view/lighting/gizmos/recording, editing UX, file/IO, perf/stability
+- GUI bug fixes: dock-panel layout reset on rerun, raise frame rate above 10fps, animate the scene preview (sim stepping in the editor viewport)
+- Scene generation (GEN-01..05): more task templates, better LLM text→scene, VLM image→scene, procedural/batch gen, interactive LLM clarifying-question flow
+
+**Order:** GUI depth + bug fixes first → scene generation second.
+
+**Key context:** Phase numbering continues from 41 (v0.6.0 ended at 40.1). Known GUI bugs fold into the perf/stability (GUI-15) + viewport-decoupling (GUI-11) phases rather than a standalone phase — the <10fps and immobile-preview bugs likely share a root cause in render/sim coupling. GUI stays in the stock interpreter (no `mjpython` re-exec, per the v0.5.0 decision). Dock-panel layout reset is a QMainWindow dock-state persistence/restore issue.
 
 ## Shipped Milestone: v0.6.0 Carried-Forward Debt Closure (SHIPPED 2026-07-15)
 
@@ -169,10 +182,11 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 - ✓ **3D Fluid Flag (`dim_3d=True`)** — 3D Eulerian grid fluids via PhiFlow 3D `Box`/`StaggeredGrid` + `make_incompressible` pressure projection; ONE_WAY coupling default (stable on thin instruments), TWO_WAY opt-in with real obstacle-velocity feedback + `dt/coupling_substeps` substep loop (Phase 40.1 closed the previously-inert knobs); `grid_size`-required memory-blow-up guard (SC#3); `union(*geoms)` NaN-regression covering both dims (SC#4); `fluid_step` hook unchanged (SC#5). 2D xz-slice path byte-identical to v0.5.0 (SC#1); CR-01 3D force-unit magnitude regression test green. (FLUID-01, FLUID-02, FLUID-03) — Phases 38 + 40.1
 - ✓ **K8s PVC e2e + organ-mesh licensing decision** — checkpoint-persistence e2e de-stubbed via `pytest-kind`'s session-scoped `kind_cluster` fixture (apply → `kubectl wait --for=condition=Bound` → write/read Jobs → `assert read_sha == write_sha` on a bound PVC); dedicated CPU-only `k8s-e2e` CI job on ubuntu-latest (observed GREEN 2026-07-04; re-verified 2026-07-09). Organ-mesh licensing recorded as ADR-0001 (MADR, status accepted): procedural generation is the DEFAULT, SurgToolLoc REJECTED on modality mismatch (primary — endoscopic video + tool-presence labels, no organ meshes) + MICCAI/EndoVis non-commercial clause (secondary, quoted verbatim, both public URLs cited). (DEPLOY-01, ASET-06) — Phase 39
 
-### Active (next milestone — not yet planned)
+### Active (v0.7.0 — being planned)
 
-- [ ] **GUI editor depth** (GUI-11..15) — render/sim-decoupled viewport, multi-view/lighting/gizmos/recording, editing UX, file/IO, perf/stability (deferred to v0.7.0)
-- [ ] **Scene generation** (GEN-01..05) — more task templates, better LLM text→scene, VLM image→scene, procedural/batch gen, interactive LLM clarifying-question flow (deferred to v0.7.0)
+- [ ] **GUI editor depth** (GUI-11..15) — render/sim-decoupled viewport, multi-view/lighting/gizmos/recording, editing UX, file/IO, perf/stability
+- [ ] **GUI bug fixes** — dock-panel layout reset on rerun, raise frame rate above 10fps, animate the scene preview (sim stepping in editor viewport)
+- [ ] **Scene generation** (GEN-01..05) — more task templates, better LLM text→scene, VLM image→scene, procedural/batch gen, interactive LLM clarifying-question flow
 
 ### Out of Scope
 
@@ -204,6 +218,7 @@ End-to-end pipeline from a text description or JSON scene definition to a traine
 | v0.4.1 | 25–28 | 4 | Complete |
 | v0.4.2 | 29–30 | 3 | Complete |
 | v0.5.0 | 31–35 | 22 | Complete (Scene Editor & UX Polish) |
+| v0.6.0 | 36–40.1 | 18 | Complete (Carried-Forward Debt Closure) |
 
 ## Context
 
@@ -278,4 +293,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-07-15 — v0.6.0 Carried-Forward Debt Closure SHIPPED. 6 phases (36–40.1) / 18 plans / 13-of-13 requirements closed; all phases VERIFIED `passed`. Phase 40 re-verified `passed` after the `dreamer-gpu` CI job was observed GREEN on `ubuntu-latest-4-core-gpu` (2026-07-15) — DMV3-07/08/10 runtime GREEN certified. Phase 40.1 closed the DMV3-08 parent-side resume-path gap (`checkpoint_dir` threaded into `_find_latest_checkpoint` + both call sites) and the Phase 38 advisories (CR-01 magnitude test green + real TWO_WAY feedback + `dt/coupling_substeps` substep loop, 2D byte-identical). Test baseline 1,513 passing. See `.planning/milestones/v0.6.0-ROADMAP.md` for the archived milestone.*
+*Last updated: 2026-07-15 — v0.7.0 milestone started (GUI Editor Depth & Scene Generation). v0.6.0 Carried-Forward Debt Closure SHIPPED 2026-07-15: 6 phases (36–40.1) / 18 plans / 13-of-13 requirements closed; all phases VERIFIED `passed`. Test baseline 1,513 passing. See `.planning/milestones/v0.6.0-ROADMAP.md` for the archived milestone.*
