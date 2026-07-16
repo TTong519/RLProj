@@ -62,7 +62,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 41-02-PLAN.md — aboutToClose teardown harness + LLMPanel.stop() + closeEvent emit (SC#3)
+- [x] 41-02-PLAN.md — aboutToClose teardown harness + LLMPanel.stop() + closeEvent emit (SC#3)
 
 **UI hint**: yes
 
@@ -260,7 +260,7 @@ Phases execute in numeric order: 41 → 42 → 43 → ... → 51
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 41. Dock Layout Reset & CloseEvent Teardown | v0.7.0 | 1/2 | In Progress|  |
+| 41. Dock Layout Reset & CloseEvent Teardown | v0.7.0 | 2/2 | In Progress|  |
 | 42. Render/Sim Decoupling & Animated Viewport | v0.7.0 | 0/TBD | Not started | - |
 | 43. Multi-View Layout | v0.7.0 | 0/TBD | Not started | - |
 | 44. Lighting Controls | v0.7.0 | 0/TBD | Not started | - |

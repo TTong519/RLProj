@@ -4,17 +4,17 @@ milestone: v0.7.0
 milestone_name: Phases
 current_phase: 41
 current_phase_name: Dock Layout Reset & CloseEvent Teardown
-status: executing
-stopped_at: Completed 41-01-PLAN.md
-last_updated: "2026-07-16T01:24:41.307Z"
+status: verifying
+stopped_at: "Completed 41-02-PLAN.md (GUI-18 SC#3 + aboutToClose teardown contract)"
+last_updated: "2026-07-16T01:49:42.195Z"
 last_activity: 2026-07-15
 last_activity_desc: Phase 41 execution started
 progress:
   total_phases: 11
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 0
+  completed_plans: 2
+  percent: 9
 ---
 
 # Project State
@@ -32,10 +32,10 @@ See: .planning/PROJECT.md (updated 2026-07-15 — v0.7.0 milestone started)
 
 Phase: 41 (Dock Layout Reset & CloseEvent Teardown) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-15 — Phase 41 execution started
 
-Progress: [█████░░░░░] 50%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -71,6 +71,7 @@ Progress: [█████░░░░░] 50%
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 41 P01 | 31m | 3 tasks | 5 files |
+| Phase 41 P02 | 18m | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -88,6 +89,8 @@ Decisions are logged in PROJECT.md Key Architecture Decisions. Recent decisions 
 - [v0.6.0 shipped]: Real DreamerV3 integration complete; `dreamer-gpu` CI GREEN on `ubuntu-latest-4-core-gpu` (2026-07-15). All v0.4.0+v0.4.2+v0.5.0 baseline passes unchanged (1,513 passing).
 - [Phase ?]: D-01: Factory-default dock layout captured at first showEvent via QByteArray (primary) + code-level rebuild (fallback), NOT persisted to QSettings
 - [Phase ?]: D-06: In-place update_scene on ViewportPanel + SceneTreeView (no widget recreation) — bug #3 root cause fix; PropertyForm NOT folded in this phase
+- [Phase ?]: D-04/D-05: aboutToClose plain-Signal teardown contract on EditorWindow + LLMPanel.stop() cooperative teardown (cancel flag + thread.quit() + thread.wait(3000) + timeout log); future Phase 42/46/48/51 workers plug in via stop() + connect, no closeEvent edit
+- [Phase ?]: D-09 two-pronged SC#3 verification: TestCloseMidCallMockSlow (always-on offscreen backstop, monkeypatch parse_sync to sleep) + TestCloseMidCallRealProvider (skipif no LLM_API_KEY, real provider path)
 
 ### Pending Todos
 
@@ -138,8 +141,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-16T01:24:41.295Z
-Stopped at: Completed 41-01-PLAN.md
+Last session: 2026-07-16T01:49:42.177Z
+Stopped at: Completed 41-02-PLAN.md (GUI-18 SC#3 + aboutToClose teardown contract)
 Resume file: None
 
 *Updated: 2026-07-15 — v0.7.0 roadmap created. 11 phases (41–51), 13/13 requirements mapped (0 unmapped). Next: `/gsd-plan-phase 41`.*

@@ -28,7 +28,7 @@ Requirements for v0.7.0. Each maps to a roadmap phase. REQ-IDs continue the GUI 
 - [ ] **GUI-15**: User can record the viewport to an mp4 video from within the editor (needs the one new dep `imageio-ffmpeg>=0.6.0`)
 - [ ] **GUI-16**: User can multi-select, copy/paste, and duplicate scene nodes with keyboard shortcuts, with selection synced across tree, viewport, and form
 - [ ] **GUI-17**: User can recover unsaved work via autosave + a crash-recovery prompt on launch, and the recent-files list works correctly (also fixes the duplicated `_refresh_recent_menu` latent bug)
-- [ ] **GUI-18**: User can reset the editor layout to default (dock panels restore on rerun), and closing the editor mid-operation does not crash — fixes the dock-not-reset-on-rerun bug via `DockStateManager` + a `closeEvent` teardown harness
+- [x] **GUI-18**: User can reset the editor layout to default (dock panels restore on rerun), and closing the editor mid-operation does not crash — fixes the dock-not-reset-on-rerun bug via `DockStateManager` + a `closeEvent` teardown harness
 
 ### Scene Generation
 
