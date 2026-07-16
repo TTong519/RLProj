@@ -6,9 +6,12 @@ from typing import TYPE_CHECKING
 
 from surg_rl.editor import QtCore, QtWidgets
 from surg_rl.editor._safe_error import safe_error_message
+from surg_rl.utils.logging import get_logger
 
 if TYPE_CHECKING:
     from surg_rl.scene_definition import SceneDefinition
+
+logger = get_logger(__name__)
 
 
 class TextParserWorker(QtCore.QObject):
@@ -124,11 +127,41 @@ class LLMPanel(QtWidgets.QWidget):
         self._btn_cancel.setEnabled(True)
         self._thread.start()
 
-    def _on_cancel(self) -> None:
+    def stop(self) -> None:
+        """Cooperative teardown (D-05): cancel flag + thread.quit() + thread.wait(3000).
+
+        Called from ``EditorWindow.aboutToClose`` BEFORE ``super().closeEvent()``
+        so closing the editor mid-LLM-call never segfaults or raises
+        ``RuntimeError: Internal C++ object already deleted`` (Pitfall 3).
+
+        On ``wait()`` timeout (hung parser): logs a warning and proceeds
+        (best-effort, NEVER blocks quit). Does NOT call ``thread.terminate()``
+        (risks leaving SDK/parser state inconsistent) and does NOT call
+        ``thread.deleteLater()`` synchronously — the existing
+        ``thread.finished -> thread.deleteLater`` wiring (set up in
+        ``_on_generate``) handles deletion after the thread actually exits
+        (Pitfall 4).
+        """
         if self._worker is not None:
+            # Cross-thread cancel flag (dynamic Qt property — the worker's
+            # run() polls it; do NOT switch to a Python attribute, the worker
+            # lives on the QThread and the property is the thread-safe accessor).
             self._worker.setProperty("_cancelled", True)
         if self._thread is not None:
             self._thread.quit()
+            if not self._thread.wait(3000):
+                logger.warning(
+                    "LLMPanel worker thread did not exit within 3s; "
+                    "proceeding with close"
+                )
+        # Do NOT call deleteLater here — thread.finished -> deleteLater is
+        # already wired in _on_generate (Pitfall 4).
+
+    def _on_cancel(self) -> None:
+        # The Cancel button keeps working via the canonical stop() teardown
+        # (D-05). stop() is the same path aboutToClose uses, so the Cancel
+        # button and closeEvent share one teardown implementation.
+        self.stop()
 
     def _on_parse_finished(self, scene: SceneDefinition) -> None:
         import json
