@@ -9,6 +9,7 @@ Per GUI-04 + CONTEXT.md D-05, D-08, D-17:
 
 from __future__ import annotations
 
+import contextlib
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
@@ -94,6 +95,29 @@ class SceneTreeView(QtWidgets.QTreeView):
                     child_label = getattr(child, "name", None) or f"{label[:-1]} {i}"
                     child_item = self._make_node(child_label, child, is_collection=False)
                     section_item.appendRow(child_item)
+
+    def update_scene(self, scene: SceneDefinition) -> None:
+        """In-place scene swap — rebuild the QStandardItemModel rows (D-06).
+
+        Swaps ``self._scene``, clears the model, re-sets the horizontal header
+        labels (``clear()`` drops them), and re-runs ``_build_tree`` +
+        ``expandAll``. The ``selectionModel``/``customContextMenuRequested``/
+        ``node_selected`` wiring (set on ``self`` in ``__init__``) is
+        preserved (A2): we reuse ``self._model`` and only ``clear()`` +
+        repopulate it, so the view's signal connections survive. NO new
+        ``SceneTreeView``, NO ``setWidget``.
+        """
+        self._scene = scene
+        self._model.clear()
+        self._model.setHorizontalHeaderLabels(["Scene Elements"])  # clear() drops headers
+        self._build_tree()
+        self.expandAll()
+        # A2: ``clear()`` can reset the selectionModel on some Qt versions;
+        # re-wire ``currentChanged`` defensively so node_selected keeps firing.
+        sm = self.selectionModel()
+        if sm is not None:
+            with contextlib.suppress(RuntimeError, TypeError):
+                sm.currentChanged.connect(self._on_selection_changed)
 
     def _make_node(self, label: str, value: Any, is_collection: bool) -> QtGui.QStandardItem:
         item = QtGui.QStandardItem(label)

@@ -301,19 +301,15 @@ class EditorWindow(QtWidgets.QMainWindow):
         self._set_status(path.name, sim, "—", "valid")
 
     def _refresh_viewport_and_tree(self) -> None:
-        from surg_rl.editor.tree_view import SceneTreeView
-        from surg_rl.editor.viewport import ViewportPanel
-
-        self._tree_view = SceneTreeView(self._scene or _empty_scene_stub())
-        self._tree_dock.setWidget(self._tree_view)
-        self._tree_view.node_selected.connect(self._on_node_selected)
-        old_panel = self._viewport_panel
-        self._viewport_panel = ViewportPanel(
-            scene=self._scene or _empty_scene_stub(),
-            on_fps_update=self._update_fps_status,
-        )
-        self.setCentralWidget(self._viewport_panel)
-        old_panel.stop()
+        # D-06: in-place update_scene swap — NO widget recreation (bug #3 fix).
+        # The widget identity (ViewportPanel / SceneTreeView) survives, so the
+        # dock geometry keyed on objectName survives scene loads. The
+        # node_selected connection wired in _build_dock_widgets survives too
+        # (no re-connect needed). The old simulator is closed inside
+        # ViewportPanel.update_scene (Pitfall 7), and _tick reloads the new
+        # scene's simulator on the next tick via _on_load_simulator.
+        self._tree_view.update_scene(self._scene or _empty_scene_stub())
+        self._viewport_panel.update_scene(self._scene or _empty_scene_stub())
 
     def _on_undo(self) -> None:
         from surg_rl.editor.undo_stack import SceneUndoStack

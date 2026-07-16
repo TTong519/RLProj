@@ -159,3 +159,46 @@ class TestDockRoundTrip:
             )
         finally:
             w2.close()
+
+
+@pytestmark
+class TestUpdateScene:
+    """SC#2 regression guard: _refresh_viewport_and_tree must NOT recreate the
+    ViewportPanel / SceneTreeView widgets (the bug #3 root cause). The widget
+    identity (``id()``) is unchanged across a refresh because update_scene
+    swaps state in place rather than constructing new widgets.
+    """
+
+    def test_update_scene_does_not_recreate_viewport(self, qapp, isolated_home) -> None:
+        from surg_rl.editor.main_window import EditorWindow
+
+        w = EditorWindow()
+        w.show()
+        qapp.processEvents()
+        vp_id = id(w._viewport_panel)
+        w._refresh_viewport_and_tree()
+        qapp.processEvents()
+        try:
+            assert id(w._viewport_panel) == vp_id, (
+                "_refresh_viewport_and_tree must NOT recreate ViewportPanel "
+                "(bug #3 root cause — use update_scene in-place swap)"
+            )
+        finally:
+            w.close()
+
+    def test_update_scene_does_not_recreate_tree(self, qapp, isolated_home) -> None:
+        from surg_rl.editor.main_window import EditorWindow
+
+        w = EditorWindow()
+        w.show()
+        qapp.processEvents()
+        tree_id = id(w._tree_view)
+        w._refresh_viewport_and_tree()
+        qapp.processEvents()
+        try:
+            assert id(w._tree_view) == tree_id, (
+                "_refresh_viewport_and_tree must NOT recreate SceneTreeView "
+                "(bug #3 root cause — use update_scene in-place swap)"
+            )
+        finally:
+            w.close()

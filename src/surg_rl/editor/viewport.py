@@ -396,6 +396,24 @@ class ViewportPanel(QtWidgets.QWidget):
             "target": (0.0, 0.0, 0.0),
         }
 
+    def update_scene(self, scene: SceneDefinition) -> None:
+        """In-place scene swap — NO widget recreation (D-06, bug #3 fix).
+
+        Closes the old simulator (Pitfall 7 — reuse the ``stop()`` suppress
+        pattern), sets ``_simulator = None`` so ``_tick`` reloads via
+        ``_on_load_simulator`` on the next tick, swaps ``_scene``, and resets
+        the camera (A3 — new scene = fresh view). The widget identity (and
+        thus the dock geometry keyed on objectName) is preserved — no
+        ``setCentralWidget``, no new ``ViewportPanel``. ``_running`` stays
+        True so the render loop continues across the swap.
+        """
+        with contextlib.suppress(AttributeError, OSError):
+            if self._simulator is not None:
+                self._simulator.close()
+        self._simulator = None  # forces _tick to reload via _on_load_simulator
+        self._scene = scene
+        self.reset_camera()  # A3 — new scene = fresh view
+
 
 def _default_load_simulator(scene: SceneDefinition) -> BaseSimulator | None:
     """Default simulator loader. Returns None on import error (PySide6-free or no backend).
