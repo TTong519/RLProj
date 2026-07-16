@@ -164,6 +164,74 @@ class TestDockRoundTrip:
 
 
 @pytestmark
+class TestResetLayoutReturningUser:
+    """CR-01 regression: a returning user with a saved (rearranged) layout must
+    have Reset Layout restore the FACTORY arrangement, not their last-saved one.
+
+    The factory-default snapshot must be captured from the code-built layout
+    BEFORE ``_restore_geometry`` re-applies the user's saved QSettings layout in
+    ``__init__``. If capture happens at ``showEvent`` instead, the snapshot is
+    the user's restored layout and Reset Layout is a no-op in the common case
+    (a returning user who has rearranged docks). ``isolated_home`` round-trips a
+    real saved tabified layout across two EditorWindow instances so this
+    exercises the true returning-user path (not the empty-QSettings path the
+    SC#1 test starts from).
+
+    RED on the capture-at-showEvent code; GREEN once capture moves to
+    ``__init__`` before ``_restore_geometry`` (D-01, CR-01 fix).
+    """
+
+    def test_reset_layout_restores_factory_split_for_returning_user(
+        self, qapp, isolated_home
+    ) -> None:
+        from PySide6.QtCore import Qt
+
+        from surg_rl.editor.main_window import EditorWindow
+
+        # Session 1: rearrange (tabify tree+properties), close -> closeEvent
+        # saves the tabified layout to QSettings via save_window (which syncs).
+        w1 = EditorWindow()
+        w1.show()
+        qapp.processEvents()
+        w1.tabifyDockWidget(w1._tree_dock, w1._properties_dock)
+        qapp.processEvents()
+        assert w1._properties_dock in w1.tabifiedDockWidgets(w1._tree_dock), (
+            "precondition: tree + properties tabified before close"
+        )
+        w1.close()  # closeEvent -> save_window -> tabified layout persisted
+        qapp.processEvents()
+
+        # Session 2 (returning user): __init__ restores the saved tabified
+        # layout via _restore_geometry, then Reset Layout must restore the
+        # FACTORY split (tree=Left, properties=Right), not the saved tabified.
+        w2 = EditorWindow()
+        w2.show()
+        qapp.processEvents()
+        assert w2._properties_dock in w2.tabifiedDockWidgets(w2._tree_dock), (
+            "precondition: returning user's saved tabified layout must restore "
+            "on reopen (else this test is not exercising the returning-user path)"
+        )
+        w2._action_reset_layout()
+        qapp.processEvents()
+        try:
+            tabified = w2.tabifiedDockWidgets(w2._tree_dock)
+            assert w2._properties_dock not in tabified, (
+                "CR-01: Reset Layout must restore the factory SPLIT arrangement "
+                "for a returning user, not their saved tabified layout"
+            )
+            assert (
+                w2.dockWidgetArea(w2._tree_dock).value
+                == Qt.DockWidgetArea.LeftDockWidgetArea.value
+            ), "factory: tree dock in Left area"
+            assert (
+                w2.dockWidgetArea(w2._properties_dock).value
+                == Qt.DockWidgetArea.RightDockWidgetArea.value
+            ), "factory: properties dock in Right area (not tabified with tree)"
+        finally:
+            w2.close()
+
+
+@pytestmark
 class TestUpdateScene:
     """SC#2 regression guard: _refresh_viewport_and_tree must NOT recreate the
     ViewportPanel / SceneTreeView widgets (the bug #3 root cause). The widget
