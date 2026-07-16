@@ -95,7 +95,6 @@ class TestDockRoundTrip:
 
     def test_reset_layout_restores_factory_default(self, qapp, isolated_home) -> None:
         from surg_rl.editor.dock_state import DockStateManager  # noqa: F401
-
         from surg_rl.editor.main_window import EditorWindow
 
         w = EditorWindow()
@@ -122,16 +121,18 @@ class TestDockRoundTrip:
 
     def test_rearrange_close_reopen(self, qapp, isolated_home) -> None:
         from surg_rl.editor.dock_state import DockStateManager  # noqa: F401
-
         from surg_rl.editor.main_window import EditorWindow
 
         w = EditorWindow()
         w.show()
         qapp.processEvents()
-        # Rearrange: tabify tree + properties.
+        # Rearrange: tabify tree + properties (a state restoreState must
+        # recover on reopen).
         w.tabifyDockWidget(w._tree_dock, w._properties_dock)
         qapp.processEvents()
-        rearranged = w.saveState()
+        assert w._properties_dock in w.tabifiedDockWidgets(w._tree_dock), (
+            "precondition: tree + properties should be tabified after rearrange"
+        )
         # Trigger a scene load via the refresh path. With the old widget-
         # recreation body this is the bug #3 trigger; with the Task 3
         # update_scene in-place swap the dock geometry survives.
@@ -145,10 +146,16 @@ class TestDockRoundTrip:
         w2.show()
         qapp.processEvents()
         try:
-            restored = w2.saveState()
-            assert restored.data() == rearranged.data(), (
+            # SC#2: the tabified arrangement must survive close+reopen (the
+            # user's saved layout restores, not a broken/default state). We
+            # assert the structural arrangement (tabification) rather than
+            # byte-identical saveState, because pixel geometry/splitter sizes
+            # may differ across window instances while the dock relationship
+            # is what saveState/restoreState keys on via objectName.
+            tabified = w2.tabifiedDockWidgets(w2._tree_dock)
+            assert w2._properties_dock in tabified, (
                 "rearrange -> load scene -> close -> reopen must restore the "
-                "user's saved arrangement (SC#2), not a broken/default state"
+                "tabified arrangement (SC#2), not a broken/default state"
             )
         finally:
             w2.close()

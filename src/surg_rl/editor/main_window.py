@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from surg_rl.editor import QtCore, QtGui, QtWidgets
 from surg_rl.editor._safe_error import safe_error_message
 from surg_rl.editor._settings import EditorSettings
+from surg_rl.editor.dock_state import DockStateManager
 
 if TYPE_CHECKING:
     from surg_rl.scene_definition import SceneDefinition
@@ -53,6 +54,7 @@ class EditorWindow(QtWidgets.QMainWindow):
         self.setObjectName("EditorWindow")
         self.setWindowTitle("Surg-RL Scene Editor")
         self._settings = EditorSettings()
+        self._dock_state = DockStateManager()
         self._current_path: Path | None = None
         self._scene: SceneDefinition | None = None
 
@@ -254,12 +256,7 @@ class EditorWindow(QtWidgets.QMainWindow):
         )
 
     def _action_reset_layout(self) -> None:
-        self.addDockWidget(QtCore.Qt.DockWidgetArea.LeftDockWidgetArea, self._tree_dock)
-        self.addDockWidget(QtCore.Qt.DockWidgetArea.RightDockWidgetArea, self._properties_dock)
-        self.addDockWidget(QtCore.Qt.DockWidgetArea.BottomDockWidgetArea, self._llm_dock)
-        self._tree_dock.show()
-        self._properties_dock.show()
-        self._llm_dock.show()
+        self._dock_state.reset_to_default(self)
 
     def _open_scene(self, path: Path) -> None:
         from surg_rl.scene_definition import load_scene
@@ -369,6 +366,14 @@ class EditorWindow(QtWidgets.QMainWindow):
             self.resize(1280, 800)
         if state is not None:
             self.restoreState(state)
+
+    def showEvent(self, event: QtGui.QShowEvent) -> None:  # noqa: N802
+        # Capture the factory-default dock layout at first show (D-01). The
+        # one-shot guard lives inside DockStateManager (Pitfall 5) so
+        # subsequent showEvents (minimize/restore) do NOT overwrite the
+        # factory snapshot with the user's rearranged layout.
+        self._dock_state.capture_factory_default(self)
+        super().showEvent(event)
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:  # noqa: N802
         # Stop the viewport render loop BEFORE Qt tears down — prevents
