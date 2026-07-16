@@ -5,15 +5,15 @@ milestone_name: Phases
 current_phase: 41
 current_phase_name: Dock Layout Reset & CloseEvent Teardown
 status: executing
-stopped_at: Phase 41 context gathered
-last_updated: "2026-07-15T21:37:42.291Z"
+stopped_at: Completed 41-01-PLAN.md
+last_updated: "2026-07-16T01:24:41.307Z"
 last_activity: 2026-07-15
-last_activity_desc: v0.7.0 roadmap created (11 phases, 13/13 requirements mapped)
+last_activity_desc: Phase 41 execution started
 progress:
   total_phases: 11
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 2
+  completed_plans: 1
   percent: 0
 ---
 
@@ -24,18 +24,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-15 — v0.7.0 milestone started)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation — with automatic primitive fallbacks when real assets are missing, and a benchmarking framework for systematic RL research comparisons.
-**Current focus:** v0.7.0 GUI Editor Depth & Scene Generation — Phase 41 (Dock Layout Reset & CloseEvent Teardown, GUI-18). 13 requirements across 11 phases (41–51). GUI depth + bug fixes first, scene generation second.
+**Current focus:** Phase 41 — Dock Layout Reset & CloseEvent Teardown
 
 > **Note:** v0.6.0 SHIPPED 2026-07-15 (verified closeout, 6 phases / 18 plans / 13 requirements closed, test baseline 1,513 passing). v0.7.0 roadmap created 2026-07-15 — 11 phases following the user-confirmed build order GUI-18 → GUI-11 → GUI-12 → GUI-13 → GUI-14 → GUI-15 → GUI-16 → GUI-17 → GEN-01 → GEN-02 → GEN-03/04/05. Three known GUI bugs fold into the relevant phases (bug #3 → Phase 41; bugs #1/#2 → Phase 42). Phase 45 (gizmos) flagged for `/gsd-plan-phase --research-phase 45` (2D QPainter overlay vs 3D pipeline disagreement). Phase 51 flagged for OpenAI Structured Outputs + Anthropic tool-use spike.
 
 ## Current Position
 
-Phase: 41 of 51 (Dock Layout Reset & CloseEvent Teardown)
-Plan: —
+Phase: 41 (Dock Layout Reset & CloseEvent Teardown) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-07-15 — v0.7.0 roadmap created (11 phases, 13/13 requirements mapped)
+Last activity: 2026-07-15 — Phase 41 execution started
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
@@ -66,6 +66,11 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: Stable — v0.7.0 is a depth milestone on a shipped app (GUI + scene gen); single new dep `imageio-ffmpeg>=0.6.0`
 
 *Updated after each plan completion*
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 41 P01 | 31m | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -81,6 +86,8 @@ Decisions are logged in PROJECT.md Key Architecture Decisions. Recent decisions 
 - [v0.7.0 research]: Persistent edits (lights, gizmos, transforms) MUST round-trip through `SceneDefinition` + `SceneUndoStack` (Pitfall 7) — NOT poke simulator attrs directly, or undo/save/revert silently corrupt.
 - [v0.7.0 research]: `closeEvent` must gain a teardown harness — every long-running panel gets a `stop()` (cooperative cancel + `thread.quit()` + `thread.wait(3000)`); `EditorWindow.closeEvent` calls all `stop()`s BEFORE `super().closeEvent()` (Pitfall 3).
 - [v0.6.0 shipped]: Real DreamerV3 integration complete; `dreamer-gpu` CI GREEN on `ubuntu-latest-4-core-gpu` (2026-07-15). All v0.4.0+v0.4.2+v0.5.0 baseline passes unchanged (1,513 passing).
+- [Phase ?]: D-01: Factory-default dock layout captured at first showEvent via QByteArray (primary) + code-level rebuild (fallback), NOT persisted to QSettings
+- [Phase ?]: D-06: In-place update_scene on ViewportPanel + SceneTreeView (no widget recreation) — bug #3 root cause fix; PropertyForm NOT folded in this phase
 
 ### Pending Todos
 
@@ -131,9 +138,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-15T20:42:58.411Z
-Stopped at: Phase 41 context gathered
-Resume file: .planning/phases/41-dock-layout-reset-closeevent-teardown/41-CONTEXT.md
+Last session: 2026-07-16T01:24:41.295Z
+Stopped at: Completed 41-01-PLAN.md
+Resume file: None
 
 *Updated: 2026-07-15 — v0.7.0 roadmap created. 11 phases (41–51), 13/13 requirements mapped (0 unmapped). Next: `/gsd-plan-phase 41`.*
 

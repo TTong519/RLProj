@@ -58,7 +58,7 @@ For the historical record of shipped milestones, see `.planning/milestones/v0.X.
 Plans:
 **Wave 1**
 
-- [ ] 41-01-PLAN.md — DockStateManager + Reset Layout + update_scene in-place swap (SC#1, SC#2, SC#4)
+- [x] 41-01-PLAN.md — DockStateManager + Reset Layout + update_scene in-place swap (SC#1, SC#2, SC#4)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -260,7 +260,7 @@ Phases execute in numeric order: 41 → 42 → 43 → ... → 51
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 41. Dock Layout Reset & CloseEvent Teardown | v0.7.0 | 0/TBD | Not started | - |
+| 41. Dock Layout Reset & CloseEvent Teardown | v0.7.0 | 1/2 | In Progress|  |
 | 42. Render/Sim Decoupling & Animated Viewport | v0.7.0 | 0/TBD | Not started | - |
 | 43. Multi-View Layout | v0.7.0 | 0/TBD | Not started | - |
 | 44. Lighting Controls | v0.7.0 | 0/TBD | Not started | - |

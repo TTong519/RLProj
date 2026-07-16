@@ -67,7 +67,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GUI-18 | Phase 41 | Pending |
+| GUI-18 | Phase 41 | In Progress |
 | GUI-11 | Phase 42 | Pending |
 | GUI-12 | Phase 43 | Pending |
 | GUI-13 | Phase 44 | Pending |
@@ -82,6 +82,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | GEN-05 | Phase 51 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 13 total
 - Mapped to phases: 13 (100%)
 - Unmapped: 0 ✓
