@@ -78,7 +78,16 @@ Plans:
   3. User can pause/resume the simulation preview and step it one frame at a time from the editor
   4. Render rate and sim rate are decoupled — a slow render does not slow the physics, and a fast sim does not flood the UI thread (snapshot publish capped at ~30Hz)
 
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+**Wave 1**
+
+- [ ] 42-01-PLAN.md — SimStepWorker + RenderPollLoop modules + isolated offscreen tests (SC#1, SC#2 proxy, SC#3, SC#4, D-09; TDD)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 42-02-PLAN.md — ViewportPanel integration + EditorWindow wiring (toolbar/shortcuts/status-bar/load-paused/teardown) + integration tests + _scene_has_dynamics predicate (D-04, D-06, D-08, D-11, D-12, Phase 41 D-07 extension)
+
 **UI hint**: yes
 
 ### Phase 43: Multi-View Layout
