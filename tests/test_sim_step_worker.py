@@ -131,6 +131,51 @@ def isolated_home(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# Cross-thread slot invocation helper.
+# ---------------------------------------------------------------------------
+# PySide6 has no Q_ARG macro (that's PyQt). The idiomatic PySide6 way to
+# invoke a slot cross-thread with QueuedConnection is to emit a signal that
+# is connected to the slot — Qt auto-selects QueuedConnection when the
+# emitter (UI thread) and receiver (worker QThread) live on different
+# threads. ``_make_emitter`` wraps the four worker-driving signals so tests
+# can drive ``SimStepWorker`` exactly the way EditorWindow will in Plan 02.
+def _make_emitter(worker):
+    """Create a UI-thread emitter and connect its signals to the worker slots.
+
+    Connection type is AutoConnection — Qt upgrades to QueuedConnection because
+    ``worker`` lives on the worker QThread and the emitter lives on the UI
+    thread. Returns the emitter so the test can ``.bind.emit(mock)`` etc.
+    """
+    from PySide6.QtCore import QObject, Signal
+
+    class _E(QObject):
+        bind = Signal(object)
+        pause = Signal(bool)
+        speed = Signal(float)
+        step = Signal()
+
+    e = _E()
+    e.bind.connect(worker.bind_scene)
+    e.pause.connect(worker.set_paused)
+    e.speed.connect(worker.set_speed)
+    e.step.connect(worker.step_one)
+    return e
+
+
+def _settle(qapp, seconds: float) -> None:
+    """Sleep then flush UI-thread deliveries — lets the worker QThread run.
+
+    ``QTest.qWait`` holds the Python GIL during its internal msleep, which
+    starves the worker QThread (its ``_tick`` slot is Python and needs the
+    GIL). A plain ``time.sleep`` releases the GIL so the worker thread runs
+    freely at ~50 Hz; the trailing ``processEvents`` flushes any queued
+    ``snapshot_ready`` deliveries to the UI thread.
+    """
+    time.sleep(seconds)
+    qapp.processEvents()
+
+
+# ---------------------------------------------------------------------------
 # Test classes
 # ---------------------------------------------------------------------------
 @pytestmark
@@ -138,35 +183,21 @@ class TestSimStepWorkerAccumulator:
     """SC#1: physics advances at ~50 Hz via the fixed-step accumulator."""
 
     def test_accumulator_advances_physics(self, qapp, isolated_home) -> None:
-        from PySide6.QtCore import QMetaObject, Qt, QThread
+        from PySide6.QtCore import QThread
 
         worker = SimStepWorker()
         thread = QThread()
         worker.moveToThread(thread)
         thread.started.connect(worker.start)
         mock = MockSimulator()
+        emitter = _make_emitter(worker)
         try:
             thread.start()
-            # Bind the mock simulator (queued -> runs on worker thread).
-            QMetaObject.invokeMethod(
-                worker,
-                "bind_scene",
-                Qt.ConnectionType.QueuedConnection,
-                QMetaObject.Q_ARG("object", mock),
-            )
-            # Unpause (worker loads paused per D-11).
-            QMetaObject.invokeMethod(
-                worker,
-                "set_paused",
-                Qt.ConnectionType.QueuedConnection,
-                QMetaObject.Q_ARG("bool", False),
-            )
-            # Pump the UI event loop for ~100 ms (worker runs independently
-            # on its QThread; QTest.qWait processes UI-thread deliveries).
-            from PySide6.QtTest import QTest
-
-            QTest.qWait(100)
-            qapp.processEvents()
+            emitter.bind.emit(mock)  # queued -> worker thread
+            emitter.pause.emit(False)  # queued -> unpause (D-11 load paused)
+            # Settle: time.sleep releases the GIL so the worker QThread runs
+            # freely at ~50 Hz; processEvents flushes UI-thread deliveries.
+            _settle(qapp, 0.1)
             # 50 Hz * 100 ms ~= 5 steps; allow jitter down to 3.
             assert mock.step_count >= 3, (
                 f"expected >=3 steps in 100ms at 50Hz, got {mock.step_count}"
@@ -182,38 +213,29 @@ class TestPauseResumeStepOne:
     """SC#3: pause stops stepping; step_one advances exactly 1; resume restarts."""
 
     def test_step_one_advances_exactly_one_while_paused(self, qapp, isolated_home) -> None:
-        from PySide6.QtCore import QMetaObject, Qt, QThread
-        from PySide6.QtTest import QTest
+        from PySide6.QtCore import QThread
 
         worker = SimStepWorker()
         thread = QThread()
         worker.moveToThread(thread)
         thread.started.connect(worker.start)
         mock = MockSimulator()
+        emitter = _make_emitter(worker)
         snapshots: list = []
-
         worker.snapshot_ready.connect(
-            lambda snap: snapshots.append(snap), Qt.ConnectionType.QueuedConnection
+            lambda snap: snapshots.append(snap),
+            __import__("PySide6").QtCore.Qt.ConnectionType.QueuedConnection,
         )
         try:
             thread.start()
-            QMetaObject.invokeMethod(
-                worker,
-                "bind_scene",
-                Qt.ConnectionType.QueuedConnection,
-                QMetaObject.Q_ARG("object", mock),
-            )
+            emitter.bind.emit(mock)
             # Worker stays paused (D-11 default). Let the bind land.
-            QTest.qWait(30)
-            qapp.processEvents()
+            _settle(qapp, 0.03)
             assert mock.step_count == 0, "no steps should fire while paused"
 
             # step_one -> exactly one physics step + one snapshot.
-            QMetaObject.invokeMethod(
-                worker, "step_one", Qt.ConnectionType.QueuedConnection
-            )
-            QTest.qWait(30)
-            qapp.processEvents()
+            emitter.step.emit()
+            _settle(qapp, 0.03)
             assert mock.step_count == 1, (
                 f"step_one should advance exactly 1, got {mock.step_count}"
             )
@@ -226,46 +248,29 @@ class TestPauseResumeStepOne:
             thread.wait(3000)
 
     def test_pause_then_resume_advances_then_holds(self, qapp, isolated_home) -> None:
-        from PySide6.QtCore import QMetaObject, Qt, QThread
-        from PySide6.QtTest import QTest
+        from PySide6.QtCore import QThread
 
         worker = SimStepWorker()
         thread = QThread()
         worker.moveToThread(thread)
         thread.started.connect(worker.start)
         mock = MockSimulator()
+        emitter = _make_emitter(worker)
         try:
             thread.start()
-            QMetaObject.invokeMethod(
-                worker,
-                "bind_scene",
-                Qt.ConnectionType.QueuedConnection,
-                QMetaObject.Q_ARG("object", mock),
-            )
-            QTest.qWait(20)
+            emitter.bind.emit(mock)
+            _settle(qapp, 0.02)
             # Unpause for 100 ms -> steps advance.
-            QMetaObject.invokeMethod(
-                worker,
-                "set_paused",
-                Qt.ConnectionType.QueuedConnection,
-                QMetaObject.Q_ARG("bool", False),
-            )
-            QTest.qWait(100)
-            qapp.processEvents()
+            emitter.pause.emit(False)
+            _settle(qapp, 0.1)
             count_after_run = mock.step_count
             assert count_after_run >= 3, (
                 f"expected >=3 steps after resume, got {count_after_run}"
             )
 
             # Pause -> steps must NOT advance further.
-            QMetaObject.invokeMethod(
-                worker,
-                "set_paused",
-                Qt.ConnectionType.QueuedConnection,
-                QMetaObject.Q_ARG("bool", True),
-            )
-            QTest.qWait(100)
-            qapp.processEvents()
+            emitter.pause.emit(True)
+            _settle(qapp, 0.1)
             assert mock.step_count == count_after_run, (
                 "step_count must not advance while paused"
             )
@@ -280,34 +285,24 @@ class TestDecouplingAndPublishCap:
     """SC#4: render/sim decoupled + ~30 Hz publish cap."""
 
     def test_publish_cap_limits_snapshot_ready_to_30hz(self, qapp, isolated_home) -> None:
-        from PySide6.QtCore import QMetaObject, Qt, QThread
-        from PySide6.QtTest import QTest
+        from PySide6.QtCore import QThread
 
         worker = SimStepWorker()
         thread = QThread()
         worker.moveToThread(thread)
         thread.started.connect(worker.start)
         mock = MockSimulator(step_delay=0.0)
+        emitter = _make_emitter(worker)
         snapshots: list = []
         worker.snapshot_ready.connect(
-            lambda snap: snapshots.append(snap), Qt.ConnectionType.QueuedConnection
+            lambda snap: snapshots.append(snap),
+            __import__("PySide6").QtCore.Qt.ConnectionType.QueuedConnection,
         )
         try:
             thread.start()
-            QMetaObject.invokeMethod(
-                worker,
-                "bind_scene",
-                Qt.ConnectionType.QueuedConnection,
-                QMetaObject.Q_ARG("object", mock),
-            )
-            QMetaObject.invokeMethod(
-                worker,
-                "set_paused",
-                Qt.ConnectionType.QueuedConnection,
-                QMetaObject.Q_ARG("bool", False),
-            )
-            QTest.qWait(100)
-            qapp.processEvents()
+            emitter.bind.emit(mock)
+            emitter.pause.emit(False)
+            _settle(qapp, 0.1)
             # 50 Hz sim steps.
             assert mock.step_count >= 3
             # 30 Hz publish cap -> ~3 publishes in 100 ms; allow 4 for jitter.
@@ -328,27 +323,18 @@ class TestDecouplingAndPublishCap:
         step_count still advances at ~50 Hz because step() runs on the worker
         thread, decoupled from the UI thread.
         """
-        from PySide6.QtCore import QMetaObject, Qt, QThread
+        from PySide6.QtCore import QThread
 
         worker = SimStepWorker()
         thread = QThread()
         worker.moveToThread(thread)
         thread.started.connect(worker.start)
         mock = MockSimulator(step_delay=0.0)
+        emitter = _make_emitter(worker)
         try:
             thread.start()
-            QMetaObject.invokeMethod(
-                worker,
-                "bind_scene",
-                Qt.ConnectionType.QueuedConnection,
-                QMetaObject.Q_ARG("object", mock),
-            )
-            QMetaObject.invokeMethod(
-                worker,
-                "set_paused",
-                Qt.ConnectionType.QueuedConnection,
-                QMetaObject.Q_ARG("bool", False),
-            )
+            emitter.bind.emit(mock)
+            emitter.pause.emit(False)
             # Block the UI thread in ~80 ms slices for ~200 ms (slow render
             # simulation). The worker thread keeps stepping independently.
             end = time.monotonic() + 0.2
@@ -370,36 +356,19 @@ class TestSpeedScaling:
     """D-09: speed scales wall_dt (NOT sim_dt); 2x ~= 2x, 0.5x ~= half."""
 
     def test_speed_2x_doubles_step_count(self, qapp, isolated_home) -> None:
-        from PySide6.QtCore import QMetaObject, Qt, QThread
-        from PySide6.QtTest import QTest
+        from PySide6.QtCore import QThread
 
-        worker_1x, thread_1x, mock_1x = self._make_worker(mock_kwargs={})
-        worker_2x, thread_2x, mock_2x = self._make_worker(mock_kwargs={})
+        worker_1x, thread_1x, mock_1x, em_1x = self._make_worker()
+        worker_2x, thread_2x, mock_2x, em_2x = self._make_worker()
         try:
             thread_1x.start()
             thread_2x.start()
-            QMetaObject.invokeMethod(
-                worker_1x, "bind_scene", Qt.ConnectionType.QueuedConnection,
-                QMetaObject.Q_ARG("object", mock_1x),
-            )
-            QMetaObject.invokeMethod(
-                worker_2x, "bind_scene", Qt.ConnectionType.QueuedConnection,
-                QMetaObject.Q_ARG("object", mock_2x),
-            )
-            QMetaObject.invokeMethod(
-                worker_1x, "set_paused", Qt.ConnectionType.QueuedConnection,
-                QMetaObject.Q_ARG("bool", False),
-            )
-            QMetaObject.invokeMethod(
-                worker_2x, "set_speed", Qt.ConnectionType.QueuedConnection,
-                QMetaObject.Q_ARG("float", 2.0),
-            )
-            QMetaObject.invokeMethod(
-                worker_2x, "set_paused", Qt.ConnectionType.QueuedConnection,
-                QMetaObject.Q_ARG("bool", False),
-            )
-            QTest.qWait(120)
-            qapp.processEvents()
+            em_1x.bind.emit(mock_1x)
+            em_2x.bind.emit(mock_2x)
+            em_1x.pause.emit(False)
+            em_2x.speed.emit(2.0)
+            em_2x.pause.emit(False)
+            _settle(qapp, 0.12)
             c1 = mock_1x.step_count
             c2 = mock_2x.step_count
             # 2x should be roughly double 1x; generous jitter bounds (1.5x..2.5x).
@@ -419,36 +388,19 @@ class TestSpeedScaling:
             thread_2x.wait(3000)
 
     def test_speed_0_5x_halves_step_count(self, qapp, isolated_home) -> None:
-        from PySide6.QtCore import QMetaObject, Qt, QThread
-        from PySide6.QtTest import QTest
+        from PySide6.QtCore import QThread
 
-        worker_1x, thread_1x, mock_1x = self._make_worker(mock_kwargs={})
-        worker_half, thread_half, mock_half = self._make_worker(mock_kwargs={})
+        worker_1x, thread_1x, mock_1x, em_1x = self._make_worker()
+        worker_half, thread_half, mock_half, em_half = self._make_worker()
         try:
             thread_1x.start()
             thread_half.start()
-            QMetaObject.invokeMethod(
-                worker_1x, "bind_scene", Qt.ConnectionType.QueuedConnection,
-                QMetaObject.Q_ARG("object", mock_1x),
-            )
-            QMetaObject.invokeMethod(
-                worker_half, "bind_scene", Qt.ConnectionType.QueuedConnection,
-                QMetaObject.Q_ARG("object", mock_half),
-            )
-            QMetaObject.invokeMethod(
-                worker_1x, "set_paused", Qt.ConnectionType.QueuedConnection,
-                QMetaObject.Q_ARG("bool", False),
-            )
-            QMetaObject.invokeMethod(
-                worker_half, "set_speed", Qt.ConnectionType.QueuedConnection,
-                QMetaObject.Q_ARG("float", 0.5),
-            )
-            QMetaObject.invokeMethod(
-                worker_half, "set_paused", Qt.ConnectionType.QueuedConnection,
-                QMetaObject.Q_ARG("bool", False),
-            )
-            QTest.qWait(150)
-            qapp.processEvents()
+            em_1x.bind.emit(mock_1x)
+            em_half.bind.emit(mock_half)
+            em_1x.pause.emit(False)
+            em_half.speed.emit(0.5)
+            em_half.pause.emit(False)
+            _settle(qapp, 0.15)
             c1 = mock_1x.step_count
             ch = mock_half.step_count
             # 0.5x should be roughly half of 1x; generous jitter (0.3x..0.7x).
@@ -468,12 +420,13 @@ class TestSpeedScaling:
             thread_half.wait(3000)
 
     @staticmethod
-    def _make_worker(mock_kwargs: dict):
+    def _make_worker():
         from PySide6.QtCore import QThread
 
         worker = SimStepWorker()
         thread = QThread()
         worker.moveToThread(thread)
         thread.started.connect(worker.start)
-        mock = MockSimulator(**mock_kwargs)
-        return worker, thread, mock
+        mock = MockSimulator()
+        emitter = _make_emitter(worker)
+        return worker, thread, mock, emitter
