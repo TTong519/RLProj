@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: Phases
 current_phase: 42
-current_phase_name: Render/Sim Decoupling & Animated Viewport
-status: planning
-stopped_at: "Completed 41-02-PLAN.md (GUI-18 SC#3 + aboutToClose teardown contract)"
-last_updated: "2026-07-16T02:26:11.142Z"
-last_activity: 2026-07-15
-last_activity_desc: Phase 41 complete, transitioned to Phase 42
+current_phase_name: render-sim-decoupling-animated-viewport
+status: executing
+stopped_at: Phase 42 context gathered
+last_updated: "2026-07-18T05:58:43.115Z"
+last_activity: 2026-07-17
+last_activity_desc: Phase 42 execution started
 progress:
   total_phases: 11
   completed_phases: 1
-  total_plans: 2
+  total_plans: 4
   completed_plans: 2
   percent: 9
 ---
@@ -24,16 +24,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-15 — v0.7.0 milestone started)
 
 **Core value:** End-to-end pipeline from a text description or JSON scene definition to a trained RL policy in a realistic surgical simulation — with automatic primitive fallbacks when real assets are missing, and a benchmarking framework for systematic RL research comparisons.
-**Current focus:** Phase 42 — Render/Sim Decoupling & Animated Viewport (Phase 41 complete 2026-07-15)
+**Current focus:** Phase 42 — render-sim-decoupling-animated-viewport
 
 > **Note:** v0.6.0 SHIPPED 2026-07-15 (verified closeout, 6 phases / 18 plans / 13 requirements closed, test baseline 1,513 passing). v0.7.0 roadmap created 2026-07-15 — 11 phases following the user-confirmed build order GUI-18 → GUI-11 → GUI-12 → GUI-13 → GUI-14 → GUI-15 → GUI-16 → GUI-17 → GEN-01 → GEN-02 → GEN-03/04/05. Three known GUI bugs fold into the relevant phases (bug #3 → Phase 41; bugs #1/#2 → Phase 42). Phase 45 (gizmos) flagged for `/gsd-plan-phase --research-phase 45` (2D QPainter overlay vs 3D pipeline disagreement). Phase 51 flagged for OpenAI Structured Outputs + Anthropic tool-use spike.
 
 ## Current Position
 
-Phase: 42 — Render/Sim Decoupling & Animated Viewport
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-07-15 — Phase 41 complete, transitioned to Phase 42
+Phase: 42 (render-sim-decoupling-animated-viewport) — EXECUTING
+Plan: 1 of 2
+Status: Executing Phase 42
+Last activity: 2026-07-17 — Phase 42 execution started
 
 Progress: [██████████] 100%
 
@@ -141,9 +141,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-16T01:49:42.177Z
-Stopped at: Completed 41-02-PLAN.md (GUI-18 SC#3 + aboutToClose teardown contract)
-Resume file: None
+Last session: 2026-07-16T06:40:55.685Z
+Stopped at: Phase 42 context gathered
+Resume file: .planning/phases/42-render-sim-decoupling-animated-viewport/42-CONTEXT.md
 
 *Updated: 2026-07-15 — v0.7.0 roadmap created. 11 phases (41–51), 13/13 requirements mapped (0 unmapped). Next: `/gsd-plan-phase 41`.*
 
