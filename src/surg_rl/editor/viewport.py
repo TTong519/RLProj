@@ -1,9 +1,12 @@
 """ViewportPanel — the 3D render surface for the scene editor.
 
-Per CONTEXT.md D-01..D-04:
-  - D-01: render-to-QImage (np.ndarray -> QImage -> QPixmap -> QLabel)
+Per CONTEXT.md D-01..D-04 (Phase 42 render/sim decoupling):
+  - D-01: render-to-QImage (np.ndarray -> QImage -> QPixmap -> canvas)
   - D-02: reuse BaseSimulator.render(mode="rgb_array", width, height, camera_name) as-is
-  - D-03: QTimer.singleShot(50, self._tick) self-rescheduling (no interval timer)
+  - D-03: the render loop is delegated to RenderPollLoop (UI thread, ~30 Hz);
+          the step responsibility is delegated to SimStepWorker (QThread,
+          ~50 Hz). ViewportPanel owns the canvas + camera offset + the
+          ndarray->QPixmap adapter (set_image) and the scene-swap (update_scene).
   - D-04: mouse orbit/pan/zoom + R key camera reset
 """
 
@@ -12,7 +15,7 @@ from __future__ import annotations
 import contextlib
 import platform
 from collections.abc import Callable
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 import numpy as np
 
@@ -141,13 +144,17 @@ class ViewportCanvas(QtWidgets.QWidget):
 
 
 class ViewportPanel(QtWidgets.QWidget):
-    """QWidget that renders the loaded scene at 20 Hz via QTimer.singleShot.
+    """QWidget hosting the 3D render surface for the loaded scene.
 
-    Lifecycle:
-        __init__ takes the loaded SceneDefinition and a callback for FPS updates.
-        _tick is self-rescheduling: it processes one frame, then schedules the next
-        via QTimer.singleShot(50, self._tick). This pattern (per D-03) prevents
-        frame pile-up if the render takes > 50 ms.
+    Phase 42 render/sim decoupling (Plan 42-02):
+        The render half of the old monolithic ``_tick`` is delegated to a
+        ``RenderPollLoop`` (UI thread, ~30 Hz self-rescheduling); the step
+        responsibility is delegated to a ``SimStepWorker`` (QThread, ~50 Hz
+        fixed-step accumulator). ``EditorWindow`` constructs both and hands
+        them in via ``set_playback`` after ``__init__``. ``ViewportPanel``
+        owns the canvas, the ephemeral camera offset (D-05), the
+        ndarray->QPixmap adapter (``set_image``), and the in-place scene
+        swap (``update_scene`` — Phase 41 D-06: no widget recreation).
     """
 
     def __init__(
@@ -164,9 +171,24 @@ class ViewportPanel(QtWidgets.QWidget):
         self._frame_count: int = 0
         self._last_fps_check: float = 0.0
         # Render-loop guard (UAT Gap 2 fix): stop() sets this False so that
-        # already-queued QTimer.singleShot callbacks early-return instead of
+        # already-queued render-poll callbacks early-return instead of
         # rescheduling indefinitely after window close.
         self._running: bool = True
+
+        # Phase 42 D-01/D-02 — the render half of the old monolithic _tick is
+        # delegated to a RenderPollLoop (UI thread, ~30 Hz), and the step
+        # responsibility is on a SimStepWorker (QThread, ~50 Hz). The
+        # EditorWindow constructs both and hands them in via set_playback()
+        # AFTER __init__ so the worker/loop have the right thread affinity.
+        # Until set_playback() is called, _sim_worker/_render_loop are None
+        # and stop()/update_scene() guard the missing refs (backward-compat
+        # for tests that construct ViewportPanel in isolation).
+        self._sim_worker: Any = None
+        self._render_loop: Any = None
+        # D-12 static-scene hint flag — set by update_scene/set_playback from
+        # _scene_has_dynamics; read by the EditorWindow status-bar callback
+        # (Task 3). Panel-local/ephemeral (D-05 — NOT written to the schema).
+        self._static_scene: bool = not _scene_has_dynamics(scene)
 
         self._canvas = ViewportCanvas(self)
         self._canvas.setMinimumSize(_DEFAULT_WIDTH, _DEFAULT_HEIGHT)
@@ -187,16 +209,94 @@ class ViewportPanel(QtWidgets.QWidget):
         self._canvas.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
         self._canvas.setAttribute(QtCore.Qt.WidgetAttribute.WA_Hover)
         self._last_mouse_pos: QtCore.QPoint | None = None
-        self._start()
+        # Phase 42 D-02 — NO auto-start render chain on the UI thread here.
+        # The RenderPollLoop (constructed by EditorWindow) owns the ONLY
+        # render chain and is started by the controller after set_playback().
+        # The old self._start() path is removed (D-02 forbids a second render
+        # chain on the UI thread).
 
-    def _start(self) -> None:
-        self._running = True
-        QtCore.QTimer.singleShot(0, self._tick)
+    def set_playback(
+        self,
+        sim_worker: Any,
+        render_loop: Any,
+    ) -> None:
+        """Receive the SimStepWorker + RenderPollLoop refs from EditorWindow.
+
+        Performs the INITIAL bind: loads the scene's simulator on the UI
+        thread (GL-probe-safe per D-01 — ``_default_load_simulator`` calls
+        ``sim.render()`` which is thread-affine), hands the live simulator to
+        the render loop (``bind_simulator``) and to the worker (queued
+        ``bind_scene.emit``), and sets the worker paused (D-11 — load paused;
+        the user must press Play to begin animation). Also evaluates the
+        D-12 static-scene hint for the initial scene.
+
+        Idempotent: safe to call once. Subsequent scene swaps go through
+        ``update_scene`` (the in-place re-bind path).
+        """
+        self._sim_worker = sim_worker
+        self._render_loop = render_loop
+        self._bind_loaded_simulator(initial=True)
+
+    def _bind_loaded_simulator(self, initial: bool = False) -> None:
+        """Load the current scene's simulator on the UI thread and bind it to
+        the worker + render loop. Shared by ``set_playback`` (initial) and
+        ``update_scene`` (swap).
+
+        Order (Pitfall 3): the caller (``update_scene``) pauses the worker +
+        closes the old simulator BEFORE this runs. Here we load the new sim
+        (UI thread), bind the render loop, then queue ``bind_scene`` to the
+        worker (the worker binds on its own thread after any in-flight
+        ``_tick``), then reaffirm paused (D-11 belt-and-braces) and evaluate
+        the D-12 hint.
+        """
+        if self._render_loop is not None:
+            self._render_loop.bind_simulator(None)  # reset render state eagerly
+        try:
+            new_sim = self._on_load_simulator(self._scene)
+        except Exception as exc:  # noqa: BLE001
+            from surg_rl.editor._safe_error import safe_error_message
+
+            self._canvas.set_text(f"Simulator load error: {safe_error_message(exc)}")
+            new_sim = None
+        self._simulator = new_sim
+        if new_sim is None:
+            self._canvas.set_text("(simulator unavailable)")
+        else:
+            self._canvas.set_text("(loading simulator...)")
+        if self._render_loop is not None and new_sim is not None:
+            self._render_loop.bind_simulator(new_sim)
+        if self._sim_worker is not None:
+            if new_sim is not None:
+                self._sim_worker.bind_scene.emit(new_sim)  # queued — worker thread
+            # D-11 — load paused: the worker must NOT start stepping until the
+            # user presses Play (or Space). Belt-and-braces after bind_scene.
+            self._sim_worker.set_paused.emit(True)
+        # D-12 static-scene hint (panel-local; the EditorWindow status-bar
+        # callback reads this in Task 3).
+        self._static_scene = not _scene_has_dynamics(self._scene)
 
     def stop(self) -> None:
-        # Halt the render loop — _tick checks _running at the top and before
-        # rescheduling, so already-queued QTimer callbacks become no-ops.
+        """Halt the render loop + pause the worker BEFORE closing the shared
+        simulator (Pitfall 3 — the worker is never mid-step() while
+        ``simulator.close()`` runs on the UI thread).
+
+        The ``aboutToClose`` signal (EditorWindow.closeEvent) already fired
+        and already triggered ``_stop_sim_worker`` (controller-side
+        ``sim_worker.stop`` + ``thread.quit`` + ``wait(3000)``); this method
+        is the belt-and-braces for the ``update_scene`` swap path and for
+        tests that call ``viewport.stop()`` directly.
+        """
+        # _running guard kept for backward compat with tests that assert
+        # ``stop() sets _running=False`` (the render-poll has its own _running
+        # guard inside RenderPollLoop).
         self._running = False
+        # Pitfall 3 — pause the worker BEFORE closing the shared simulator.
+        if self._render_loop is not None:
+            with contextlib.suppress(Exception):
+                self._render_loop.stop()
+        if self._sim_worker is not None:
+            with contextlib.suppress(Exception):
+                self._sim_worker.set_paused.emit(True)
         if self._simulator is not None:
             # MuJoCo Renderer.__del__ can raise AttributeError
             # ('_gl_context') during interpreter shutdown if the GL
@@ -213,108 +313,51 @@ class ViewportPanel(QtWidgets.QWidget):
         with contextlib.suppress(Exception):
             self.stop()
 
-    def _tick(self) -> None:
+    def _tick(self) -> None:  # noqa: D401
+        """No-op retained for backward compat with tests that call ``_tick``
+        directly. The render half of the old monolithic ``_tick`` is delegated
+        to ``RenderPollLoop._tick`` (Plan 01) and the step responsibility is
+        on ``SimStepWorker._tick`` (Plan 01). The ``_running`` guard is kept
+        so post-stop calls early-return (``test_stop_halts_render_loop``).
+        """
         if not self._running:
-            return  # stop() was called — halt the render loop
+            return  # stop() was called — halt
+        # Render + step are owned by RenderPollLoop + SimStepWorker (D-01/D-02).
+        # No reschedule here — the render-poll owns the only render chain
+        # (D-02 forbids a second render chain on the UI thread).
 
-        if self._simulator is None:
-            try:
-                self._simulator = self._on_load_simulator(self._scene)
-            except Exception as exc:  # noqa: BLE001
-                from surg_rl.editor._safe_error import safe_error_message
+    # --- RenderPollLoop canvas adapter (D-03 — the loop calls these) ---
+    def set_image(self, arr) -> None:
+        """Canvas adapter for RenderPollLoop — converts the rendered ndarray
+        to a QPixmap via ``_display_array`` (the ndarray→QPixmap path stays
+        in the viewport layer per 42-01-SUMMARY "Render-error handling scoped
+        out"). ``RenderPollLoop._render`` calls this with the ``sim.render()``
+        result.
+        """
+        self._display_array(arr)
 
-                self._canvas.set_text(f"Simulator load error: {safe_error_message(exc)}")
-                QtCore.QTimer.singleShot(_FRAME_INTERVAL_MS, self._tick)
-                return
+    def set_text(self, text: str) -> None:
+        """Canvas adapter for RenderPollLoop — delegates to the ViewportCanvas
+        fallback text (used when render() raises or returns None)."""
+        self._canvas.set_text(text)
 
-            if self._simulator is None:
-                self._canvas.set_text("(simulator unavailable)")
-                # FIX (UAT Gap 2): reschedule instead of returning — the
-                # original code killed the render loop silently when the
-                # simulator was unavailable.
-                QtCore.QTimer.singleShot(_FRAME_INTERVAL_MS, self._tick)
-                return
+    def width(self) -> int:  # noqa: D401
+        """Canvas width for RenderPollLoop's render-size selection."""
+        return self._canvas.width()
 
-        try:
-            camera_name = None
-            env = getattr(self._scene, "environment", None)
-            if env is not None:
-                cameras = getattr(env, "cameras", None)
-                if cameras:
-                    camera_name = getattr(cameras[0], "name", None)
-            self._last_render_width = max(1, self._canvas.width())
-            self._last_render_height = max(1, self._canvas.height())
-            # Push current camera offsets into the simulator so PyBullet preview
-            # orbit/pan/zoom respond to user input. MuJoCo ignores these attrs.
-            try:
-                object.__setattr__(
-                    self._simulator, "_editor_camera_target", self._camera_offset["target"]
-                )
-                object.__setattr__(
-                    self._simulator, "_editor_camera_distance", self._camera_offset["distance"]
-                )
-                object.__setattr__(
-                    self._simulator, "_editor_camera_azimuth", self._camera_offset["azimuth"]
-                )
-                object.__setattr__(
-                    self._simulator, "_editor_camera_elevation", self._camera_offset["elevation"]
-                )
-            except Exception:  # noqa: BLE001
-                pass
-            arr = self._simulator.render(
-                mode="rgb_array",
-                width=self._last_render_width,
-                height=self._last_render_height,
-                camera_name=camera_name,
-            )
-        except Exception as exc:  # noqa: BLE001
-            err_msg = str(exc)
-            # MuJoCo's default offscreen framebuffer is 640x480. If the
-            # viewport canvas is larger, the renderer raises a framebuffer
-            # size error. Retry at the default framebuffer size so the preview
-            # still works on high-DPI / large windows.
-            if "framebuffer" in err_msg.lower() or "offwidth" in err_msg.lower():
-                logger.debug(
-                    "Viewport render too large for MuJoCo framebuffer (%s); retrying at 640x480",
-                    err_msg,
-                )
-                self._last_render_width = 640
-                self._last_render_height = 480
-                try:
-                    arr = self._simulator.render(
-                        mode="rgb_array",
-                        width=self._last_render_width,
-                        height=self._last_render_height,
-                        camera_name=camera_name,
-                    )
-                except Exception as exc2:  # noqa: BLE001
-                    from surg_rl.editor._safe_error import safe_error_message
+    def height(self) -> int:  # noqa: D401
+        """Canvas height for RenderPollLoop's render-size selection."""
+        return self._canvas.height()
 
-                    self._canvas.set_text(f"Render error: {safe_error_message(exc2)}")
-                    QtCore.QTimer.singleShot(_FRAME_INTERVAL_MS, self._tick)
-                    return
-            else:
-                from surg_rl.editor._safe_error import safe_error_message
-
-                self._canvas.set_text(f"Render error: {safe_error_message(exc)}")
-                QtCore.QTimer.singleShot(_FRAME_INTERVAL_MS, self._tick)
-                return
-
-        if arr is not None:
-            self._display_array(arr)
-        else:
-            # MuJoCo's CGL/EGL renderer can return None when no GL context is
-            # available (e.g. macOS offscreen Qt). Show a stable diagnostic
-            # message instead of leaving the initial "loading simulator..."
-            # text up forever.
-            self._canvas.set_text("(preview render unavailable — no GL context)")
-        self._frame_count += 1
-        self._maybe_update_fps()
-
-        # Only reschedule if still running — stop() may have been called
-        # during render (UAT Gap 2 fix: prevents dangling QTimer callbacks).
-        if self._running:
-            QtCore.QTimer.singleShot(_FRAME_INTERVAL_MS, self._tick)
+    def camera_name(self) -> str | None:
+        """Read the scene's first camera name for ``sim.render()`` (mirrors
+        the old _tick :212-217 block — kept on the render side)."""
+        env = getattr(self._scene, "environment", None)
+        if env is not None:
+            cameras = getattr(env, "cameras", None)
+            if cameras:
+                return getattr(cameras[0], "name", None)
+        return None
 
     def _maybe_update_fps(self) -> None:
         import time
@@ -424,22 +467,49 @@ class ViewportPanel(QtWidgets.QWidget):
         }
 
     def update_scene(self, scene: SceneDefinition) -> None:
-        """In-place scene swap — NO widget recreation (D-06, bug #3 fix).
+        """In-place scene swap + worker/loop re-bind — NO widget recreation
+        (Phase 41 D-06, bug #3 fix). Loads PAUSED (D-11) so opening a scene
+        never surprises the user with CPU/GPU load.
 
-        Closes the old simulator (Pitfall 7 — reuse the ``stop()`` suppress
-        pattern), sets ``_simulator = None`` so ``_tick`` reloads via
-        ``_on_load_simulator`` on the next tick, swaps ``_scene``, and resets
-        the camera (A3 — new scene = fresh view). The widget identity (and
-        thus the dock geometry keyed on objectName) is preserved — no
-        ``setCentralWidget``, no new ``ViewportPanel``. ``_running`` stays
-        True so the render loop continues across the swap.
+        Order (Pitfall 3 + 42-RESEARCH.md Pattern 4):
+          (a) pause the worker (``set_paused.emit(True)``) BEFORE closing the
+              old simulator — the worker must never be mid-step() while
+              ``simulator.close()`` runs on the UI thread;
+          (b) close the old simulator via ``contextlib.suppress`` (the
+              existing close pattern);
+          (c) ``_simulator = None``;
+          (d) swap ``_scene``;
+          (e) ``reset_camera()`` (A3 — new scene = fresh view);
+          (f) load the new simulator on the UI thread + bind the render loop
+              + queue ``bind_scene.emit(new_sim)`` to the worker + reaffirm
+              paused (D-11) + evaluate the D-12 static-scene hint — shared
+              with ``set_playback`` via ``_bind_loaded_simulator``.
+
+        The widget identity (and thus the dock geometry keyed on
+        objectName) is preserved — no central-widget swap, no new
+        ``ViewportPanel``. ``_running`` stays True so the render loop
+        continues across the swap (the render-poll reads the new simulator
+        via ``bind_simulator``).
         """
+        # (a) Pitfall 3 — pause worker BEFORE closing the old sim.
+        if self._sim_worker is not None:
+            with contextlib.suppress(Exception):
+                self._sim_worker.set_paused.emit(True)
+        # (b) close the old simulator (the existing suppress pattern).
         with contextlib.suppress(AttributeError, OSError):
             if self._simulator is not None:
                 self._simulator.close()
-        self._simulator = None  # forces _tick to reload via _on_load_simulator
+        # (c) drop the old ref.
+        self._simulator = None
+        # (d) swap the scene.
         self._scene = scene
-        self.reset_camera()  # A3 — new scene = fresh view
+        # (e) fresh view.
+        self.reset_camera()
+        # (f) load + bind (UI-thread load, queued bind_scene, paused D-11,
+        # D-12 hint) — shared with set_playback. If set_playback has not
+        # been called yet (no worker/loop), this still loads the simulator
+        # and evaluates the hint so the canvas shows the new scene.
+        self._bind_loaded_simulator()
 
 
 def _default_load_simulator(scene: SceneDefinition) -> BaseSimulator | None:
