@@ -5,15 +5,15 @@ milestone_name: Phases
 current_phase: 42
 current_phase_name: render-sim-decoupling-animated-viewport
 status: executing
-stopped_at: Phase 42 context gathered
-last_updated: "2026-07-18T05:58:43.115Z"
+stopped_at: Completed 42-01-PLAN.md
+last_updated: "2026-07-22T22:02:05.345Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 42 execution started
 progress:
   total_phases: 11
   completed_phases: 1
   total_plans: 4
-  completed_plans: 2
+  completed_plans: 3
   percent: 9
 ---
 
@@ -31,11 +31,11 @@ See: .planning/PROJECT.md (updated 2026-07-15 — v0.7.0 milestone started)
 ## Current Position
 
 Phase: 42 (render-sim-decoupling-animated-viewport) — EXECUTING
-Plan: 1 of 2
-Status: Executing Phase 42
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-07-17 — Phase 42 execution started
 
-Progress: [██████████] 100%
+Progress: [████████░░] 75%
 
 ## Performance Metrics
 
@@ -72,6 +72,7 @@ Progress: [██████████] 100%
 |------|----------|-------|-------|
 | Phase 41 P01 | 31m | 3 tasks | 5 files |
 | Phase 41 P02 | 18m | 2 tasks | 3 files |
+| Phase 42 P01 | multi-session (~4d) | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,8 @@ Decisions are logged in PROJECT.md Key Architecture Decisions. Recent decisions 
 - [Phase ?]: D-06: In-place update_scene on ViewportPanel + SceneTreeView (no widget recreation) — bug #3 root cause fix; PropertyForm NOT folded in this phase
 - [Phase ?]: D-04/D-05: aboutToClose plain-Signal teardown contract on EditorWindow + LLMPanel.stop() cooperative teardown (cancel flag + thread.quit() + thread.wait(3000) + timeout log); future Phase 42/46/48/51 workers plug in via stop() + connect, no closeEvent edit
 - [Phase ?]: D-09 two-pronged SC#3 verification: TestCloseMidCallMockSlow (always-on offscreen backstop, monkeypatch parse_sync to sleep) + TestCloseMidCallRealProvider (skipif no LLM_API_KEY, real provider path)
+- [Phase ?]: Phase 42 P01: Render/sim decoupling seam = SimStepWorker.snapshot_ready (queued Signal) -> RenderPollLoop.on_snapshot; ONE render timer on UI thread + ONE sim loop on QThread worker (D-01/D-02); _Snapshot(state, frame_id:int) is the cross-thread boundary; speed scales wall_dt NOT sim_dt (Pitfall 5); _MAX_STEPS_PER_TICK=8 spiral cap
+- [Phase ?]: Phase 42 P01: worker loads PAUSED (D-11); step_one runs exactly one step(None) while paused without resuming the timer (D-07); stop() is cooperative cancel flag + timer.stop ONLY — controller owns thread.quit/wait(3000) + log-on-timeout, NEVER terminate (D-04, mirrors Phase 41 D-05 LLMPanel.stop template)
 
 ### Pending Todos
 
@@ -141,9 +144,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-16T06:40:55.685Z
-Stopped at: Phase 42 context gathered
-Resume file: .planning/phases/42-render-sim-decoupling-animated-viewport/42-CONTEXT.md
+Last session: 2026-07-22T22:02:05.337Z
+Stopped at: Completed 42-01-PLAN.md
+Resume file: None
 
 *Updated: 2026-07-15 — v0.7.0 roadmap created. 11 phases (41–51), 13/13 requirements mapped (0 unmapped). Next: `/gsd-plan-phase 41`.*
 
