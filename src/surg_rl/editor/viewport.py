@@ -34,6 +34,33 @@ _PAN_SENSITIVITY: float = 0.002
 _ZOOM_STEP: float = 0.15
 
 
+def _scene_has_dynamics(scene: SceneDefinition) -> bool:
+    """D-12 static-scene predicate — a STRUCTURAL schema-level check (NOT a
+    runtime step-delta heuristic and NOT an auto-pause).
+
+    Returns True when the scene has any actuated/animated entity:
+      - ``scene.robots`` (schema.py:1402) non-empty — any robot with joints
+        has actuated dynamics.
+      - ``scene.tissues`` (schema.py:1403) non-empty — tissues are soft-body
+        and deform under contact.
+      - ``scene.fluid`` (schema.py:1442) is not None — ``fluid`` is a DIRECT
+        field on ``SceneDefinition`` (NOT on ``EnvironmentConfig`` — the
+        EnvironmentConfig has lights/cameras/ground_plane only, schema.py
+        :990-1009).
+
+    Instruments-only (no robots/tissues/fluid) returns False — instruments
+    without robots have no actuated joints, so the scene is structurally
+    static. The hint is informational only (D-12 — the worker keeps stepping
+    harmlessly if the user hits Play on a static scene; the render-poll stays
+    alive so camera orbit/zoom still work).
+    """
+    if getattr(scene, "robots", None):
+        return True
+    if getattr(scene, "tissues", None):
+        return True
+    return getattr(scene, "fluid", None) is not None
+
+
 class _CameraOffset(TypedDict):
     azimuth: float
     elevation: float

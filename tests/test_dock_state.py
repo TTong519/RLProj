@@ -75,12 +75,43 @@ class TestDockObjectNames:
             docks = w.findChildren(QDockWidget)
             names = [d.objectName() for d in docks]
             assert docks, "EditorWindow should construct at least one QDockWidget"
-            assert all(names), (
-                f"Every QDockWidget must have a non-empty objectName; got {names}"
-            )
-            assert len(names) == len(set(names)), (
-                f"QDockWidget objectNames must be unique; got {names}"
-            )
+            assert all(names), f"Every QDockWidget must have a non-empty objectName; got {names}"
+            assert len(names) == len(
+                set(names)
+            ), f"QDockWidget objectNames must be unique; got {names}"
+        finally:
+            w.close()
+
+
+@pytestmark
+class TestToolbarObjectNames:
+    """Phase 42 D-06 / Phase 41 D-07 extension: every QToolBar has a non-empty,
+    unique objectName so saveState()/restoreState() round-trip the playback
+    toolbar (Pitfall 7 — setObjectName BEFORE addToolBar).
+
+    RED on Task 1 of Plan 42-02: the playback QToolBar is built in Task 3's
+    ``_build_playback_toolbar``; findChildren(QToolBar) is empty until then.
+    The sibling ``TestDockObjectNames`` (the QDockWidget regression guard for
+    Phase 41 SC#4) stays GREEN throughout.
+    """
+
+    def test_every_toolbar_has_unique_nonempty_objectname(self, qapp, isolated_home) -> None:
+        from PySide6.QtWidgets import QToolBar
+
+        from surg_rl.editor.main_window import EditorWindow
+
+        w = EditorWindow()
+        w.show()
+        qapp.processEvents()
+        try:
+            tbs = w.findChildren(QToolBar)
+            names = [t.objectName() for t in tbs]
+            assert tbs, "EditorWindow should construct at least one QToolBar"
+            assert all(names), f"Every QToolBar must have a non-empty objectName; got {names}"
+            assert len(names) == len(
+                set(names)
+            ), f"QToolBar objectNames must be unique; got {names}"
+            assert "toolbar_playback" in names, f"toolbar_playback objectName missing; got {names}"
         finally:
             w.close()
 
@@ -108,9 +139,9 @@ class TestDockRoundTrip:
         w.tabifyDockWidget(w._tree_dock, w._properties_dock)
         qapp.processEvents()
         try:
-            assert w.saveState().data() != factory.data(), (
-                "tabify should change the saved state before reset"
-            )
+            assert (
+                w.saveState().data() != factory.data()
+            ), "tabify should change the saved state before reset"
             w._action_reset_layout()
             qapp.processEvents()
             after = w.saveState()
@@ -132,9 +163,9 @@ class TestDockRoundTrip:
         # recover on reopen).
         w.tabifyDockWidget(w._tree_dock, w._properties_dock)
         qapp.processEvents()
-        assert w._properties_dock in w.tabifiedDockWidgets(w._tree_dock), (
-            "precondition: tree + properties should be tabified after rearrange"
-        )
+        assert w._properties_dock in w.tabifiedDockWidgets(
+            w._tree_dock
+        ), "precondition: tree + properties should be tabified after rearrange"
         # Trigger a scene load via the refresh path. With the old widget-
         # recreation body this is the bug #3 trigger; with the Task 3
         # update_scene in-place swap the dock geometry survives.
@@ -195,9 +226,9 @@ class TestResetLayoutReturningUser:
         qapp.processEvents()
         w1.tabifyDockWidget(w1._tree_dock, w1._properties_dock)
         qapp.processEvents()
-        assert w1._properties_dock in w1.tabifiedDockWidgets(w1._tree_dock), (
-            "precondition: tree + properties tabified before close"
-        )
+        assert w1._properties_dock in w1.tabifiedDockWidgets(
+            w1._tree_dock
+        ), "precondition: tree + properties tabified before close"
         w1.close()  # closeEvent -> save_window -> tabified layout persisted
         qapp.processEvents()
 
@@ -220,8 +251,7 @@ class TestResetLayoutReturningUser:
                 "for a returning user, not their saved tabified layout"
             )
             assert (
-                w2.dockWidgetArea(w2._tree_dock).value
-                == Qt.DockWidgetArea.LeftDockWidgetArea.value
+                w2.dockWidgetArea(w2._tree_dock).value == Qt.DockWidgetArea.LeftDockWidgetArea.value
             ), "factory: tree dock in Left area"
             assert (
                 w2.dockWidgetArea(w2._properties_dock).value
@@ -345,9 +375,7 @@ class TestCloseMidCallRealProvider:
         reason="No LLM_API_KEY — D-09a real-provider path, guarded by D-09b "
         "mock backstop (TestCloseMidCallMockSlow runs unconditionally)",
     )
-    def test_close_mid_llm_call_clean_exit_real_provider(
-        self, qapp, isolated_home
-    ) -> None:
+    def test_close_mid_llm_call_clean_exit_real_provider(self, qapp, isolated_home) -> None:
         from surg_rl.editor.main_window import EditorWindow
 
         w = EditorWindow()
@@ -381,9 +409,7 @@ class TestAboutToClose:
     ``tests/test_viewport.py:299-316`` closeEvent + Mock stop pattern).
     """
 
-    def test_close_event_emits_aboutto_close_before_super(
-        self, qapp, isolated_home
-    ) -> None:
+    def test_close_event_emits_aboutto_close_before_super(self, qapp, isolated_home) -> None:
         from unittest.mock import MagicMock
 
         from PySide6.QtGui import QCloseEvent
