@@ -199,9 +199,9 @@ class TestSimStepWorkerAccumulator:
             # freely at ~50 Hz; processEvents flushes UI-thread deliveries.
             _settle(qapp, 0.1)
             # 50 Hz * 100 ms ~= 5 steps; allow jitter down to 3.
-            assert mock.step_count >= 3, (
-                f"expected >=3 steps in 100ms at 50Hz, got {mock.step_count}"
-            )
+            assert (
+                mock.step_count >= 3
+            ), f"expected >=3 steps in 100ms at 50Hz, got {mock.step_count}"
         finally:
             worker.stop()
             thread.quit()
@@ -236,12 +236,10 @@ class TestPauseResumeStepOne:
             # step_one -> exactly one physics step + one snapshot.
             emitter.step.emit()
             _settle(qapp, 0.03)
-            assert mock.step_count == 1, (
-                f"step_one should advance exactly 1, got {mock.step_count}"
-            )
-            assert len(snapshots) == 1, (
-                f"step_one should publish exactly 1 snapshot, got {len(snapshots)}"
-            )
+            assert mock.step_count == 1, f"step_one should advance exactly 1, got {mock.step_count}"
+            assert (
+                len(snapshots) == 1
+            ), f"step_one should publish exactly 1 snapshot, got {len(snapshots)}"
         finally:
             worker.stop()
             thread.quit()
@@ -264,16 +262,12 @@ class TestPauseResumeStepOne:
             emitter.pause.emit(False)
             _settle(qapp, 0.1)
             count_after_run = mock.step_count
-            assert count_after_run >= 3, (
-                f"expected >=3 steps after resume, got {count_after_run}"
-            )
+            assert count_after_run >= 3, f"expected >=3 steps after resume, got {count_after_run}"
 
             # Pause -> steps must NOT advance further.
             emitter.pause.emit(True)
             _settle(qapp, 0.1)
-            assert mock.step_count == count_after_run, (
-                "step_count must not advance while paused"
-            )
+            assert mock.step_count == count_after_run, "step_count must not advance while paused"
         finally:
             worker.stop()
             thread.quit()
@@ -306,9 +300,9 @@ class TestDecouplingAndPublishCap:
             # 50 Hz sim steps.
             assert mock.step_count >= 3
             # 30 Hz publish cap -> ~3 publishes in 100 ms; allow 4 for jitter.
-            assert len(snapshots) <= 4, (
-                f"publish cap failed: {len(snapshots)} snapshots in 100ms (<=4 expected)"
-            )
+            assert (
+                len(snapshots) <= 4
+            ), f"publish cap failed: {len(snapshots)} snapshots in 100ms (<=4 expected)"
             assert len(snapshots) >= 1, "expected at least one published snapshot"
         finally:
             worker.stop()
@@ -356,7 +350,6 @@ class TestSpeedScaling:
     """D-09: speed scales wall_dt (NOT sim_dt); 2x ~= 2x, 0.5x ~= half."""
 
     def test_speed_2x_doubles_step_count(self, qapp, isolated_home) -> None:
-        from PySide6.QtCore import QThread
 
         worker_1x, thread_1x, mock_1x, em_1x = self._make_worker()
         worker_2x, thread_2x, mock_2x, em_2x = self._make_worker()
@@ -374,9 +367,9 @@ class TestSpeedScaling:
             # 2x should be roughly double 1x; generous jitter bounds (1.5x..2.5x).
             if c1 >= 2:
                 ratio = c2 / c1
-                assert 1.5 <= ratio <= 2.5, (
-                    f"2x speed ratio out of bounds: 1x={c1}, 2x={c2}, ratio={ratio:.2f}"
-                )
+                assert (
+                    1.5 <= ratio <= 2.5
+                ), f"2x speed ratio out of bounds: 1x={c1}, 2x={c2}, ratio={ratio:.2f}"
             else:
                 pytest.skip("1x baseline too small for a meaningful ratio")
         finally:
@@ -388,7 +381,6 @@ class TestSpeedScaling:
             thread_2x.wait(3000)
 
     def test_speed_0_5x_halves_step_count(self, qapp, isolated_home) -> None:
-        from PySide6.QtCore import QThread
 
         worker_1x, thread_1x, mock_1x, em_1x = self._make_worker()
         worker_half, thread_half, mock_half, em_half = self._make_worker()
@@ -406,9 +398,9 @@ class TestSpeedScaling:
             # 0.5x should be roughly half of 1x; generous jitter (0.3x..0.7x).
             if c1 >= 4:
                 ratio = ch / c1
-                assert 0.3 <= ratio <= 0.7, (
-                    f"0.5x speed ratio out of bounds: 1x={c1}, 0.5x={ch}, ratio={ratio:.2f}"
-                )
+                assert (
+                    0.3 <= ratio <= 0.7
+                ), f"0.5x speed ratio out of bounds: 1x={c1}, 0.5x={ch}, ratio={ratio:.2f}"
             else:
                 pytest.skip("1x baseline too small for a meaningful ratio")
         finally:

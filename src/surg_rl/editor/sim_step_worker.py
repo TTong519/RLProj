@@ -43,7 +43,7 @@ from surg_rl.editor import QtCore
 from surg_rl.utils.logging import get_logger
 
 if TYPE_CHECKING:
-    from surg_rl.simulators.base_simulator import BaseSimulator, State
+    from surg_rl.simulators.base_simulator import BaseSimulator
 
 logger = get_logger(__name__)
 

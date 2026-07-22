@@ -165,8 +165,7 @@ def isolated_home(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 # Helpers — construct a RenderPollLoop wired to a MockSimulator + spy canvas.
 # ---------------------------------------------------------------------------
-def _make_loop(mock: MockSimulator, canvas: _SpyCanvas | None = None,
-               on_fps_update=None):
+def _make_loop(mock: MockSimulator, canvas: _SpyCanvas | None = None, on_fps_update=None):
     if canvas is None:
         canvas = _SpyCanvas()
     camera_offset_ref = lambda: {  # noqa: E731
@@ -203,10 +202,13 @@ class TestRenderPollCadence:
             loop.start()
             # Pump the UI event loop for ~100 ms. At _FRAME_INTERVAL_MS=33,
             # singleShot fires at ~0, 33, 66, 99 ms -> ~4 ticks; assert >=3.
+            # We count _tick invocations (loop._tick_count), not renders:
+            # skip-when-no-new means canvas.set_image only rises on a new
+            # frame_id, so the timer cadence is the truer offscreen proxy.
             QTest.qWait(100)
             qapp.processEvents()
-            assert canvas.set_image_count >= 3, (
-                f"render-poll cadence too low: {canvas.set_image_count} renders "
+            assert loop._tick_count >= 3, (
+                f"render-poll cadence too low: {loop._tick_count} ticks "
                 f"in 100ms (>=3 expected at 30Hz)"
             )
         finally:
@@ -270,16 +272,15 @@ class TestSkipNoNewSnapshot:
             loop.on_snapshot(_Snapshot(state=mock.get_state(), frame_id=1))
             QTest.qWait(60)
             qapp.processEvents()
-            renders_after_first = canvas.set_image_count
-            mock.render_count_after_first = mock.render_count  # type: ignore[attr-defined]
+            render_count_after_first = mock.render_count
 
             # Re-inject the SAME frame_id -> skip render.
             loop.on_snapshot(_Snapshot(state=mock.get_state(), frame_id=1))
             QTest.qWait(60)
             qapp.processEvents()
-            assert mock.render_count == mock.render_count_after_first, (  # type: ignore[attr-defined]
+            assert mock.render_count == render_count_after_first, (
                 f"render() should NOT be called for duplicate frame_id; "
-                f"render_count incremented from {mock.render_count_after_first} "  # type: ignore[attr-defined]
+                f"render_count incremented from {render_count_after_first} "
                 f"to {mock.render_count}"
             )
         finally:
