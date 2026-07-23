@@ -155,7 +155,23 @@ class ViewportPanel(QtWidgets.QWidget):
         owns the canvas, the ephemeral camera offset (D-05), the
         ndarray->QPixmap adapter (``set_image``), and the in-place scene
         swap (``update_scene`` — Phase 41 D-06: no widget recreation).
+
+    Cross-thread requests (``set_paused`` / ``bind_scene`` on the worker)
+    are emitted as proxy signals (``_pause_requested`` /
+    ``_bind_scene_requested``) so the EditorWindow controller can connect
+    them to the worker's ``@Slot``s with a queued connection — the worker's
+    ``@Slot`` methods are NOT signals and cannot be ``.emit()``-ed directly.
     """
+
+    # Proxy signals → connected by EditorWindow to the SimStepWorker @Slots
+    # (Qt.QueuedConnection — the worker lives on a QThread). These cross the
+    # UI→worker thread boundary; payloads are plain Python objects (safe).
+    _pause_requested = QtCore.Signal(bool)
+    _bind_scene_requested = QtCore.Signal(object)
+    # Emitted at the end of _bind_loaded_simulator (after the D-12 hint is
+    # re-evaluated) so EditorWindow can refresh the playback status-bar
+    # segment to reflect the new scene's static/dynamic state (D-12).
+    _scene_bound = QtCore.Signal()
 
     def __init__(
         self,
@@ -251,6 +267,7 @@ class ViewportPanel(QtWidgets.QWidget):
         """
         if self._render_loop is not None:
             self._render_loop.bind_simulator(None)  # reset render state eagerly
+        load_error = False
         try:
             new_sim = self._on_load_simulator(self._scene)
         except Exception as exc:  # noqa: BLE001
@@ -258,22 +275,31 @@ class ViewportPanel(QtWidgets.QWidget):
 
             self._canvas.set_text(f"Simulator load error: {safe_error_message(exc)}")
             new_sim = None
+            load_error = True
         self._simulator = new_sim
         if new_sim is None:
-            self._canvas.set_text("(simulator unavailable)")
+            # Only show the generic "(simulator unavailable)" message when the
+            # loader returned None cleanly — if it raised, the more-specific
+            # "Simulator load error: ..." message above must be preserved
+            # (Rule 1 fix — the None branch was overwriting the load-error text).
+            if not load_error:
+                self._canvas.set_text("(simulator unavailable)")
         else:
             self._canvas.set_text("(loading simulator...)")
         if self._render_loop is not None and new_sim is not None:
             self._render_loop.bind_simulator(new_sim)
         if self._sim_worker is not None:
             if new_sim is not None:
-                self._sim_worker.bind_scene.emit(new_sim)  # queued — worker thread
+                self._bind_scene_requested.emit(new_sim)  # queued — worker thread
             # D-11 — load paused: the worker must NOT start stepping until the
             # user presses Play (or Space). Belt-and-braces after bind_scene.
-            self._sim_worker.set_paused.emit(True)
+            self._pause_requested.emit(True)
         # D-12 static-scene hint (panel-local; the EditorWindow status-bar
         # callback reads this in Task 3).
         self._static_scene = not _scene_has_dynamics(self._scene)
+        # Notify the controller so it can refresh the playback status-bar
+        # segment to reflect the new scene's static/dynamic state (D-12).
+        self._scene_bound.emit()
 
     def stop(self) -> None:
         """Halt the render loop + pause the worker BEFORE closing the shared
@@ -296,7 +322,7 @@ class ViewportPanel(QtWidgets.QWidget):
                 self._render_loop.stop()
         if self._sim_worker is not None:
             with contextlib.suppress(Exception):
-                self._sim_worker.set_paused.emit(True)
+                self._pause_requested.emit(True)
         if self._simulator is not None:
             # MuJoCo Renderer.__del__ can raise AttributeError
             # ('_gl_context') during interpreter shutdown if the GL
@@ -494,7 +520,7 @@ class ViewportPanel(QtWidgets.QWidget):
         # (a) Pitfall 3 — pause worker BEFORE closing the old sim.
         if self._sim_worker is not None:
             with contextlib.suppress(Exception):
-                self._sim_worker.set_paused.emit(True)
+                self._pause_requested.emit(True)
         # (b) close the old simulator (the existing suppress pattern).
         with contextlib.suppress(AttributeError, OSError):
             if self._simulator is not None:

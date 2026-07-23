@@ -431,13 +431,17 @@ class TestCloseMidStepCleanExit:
         w = EditorWindow()
         w.show()
         qapp.processEvents()
-        # Start the worker stepping (resume from the default paused load).
-        w._sim_worker.set_paused.emit(False)
+        # Start the worker stepping (resume from the default paused load) via
+        # the toolbar action — setChecked(True) = playing -> _on_play_pause_
+        # toggled -> _play_pause_request.emit(False) -> set_paused(False) queued
+        # on the worker thread (the @Slot is NOT a signal; we route through the
+        # proxy signal, the canonical cross-thread invocation).
+        w._act_play_pause.setChecked(True)
         time.sleep(0.05)  # let the accumulator tick a few times
         qapp.processEvents()
         try:
             # Full closeEvent path: aboutToClose -> _stop_sim_worker
-            # (sim_worker.stop + thread.quit + thread.wait(3000)) -> viewport.stop.
+            # (_cancelled=True + thread.quit + thread.wait(3000)) -> viewport.stop.
             w.close()
             qapp.processEvents()
             assert not w._sim_thread.isRunning(), (

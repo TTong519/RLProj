@@ -103,7 +103,12 @@ class TestViewportFrame:
 
 @pytestmark_viewport
 class TestViewportTimer:
-    def test_tick_schedules_another_tick(self, qapp) -> None:
+    def test_construction_does_not_start_render_chain(self, qapp) -> None:
+        """Phase 42 D-02 — ViewportPanel construction does NOT schedule a
+        render QTimer.singleShot chain. The ONLY render chain lives in
+        RenderPollLoop (constructed by EditorWindow and started by the
+        controller after set_playback). The old auto-start _start() path is
+        removed (D-02 forbids a second render chain on the UI thread)."""
         from surg_rl.editor import QtCore
         from surg_rl.editor.viewport import ViewportPanel
 
@@ -111,7 +116,11 @@ class TestViewportTimer:
             scene = _fake_scene()
             panel = ViewportPanel(scene)
             qapp.processEvents()
-            mock.assert_called()
+            assert mock.call_count == 0, (
+                "ViewportPanel construction must NOT schedule a singleShot "
+                "render chain (D-02 — the only render chain is RenderPollLoop, "
+                "started by EditorWindow after set_playback)"
+            )
             panel.stop()
 
 
@@ -181,25 +190,23 @@ class TestViewportRenderLoopGuard:
             panel._tick()
             assert mock.call_count == 0, "_tick must not reschedule QTimer.singleShot after stop()"
 
-    def test_tick_recovers_from_simulator_none(self, qapp) -> None:
-        from surg_rl.editor import QtCore
+    def test_bind_shows_simulator_unavailable_when_loader_returns_none(self, qapp) -> None:
+        """Phase 42 D-02 — load-None recovery moved from the old monolithic
+        ``_tick`` to ``_bind_loaded_simulator``. When the loader returns None,
+        the canvas shows "(simulator unavailable)" via the set_text adapter.
+        The render-poll (RenderPollLoop) is bound to None and does NOT spin
+        a render chain (D-02 — only RenderPollLoop owns the render chain)."""
         from surg_rl.editor.viewport import ViewportPanel
 
         scene = _fake_scene()
-        # Force simulator unavailable.
         panel = ViewportPanel(scene, on_load_simulator=lambda s: None)
         panel.stop()  # halt any auto-started loop first
-        panel._running = True  # re-enable for the manual _tick under test
-        panel._simulator = None
-        with patch.object(QtCore.QTimer, "singleShot") as mock:
-            panel._tick()
-            assert (
-                "(simulator unavailable)" in panel._canvas.text()
-            ), "canvas must show simulator-unavailable text"
-            assert mock.call_count >= 1, (
-                "_tick must reschedule when simulator is unavailable "
-                "(original bug: silent render-loop death)"
-            )
+        # set_playback performs the initial bind; a None-returning loader must
+        # surface the diagnostic via the canvas adapter (D-02/D-03).
+        panel.set_playback(sim_worker=None, render_loop=None)
+        assert (
+            "(simulator unavailable)" in panel._canvas.text()
+        ), "canvas must show simulator-unavailable text via _bind_loaded_simulator"
         panel.stop()
 
     def test_del_guarded_against_attribute_error(self, qapp) -> None:
@@ -226,69 +233,46 @@ class TestViewportRenderLoopGuard:
         except AttributeError as exc:  # noqa: PT017
             pytest.fail(f"__del__ must not raise AttributeError: {exc}")
 
-    def test_render_error_reschedules(self, qapp) -> None:
-        from surg_rl.editor import QtCore
+    def test_set_text_adapter_displays_render_error_message(self, qapp) -> None:
+        """Phase 42 D-03 — render-error diagnostics are owned by
+        ``RenderPollLoop._render`` (Plan 01), which calls the canvas adapter
+        ``ViewportPanel.set_text`` to surface the message. The adapter is the
+        ViewportPanel's responsibility (D-03), so we guard it here; the full
+        render-error -> reschedule behavior is tested in
+        ``tests/test_render_poll_loop.py``."""
         from surg_rl.editor.viewport import ViewportPanel
 
-        class _RenderFailSimulator:
-            def close(self) -> None:
-                pass
-
-            def render(self, **kwargs):
-                raise RuntimeError("GL fail")
-
         scene = _fake_scene()
-        panel = ViewportPanel(scene, on_load_simulator=lambda s: _RenderFailSimulator())
-        panel.stop()  # halt auto-started loop
-        panel._running = True  # re-enable for the manual _tick under test
-        panel._simulator = _RenderFailSimulator()
-        with patch.object(QtCore.QTimer, "singleShot") as mock:
-            panel._tick()
-            assert "Render error" in panel._canvas.text(), "canvas must show render error text"
-            assert mock.call_count >= 1, "_tick must reschedule after a render exception"
+        panel = ViewportPanel(scene, on_load_simulator=lambda s: None)
+        panel.stop()
+        # set_text adapter surfaces RenderPollLoop diagnostics on the canvas.
+        panel.set_text("Render error: GL fail")
+        assert (
+            "Render error" in panel._canvas.text()
+        ), "set_text adapter must surface the render-error diagnostic on the canvas"
+        # set_text adapter surfaces the render-None diagnostic too.
+        panel.set_text("(preview render unavailable — no GL context)")
+        assert (
+            "preview render unavailable" in panel._canvas.text()
+        ), "set_text adapter must surface the render-None diagnostic on the canvas"
         panel.stop()
 
-    def test_render_none_shows_unavailable_message(self, qapp) -> None:
-        from surg_rl.editor import QtCore
-        from surg_rl.editor.viewport import ViewportPanel
-
-        class _NoRenderSimulator:
-            def close(self) -> None:
-                pass
-
-            def render(self, **kwargs):
-                return None
-
-        scene = _fake_scene()
-        panel = ViewportPanel(scene, on_load_simulator=lambda s: _NoRenderSimulator())
-        panel.stop()  # halt auto-started loop
-        panel._running = True  # re-enable for the manual _tick under test
-        panel._simulator = _NoRenderSimulator()
-        with patch.object(QtCore.QTimer, "singleShot") as mock:
-            panel._tick()
-            assert (
-                "preview render unavailable" in panel._canvas.text()
-            ), "canvas must show unavailable message when render returns None"
-            assert mock.call_count >= 1, "_tick must reschedule after None render"
-        panel.stop()
-
-    def test_simulator_load_exception_shows_error_and_reschedules(self, qapp) -> None:
-        from surg_rl.editor import QtCore
+    def test_bind_shows_load_error_when_loader_raises(self, qapp) -> None:
+        """Phase 42 D-02 — load-exception recovery moved from the old monolithic
+        ``_tick`` to ``_bind_loaded_simulator``. When ``on_load_simulator``
+        raises, the canvas shows "Simulator load error: ..." via the adapter
+        and the panel does not crash (the render-poll is bound to None)."""
         from surg_rl.editor.viewport import ViewportPanel
 
         scene = _fake_scene()
         panel = ViewportPanel(
             scene, on_load_simulator=lambda s: (_ for _ in ()).throw(RuntimeError("GL init failed"))
         )
-        panel.stop()  # halt auto-started loop
-        panel._running = True  # re-enable for the manual _tick under test
-        panel._simulator = None
-        with patch.object(QtCore.QTimer, "singleShot") as mock:
-            panel._tick()
-            assert (
-                "Simulator load error" in panel._canvas.text()
-            ), "canvas must show load error when on_load_simulator raises"
-            assert mock.call_count >= 1, "_tick must reschedule after simulator load exception"
+        panel.stop()
+        panel.set_playback(sim_worker=None, render_loop=None)
+        assert (
+            "Simulator load error" in panel._canvas.text()
+        ), "canvas must show load error when on_load_simulator raises via _bind_loaded_simulator"
         panel.stop()
 
 
@@ -680,8 +664,22 @@ class TestViewportMouseInteraction:
 
 @pytestmark_viewport
 class TestViewportFramebufferRetry:
-    """MuJoCo framebuffer-too-large errors should retry at 640x480."""
+    """MuJoCo framebuffer-too-large retry — SCOPED OUT per Phase 42 Plan 01.
 
+    The framebuffer-too-large fallback (retry at 640x480) was scoped out of
+    Plan 01's RenderPollLoop per ``.planning/phases/42-render-sim-decoupling-
+    animated-viewport/42-01-SUMMARY.md`` — the high-DPI MuJoCo edge case now
+    surfaces a "Render error" diagnostic via ``RenderPollLoop._render`` (the
+    set_text adapter) instead of silently retrying at a clamped size. The
+    fallback is tracked as a deferred item for a future phase. This test is
+    skipped (not removed) so the deferred scope is visible in the suite.
+    """
+
+    @pytest.mark.skip(
+        reason="Phase 42 Plan 01 — framebuffer-too-large retry scoped out; "
+        "RenderPollLoop surfaces a 'Render error' diagnostic via set_text "
+        "instead. Tracked as a deferred item (see 42-01-SUMMARY.md)."
+    )
     def test_render_framebuffer_error_retries_at_default_size(self, qapp) -> None:
         from surg_rl.editor import QtCore
         from surg_rl.editor.viewport import ViewportPanel
