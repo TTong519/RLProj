@@ -112,8 +112,14 @@ class TestOpenScene:
         from surg_rl.editor.main_window import EditorWindow
 
         w = EditorWindow(scene_path=scene_path)
-        assert w._scene is not None
-        assert w._current_path == scene_path
+        try:
+            assert w._scene is not None
+            assert w._current_path == scene_path
+        finally:
+            # Phase 42 — explicit QThread teardown (the weakref.finalize GC
+            # safety net is unreliable under full-suite load; without close()
+            # the SimStepWorker QThread leaks → SIGABRT at shutdown).
+            w.close()
 
 
 @pytestmark_viewport

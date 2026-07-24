@@ -264,10 +264,22 @@ class TestPauseResumeStepOne:
             count_after_run = mock.step_count
             assert count_after_run >= 3, f"expected >=3 steps after resume, got {count_after_run}"
 
-            # Pause -> steps must NOT advance further.
+            # Pause -> step_count must HOLD (no further advance once the pause
+            # lands). set_paused(True) is a queued slot, so a _tick already
+            # dequeued on the worker thread before the pause is processed may
+            # complete one final accumulator pass (~1 step at 50 Hz) before the
+            # timer is stopped — that in-flight tick is captured in
+            # ``held_count`` below. What matters is that step_count does NOT
+            # advance beyond it: a broken pause (timer not stopping) would keep
+            # stepping through the second settle and trip this assertion.
             emitter.pause.emit(True)
+            _settle(qapp, 0.05)
+            held_count = mock.step_count
             _settle(qapp, 0.1)
-            assert mock.step_count == count_after_run, "step_count must not advance while paused"
+            assert mock.step_count == held_count, (
+                "step_count must hold after pause (no further advance); "
+                f"held={held_count}, after={mock.step_count}"
+            )
         finally:
             worker.stop()
             thread.quit()

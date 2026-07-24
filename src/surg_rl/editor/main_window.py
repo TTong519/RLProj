@@ -10,6 +10,7 @@ Plans 33-02..05 fill in the panes:
 from __future__ import annotations
 
 import contextlib
+import threading
 import weakref
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -131,7 +132,13 @@ class EditorWindow(QtWidgets.QMainWindow):
         # decoupling seam (D-03 — State is pure-data, safe across threads).
         self._sim_thread = QtCore.QThread()
         self._sim_thread.setObjectName("sim_step_worker_thread")
-        self._sim_worker = SimStepWorker()
+        # ONE shared cross-thread simulator-access lock — PyBullet's C API is
+        # not thread-safe, so the worker's step()/get_state()/bind_scene, the
+        # UI render-poll's render(), and ViewportPanel's close() on scene swap
+        # must all serialize. Passed to SimStepWorker + RenderPollLoop here and
+        # to ViewportPanel via set_playback below.
+        self._sim_lock = threading.RLock()
+        self._sim_worker = SimStepWorker(sim_lock=self._sim_lock)
         self._sim_worker.moveToThread(self._sim_thread)
         # thread.started -> worker.start creates the accumulator QTimer on the
         # worker thread (affinity = worker thread; Qt timers must be created on
@@ -150,6 +157,7 @@ class EditorWindow(QtWidgets.QMainWindow):
             width=max(1, self._viewport_panel.width()),
             height=max(1, self._viewport_panel.height()),
             camera_name=self._viewport_panel.camera_name(),
+            sim_lock=self._sim_lock,
         )
         # D-03 decoupling seam — queued because it crosses the worker→UI thread
         # boundary; the snapshot payload is pure-data (no Qt/GL handles).
@@ -187,7 +195,9 @@ class EditorWindow(QtWidgets.QMainWindow):
         # Hand the worker + loop refs to ViewportPanel — does the INITIAL bind
         # (load the scene's simulator on the UI thread + bind_scene queued +
         # set_paused True D-11 + D-12 hint).
-        self._viewport_panel.set_playback(self._sim_worker, self._render_loop)
+        self._viewport_panel.set_playback(
+            self._sim_worker, self._render_loop, sim_lock=self._sim_lock
+        )
         # Start the worker thread (runs the worker's event loop — NOT a
         # blocking run()) and the UI-thread render-poll chain.
         self._sim_thread.start()

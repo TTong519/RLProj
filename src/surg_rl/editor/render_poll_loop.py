@@ -33,6 +33,7 @@ without touching widget code.
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Callable
 from typing import Any
@@ -69,6 +70,7 @@ class RenderPollLoop(QtCore.QObject):
         width: int = 640,
         height: int = 480,
         camera_name: str | None = None,
+        sim_lock: threading.RLock | None = None,
     ) -> None:
         super().__init__()
         # A callable returning the CURRENT shared simulator — the live
@@ -81,6 +83,11 @@ class RenderPollLoop(QtCore.QObject):
         self._width = width
         self._height = height
         self._camera_name = camera_name
+        # Cross-thread simulator-access lock shared with SimStepWorker +
+        # ViewportPanel (PyBullet is not thread-safe — see sim_step_worker.py).
+        # The controller passes ONE instance to all three; ``render()`` is the
+        # only simulator-touching op on this side and is guarded in ``_render``.
+        self._sim_lock: threading.RLock = sim_lock if sim_lock is not None else threading.RLock()
         # _running guard (Pitfall 8): stop() sets False so already-queued
         # singleShot callbacks early-return instead of rescheduling.
         self._running: bool = True
@@ -184,12 +191,19 @@ class RenderPollLoop(QtCore.QObject):
         except Exception:  # noqa: BLE001
             pass
         try:
-            arr = sim.render(
-                mode="rgb_array",
-                width=self._width,
-                height=self._height,
-                camera_name=self._camera_name,
-            )
+            # Serialize render() with the worker's step()/get_state()/bind_scene
+            # (and ViewportPanel.close on scene swap) via _sim_lock — PyBullet's
+            # C API is not thread-safe; concurrent getCameraImage + stepSimulation
+            # (or GC of a stale simulator's pybullet buffers during bind_scene)
+            # corrupts the heap and segfaults. The lock is released before the
+            # ndarray->QPixmap conversion in canvas.set_image (no sim access).
+            with self._sim_lock:
+                arr = sim.render(
+                    mode="rgb_array",
+                    width=self._width,
+                    height=self._height,
+                    camera_name=self._camera_name,
+                )
         except Exception as exc:  # noqa: BLE001
             # Route any render error to the canvas via the redactor (D-19 /
             # GUI-09 — never leak raw secrets to the status bar). The

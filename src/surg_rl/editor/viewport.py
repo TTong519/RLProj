@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextlib
 import platform
+import threading
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, TypedDict
 
@@ -201,6 +202,12 @@ class ViewportPanel(QtWidgets.QWidget):
         # for tests that construct ViewportPanel in isolation).
         self._sim_worker: Any = None
         self._render_loop: Any = None
+        # Cross-thread simulator-access lock shared with SimStepWorker +
+        # RenderPollLoop (PyBullet is not thread-safe). Defaults to a private
+        # RLock for isolated ViewportPanel tests; set_playback replaces it with
+        # the controller's shared instance so close() on scene swap serializes
+        # with the worker's step()/bind_scene and the UI render-poll.
+        self._sim_lock: threading.RLock = threading.RLock()
         # D-12 static-scene hint flag — set by update_scene/set_playback from
         # _scene_has_dynamics; read by the EditorWindow status-bar callback
         # (Task 3). Panel-local/ephemeral (D-05 — NOT written to the schema).
@@ -235,6 +242,7 @@ class ViewportPanel(QtWidgets.QWidget):
         self,
         sim_worker: Any,
         render_loop: Any,
+        sim_lock: threading.RLock | None = None,
     ) -> None:
         """Receive the SimStepWorker + RenderPollLoop refs from EditorWindow.
 
@@ -251,6 +259,10 @@ class ViewportPanel(QtWidgets.QWidget):
         """
         self._sim_worker = sim_worker
         self._render_loop = render_loop
+        # Adopt the controller's shared lock so close() on scene swap serializes
+        # with the worker's step()/bind_scene and the UI render-poll.
+        if sim_lock is not None:
+            self._sim_lock = sim_lock
         self._bind_loaded_simulator(initial=True)
 
     def _bind_loaded_simulator(self, initial: bool = False) -> None:
@@ -328,7 +340,10 @@ class ViewportPanel(QtWidgets.QWidget):
             # ('_gl_context') during interpreter shutdown if the GL
             # context is already destroyed. Swallow it — we're tearing
             # down (UAT Gap 2 fix).
-            with contextlib.suppress(AttributeError, OSError):
+            # Serialize close() with the worker's step()/bind_scene and the UI
+            # render-poll via _sim_lock — pybullet.disconnect is a C call that
+            # is unsafe concurrent with stepSimulation/getCameraImage.
+            with self._sim_lock, contextlib.suppress(AttributeError, OSError):
                 self._simulator.close()
             self._simulator = None
 
@@ -521,8 +536,12 @@ class ViewportPanel(QtWidgets.QWidget):
         if self._sim_worker is not None:
             with contextlib.suppress(Exception):
                 self._pause_requested.emit(True)
-        # (b) close the old simulator (the existing suppress pattern).
-        with contextlib.suppress(AttributeError, OSError):
+        # (b) close the old simulator (the existing suppress pattern). Serialized
+        # with the worker's step()/bind_scene + the UI render-poll via _sim_lock
+        # so pybullet.disconnect never races an in-flight C call on another
+        # thread (the queued pause above stops the worker's timer, but a _tick
+        # already dequeued may still be mid-step — the lock waits it out).
+        with self._sim_lock, contextlib.suppress(AttributeError, OSError):
             if self._simulator is not None:
                 self._simulator.close()
         # (c) drop the old ref.

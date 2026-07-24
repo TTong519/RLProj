@@ -189,11 +189,18 @@ class TestMainWindow:
         from surg_rl.editor.main_window import EditorWindow
 
         w = EditorWindow()
-        assert w.windowTitle() == "Surg-RL Scene Editor"
-        docks = w.findChildren(QtWidgets.QDockWidget)
-        titles = sorted(d.windowTitle() for d in docks)
-        assert titles == sorted(["Scene Tree", "Properties", "LLM Prompt-to-JSON"])
-        assert w.centralWidget() is not None
+        try:
+            assert w.windowTitle() == "Surg-RL Scene Editor"
+            docks = w.findChildren(QtWidgets.QDockWidget)
+            titles = sorted(d.windowTitle() for d in docks)
+            assert titles == sorted(["Scene Tree", "Properties", "LLM Prompt-to-JSON"])
+            assert w.centralWidget() is not None
+        finally:
+            # Phase 42: close() stops the SimStepWorker QThread + render-poll
+            # reliably. The weakref.finalize GC safety net is unreliable under
+            # full-suite load (QThread destroyed while running → SIGABRT), so
+            # every EditorWindow-constructing test must close() explicitly.
+            w.close()
 
     def test_main_window_with_scene_path_does_not_crash(
         self, qapp, isolated_home, tmp_path
@@ -203,26 +210,32 @@ class TestMainWindow:
         scene = tmp_path / "test.json"
         scene.write_text('{"metadata": {"name": "x", "version": "0.1.0"}}')
         w = EditorWindow(scene_path=scene)
-        assert w.windowTitle() == "Surg-RL Scene Editor"
+        try:
+            assert w.windowTitle() == "Surg-RL Scene Editor"
+        finally:
+            w.close()  # Phase 42 — explicit QThread teardown (see above).
 
     def test_drag_drop_accepts_json(self, qapp, isolated_home, tmp_path) -> None:
         from surg_rl.editor import QtCore, QtGui
         from surg_rl.editor.main_window import EditorWindow
 
         w = EditorWindow()
-        scene = tmp_path / "drop.json"
-        scene.write_text("{}")
-        mime = QtCore.QMimeData()
-        mime.setUrls([QtCore.QUrl.fromLocalFile(str(scene))])
-        event = QtGui.QDropEvent(
-            QtCore.QPointF(0, 0),
-            QtCore.Qt.DropAction.CopyAction,
-            mime,
-            QtCore.Qt.MouseButton.LeftButton,
-            QtCore.Qt.KeyboardModifier.NoModifier,
-        )
-        w.dropEvent(event)
-        assert w.isVisible() is False
+        try:
+            scene = tmp_path / "drop.json"
+            scene.write_text("{}")
+            mime = QtCore.QMimeData()
+            mime.setUrls([QtCore.QUrl.fromLocalFile(str(scene))])
+            event = QtGui.QDropEvent(
+                QtCore.QPointF(0, 0),
+                QtCore.Qt.DropAction.CopyAction,
+                mime,
+                QtCore.Qt.MouseButton.LeftButton,
+                QtCore.Qt.KeyboardModifier.NoModifier,
+            )
+            w.dropEvent(event)
+            assert w.isVisible() is False
+        finally:
+            w.close()  # Phase 42 — explicit QThread teardown (see above).
 
     def test_close_event_persists_geometry(self, qapp, isolated_home) -> None:
         from surg_rl.editor.main_window import EditorWindow
@@ -231,21 +244,27 @@ class TestMainWindow:
         w.resize(900, 700)
         w.close()
         w2 = EditorWindow()
-        # Window managers / offscreen platforms may clamp the exact size.
-        assert w2.width() >= 700, f"expected width >= 700, got {w2.width()}"
-        assert w2.height() >= 500, f"expected height >= 500, got {w2.height()}"
+        try:
+            # Window managers / offscreen platforms may clamp the exact size.
+            assert w2.width() >= 700, f"expected width >= 700, got {w2.width()}"
+            assert w2.height() >= 500, f"expected height >= 500, got {w2.height()}"
+        finally:
+            w2.close()  # Phase 42 — explicit QThread teardown (see above).
 
     def test_status_bar_has_four_labels(self, qapp, isolated_home) -> None:
         from surg_rl.editor import QtWidgets
         from surg_rl.editor.main_window import EditorWindow
 
         w = EditorWindow()
-        bar = w.statusBar()
-        labels = bar.findChildren(QtWidgets.QLabel)
-        assert any("Untitled" in lbl.text() for lbl in labels)
-        assert any("sim:" in lbl.text() for lbl in labels)
-        assert any("fps:" in lbl.text() for lbl in labels)
-        assert any("validate:" in lbl.text() for lbl in labels)
+        try:
+            bar = w.statusBar()
+            labels = bar.findChildren(QtWidgets.QLabel)
+            assert any("Untitled" in lbl.text() for lbl in labels)
+            assert any("sim:" in lbl.text() for lbl in labels)
+            assert any("fps:" in lbl.text() for lbl in labels)
+            assert any("validate:" in lbl.text() for lbl in labels)
+        finally:
+            w.close()  # Phase 42 — explicit QThread teardown (see above).
 
 
 # --- App entrypoint tests ---------------------------------------------------

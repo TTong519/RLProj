@@ -35,6 +35,7 @@ thread-affine; render lives on the UI thread in ``RenderPollLoop``).
 
 from __future__ import annotations
 
+import threading
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -87,9 +88,21 @@ class SimStepWorker(QtCore.QObject):
 
     snapshot_ready = QtCore.Signal(object)
 
-    def __init__(self) -> None:
+    def __init__(self, sim_lock: threading.RLock | None = None) -> None:
         super().__init__()
         self._simulator: BaseSimulator | None = None
+        # Cross-thread simulator-access lock (PyBullet is NOT thread-safe — its
+        # C API shares global state, so concurrent step()/get_state() on the
+        # worker thread + render() on the UI thread, or the GC of a stale
+        # simulator's pybullet-allocated buffers during bind_scene while the UI
+        # thread is mid-getCameraImage, corrupts the heap and segfaults). The
+        # controller (EditorWindow) creates ONE shared RLock and passes the same
+        # instance to the worker + RenderPollLoop + ViewportPanel so every
+        # simulator-touching op serializes. Uncontended acquire is ~1us, so the
+        # ~50 Hz accumulator + ~30 Hz render pay only on real contention (a slow
+        # pybullet render blocks step — unavoidable for a non-thread-safe
+        # backend; the accumulator's spiral cap discards the backed-up debt).
+        self._sim_lock: threading.RLock = sim_lock if sim_lock is not None else threading.RLock()
         self._timer: QtCore.QTimer | None = None
         # D-11 — load paused. start() creates the timer but does NOT start it
         # while paused; the user must press Play to begin animation.
@@ -126,12 +139,19 @@ class SimStepWorker(QtCore.QObject):
         Called queued from ``ViewportPanel.update_scene`` on the UI thread;
         runs on the worker thread after any in-flight ``_tick``. Resets the
         accumulator + publish clock so the new scene starts fresh.
+
+        The assignment is guarded by ``_sim_lock``: dropping the previous
+        simulator reference can trigger GC of its pybullet-allocated numpy
+        buffers, which is unsafe while the UI thread's ``RenderPollLoop`` is
+        mid-``getCameraImage`` (PyBullet is not thread-safe). Serializing with
+        render guarantees the GC lands between frames, never during one.
         """
-        self._simulator = simulator
-        self._accum = 0.0
-        self._last_wall = time.monotonic()
-        self._last_publish = self._last_wall
-        self._frame_id = 0
+        with self._sim_lock:
+            self._simulator = simulator
+            self._accum = 0.0
+            self._last_wall = time.monotonic()
+            self._last_publish = self._last_wall
+            self._frame_id = 0
 
     @QtCore.Slot(bool)
     def set_paused(self, paused: bool) -> None:
@@ -169,14 +189,20 @@ class SimStepWorker(QtCore.QObject):
         """
         if self._simulator is None:
             return
-        self._simulator.step(None)
-        self._frame_id += 1
-        self.snapshot_ready.emit(self._publish())
+        with self._sim_lock:
+            self._simulator.step(None)
+            self._frame_id += 1
+            self.snapshot_ready.emit(self._publish())
 
     # --- Internal accumulator tick (runs on the worker thread) ---
     def _tick(self) -> None:
-        if self._cancelled or self._simulator is None:
-            return  # Pitfall 8 — _loaded guard via bind_scene
+        # Pitfall 8 + D-11: bail if cancelled, unbound, or paused. set_paused
+        # stops the timer, but a timeout posted on the worker thread just
+        # before the stop landed may still be delivered once — the _paused
+        # check here catches that transition tick so pause takes effect the
+        # instant the flag is set, without waiting for the next dequeue.
+        if self._cancelled or self._simulator is None or self._paused:
+            return
         now = time.monotonic()
         # Recompute wall_dt each tick from time.monotonic() so wall-clock skew
         # does NOT compound (FLAGGED ASSUMPTION precision contract).
@@ -186,20 +212,24 @@ class SimStepWorker(QtCore.QObject):
         self._accum += wall_dt * self._speed
         sim_dt = 1.0 / _SIM_HZ  # = 0.02, fixed
         steps = 0
-        # INCLUSIVE boundary: ``accum >= sim_dt`` (one step at exactly accum == sim_dt).
-        while self._accum >= sim_dt and steps < _MAX_STEPS_PER_TICK:
-            self._simulator.step(None)
-            self._accum -= sim_dt
-            steps += 1
-        if steps == _MAX_STEPS_PER_TICK:
-            # Spiral-of-death cap (Pitfall 4): discard backed-up debt so a
-            # stall does not cascade into an ever-growing catch-up load.
-            self._accum = 0.0
-        # INCLUSIVE publish boundary: ``>= 1.0 / _PUBLISH_HZ`` (30 Hz cap).
-        if now - self._last_publish >= 1.0 / _PUBLISH_HZ:
-            self._frame_id += 1
-            self.snapshot_ready.emit(self._publish())
-            self._last_publish = now
+        # Serialize the step loop + publish with the UI-thread render (and with
+        # ViewportPanel.close on scene swap) via _sim_lock — PyBullet is not
+        # thread-safe. The accumulator math above is lock-free (no sim access).
+        with self._sim_lock:
+            # INCLUSIVE boundary: ``accum >= sim_dt`` (one step at exactly accum == sim_dt).
+            while self._accum >= sim_dt and steps < _MAX_STEPS_PER_TICK:
+                self._simulator.step(None)
+                self._accum -= sim_dt
+                steps += 1
+            if steps == _MAX_STEPS_PER_TICK:
+                # Spiral-of-death cap (Pitfall 4): discard backed-up debt so a
+                # stall does not cascade into an ever-growing catch-up load.
+                self._accum = 0.0
+            # INCLUSIVE publish boundary: ``>= 1.0 / _PUBLISH_HZ`` (30 Hz cap).
+            if now - self._last_publish >= 1.0 / _PUBLISH_HZ:
+                self._frame_id += 1
+                self.snapshot_ready.emit(self._publish())
+                self._last_publish = now
 
     def _publish(self) -> _Snapshot:
         return _Snapshot(state=self._simulator.get_state(), frame_id=self._frame_id)
