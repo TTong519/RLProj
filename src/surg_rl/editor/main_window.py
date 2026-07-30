@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import contextlib
 import threading
-import weakref
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -20,7 +19,11 @@ from surg_rl.editor._safe_error import safe_error_message
 from surg_rl.editor._settings import EditorSettings
 from surg_rl.editor.dock_state import DockStateManager
 from surg_rl.editor.render_poll_loop import RenderPollLoop
-from surg_rl.editor.sim_step_worker import SimStepWorker
+from surg_rl.editor.sim_step_worker import (
+    SimStepWorker,
+    register_sim_runtime,
+    unregister_sim_runtime,
+)
 
 if TYPE_CHECKING:
     from surg_rl.scene_definition import SceneDefinition
@@ -30,29 +33,6 @@ from surg_rl.utils.logging import get_logger
 logger = get_logger(__name__)
 
 _PLACEHOLDER_TEXT = "(populated by Phase 33 plan {plan})"
-
-
-def _finalize_sim_thread(thread: QtCore.QThread, worker: SimStepWorker) -> None:
-    """Best-effort SimStepWorker thread teardown at EditorWindow GC time.
-
-    Pre-Phase-42 EditorWindow tests (``test_gui_foundation.py``) construct
-    ``EditorWindow`` without calling ``close()``, which was safe when the
-    window owned no QThreads. Phase 42 Task 3 starts a SimStepWorker QThread
-    in ``__init__``; if those pre-existing tests never call ``close()``, the
-    thread is still running when the QThread is destroyed →
-    ``QThread: Destroyed while thread is still running`` + segfault during
-    GC. This finalizer is the safety net: it runs when the EditorWindow
-    Python wrapper is garbage-collected, sets the cancel flag + quits +
-    waits (mirrors ``_stop_sim_worker``). It holds refs to the thread +
-    worker ONLY (not to self) so it does not keep the EditorWindow alive
-    (Rule 1 fix for the thread-leak regression in pre-existing tests).
-    """
-    with contextlib.suppress(Exception):
-        worker._cancelled = True
-    if thread is not None:
-        thread.quit()
-        with contextlib.suppress(Exception):
-            thread.wait(3000)
 
 
 def _empty_scene_stub() -> SceneDefinition:
@@ -202,16 +182,18 @@ class EditorWindow(QtWidgets.QMainWindow):
         # blocking run()) and the UI-thread render-poll chain.
         self._sim_thread.start()
         self._render_loop.start()
-        # Rule 1 safety net — pre-Phase-42 EditorWindow tests construct the
-        # window without calling close() (safe before because the window owned
-        # no QThreads). Now that __init__ starts a SimStepWorker QThread, those
-        # tests leak a running thread → "QThread: Destroyed while thread is
-        # still running" + segfault during GC. The finalizer stops the thread
-        # at GC time; it holds refs to the thread + worker ONLY (not self) so
-        # it does not keep the EditorWindow alive.
-        self._sim_finalizer = weakref.finalize(
-            self, _finalize_sim_thread, self._sim_thread, self._sim_worker
-        )
+        # Register the (thread, worker, render_loop) runtime so the autouse
+        # test fixture (tests/conftest.py → reap_all_sim_runtimes) can stop +
+        # join it after tests that construct EditorWindow WITHOUT calling
+        # close(). A per-window weakref.finalize is NOT a viable safety net
+        # here: the RenderPollLoop's self-rescheduling singleShot chain holds
+        # the loop, whose simulator_ref lambda holds the EditorWindow, so the
+        # window is never unreachable while the render-poll runs and the
+        # finalizer never fires. The registry holds a STRONG ref so a leaked
+        # QThread is not destroyed while still running before the reaper joins
+        # it (no "QThread: Destroyed while thread is still running" SIGABRT,
+        # no pybullet teardown segfault). The close() path unregisters.
+        register_sim_runtime(self, self._sim_thread, self._sim_worker, self._render_loop)
 
         self._build_dock_widgets()
         # Phase 42 D-06 — playback toolbar (Play/Pause + Step-one + speed
@@ -305,11 +287,11 @@ class EditorWindow(QtWidgets.QMainWindow):
 
         Best-effort — never blocks close on timeout (log and proceed).
         """
-        # Detach the GC finalizer — close() is the explicit teardown path, so
-        # the finalizer would be redundant (and double-stop the thread).
-        finalizer = getattr(self, "_sim_finalizer", None)
-        if finalizer is not None:
-            finalizer.detach()
+        # Unregister from the module-level runtime registry — close() is the
+        # explicit teardown path, so the autouse test fixture's reaper does not
+        # need to (and must not double-stop) this runtime.
+        if self._sim_thread is not None:
+            unregister_sim_runtime(self._sim_thread)
         # Cross-thread cancel flag — the worker's _tick polls _cancelled
         # at the top and returns; thread.quit() exits the event loop (and
         # stops the accumulator QTimer naturally).
@@ -728,5 +710,52 @@ class EditorWindow(QtWidgets.QMainWindow):
             self._viewport_panel.stop()
         except Exception:  # noqa: BLE001
             pass  # best-effort — don't block window close on viewport cleanup
+        # Break the QObject reference cycles so the window graph is
+        # refcount-collected at close() instead of lingering for cyclic GC.
+        # Phase 42's signal wiring created cycles (EditorWindow ↔ ViewportPanel
+        # via ``_scene_bound -> _refresh_playback_status``; EditorWindow ↔
+        # RenderPollLoop via the ``simulator_ref``/``camera_offset_ref`` lambdas
+        # + ``on_fps_update`` bound method; EditorWindow → SimStepWorker →
+        # RenderPollLoop via ``snapshot_ready -> on_snapshot``). close() stops
+        # the sim/thread but does NOT break these, so the graph survives as a
+        # cycle and a later mock-driven cyclic GC (test_rendering) collects it
+        # — traversing a stale shiboken6 wrapper segfaulted (Phase 42
+        # regression; baseline has no QThread and is clean). Breaking the
+        # cycles here lets refcounting collect the graph immediately at close,
+        # before any cyclic GC runs.
+        self._break_qobject_cycles()
         self._settings.save_window(self.saveGeometry(), self.saveState())
         super().closeEvent(event)
+
+    def _break_qobject_cycles(self) -> None:
+        """Sever the Phase 42 signal/lambda reference cycles so the EditorWindow
+        QObject graph is refcount-collected at close() rather than lingering
+        for the cyclic garbage collector (whose traversal of a stale shiboken6
+        wrapper segfaulted — see closeEvent). Best-effort; never raise.
+        """
+        # RenderPollLoop -> EditorWindow (lambdas capture the window/viewport;
+        # on_fps_update is a window bound method). Nulling these breaks
+        # EditorWindow ↔ RenderPollLoop and lets the loop be refcount-collected.
+        loop = getattr(self, "_render_loop", None)
+        if loop is not None:
+            with contextlib.suppress(Exception):  # noqa: BLE001
+                loop._simulator_ref = None
+                loop._camera_offset_ref = None
+                loop._on_fps_update = None
+                loop._canvas = None
+        # ViewportPanel -> EditorWindow: the panel stores the window's
+        # ``_update_fps_status`` bound method as ``_on_fps_update`` (passed at
+        # construction, viewport.py). A stored Python attribute holding a bound
+        # method IS a strong ref → window→panel→bound method→window cycle.
+        # Nulling it is REQUIRED to break that cycle (proven: post-close
+        # ``del window`` did not drop the refcount until this was nulled; only
+        # cyclic GC collected it, and cyclic GC traversing the stale shiboken6
+        # wrapper segfaulted — the Phase 42 regression). The ``_scene_bound``
+        # signal connection to ``_refresh_playback_status`` does NOT create a
+        # Python ref cycle (PySide6 signal-slot holds the slot without a Python
+        # attribute edge), so disconnecting it is unnecessary and only emitted a
+        # ``Failed to disconnect`` RuntimeWarning — omitted here.
+        panel = getattr(self, "_viewport_panel", None)
+        if panel is not None:
+            with contextlib.suppress(Exception):  # noqa: BLE001
+                panel._on_fps_update = None

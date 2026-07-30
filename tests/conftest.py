@@ -29,6 +29,57 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(skip_pybullet)
 
 
+@pytest.fixture(autouse=True)
+def _reap_editor_sim_runtimes(request):
+    """Stop + join any leaked editor sim runtime (QThread + render loop) after
+    every test.
+
+    EditorWindow.__init__ starts a SimStepWorker QThread + a RenderPollLoop
+    self-rescheduling singleShot chain. Tests that construct EditorWindow
+    WITHOUT calling close() leak both: the singleShot chain holds the loop →
+    the loop's simulator_ref lambda holds the EditorWindow, so the window is
+    never unreachable and a weakref.finalize safety net never fires. The
+    leaked thread + render-poll then run until interpreter shutdown →
+    ``QThread: Destroyed while thread is still running`` (SIGABRT) or a
+    pybullet teardown segfault (Phase 42 regression). The module-level
+    registry in sim_step_worker + this reaper is the reliable fix: no sim
+    runtime outlives a test. Lazy import (cached after first use) keeps
+    non-editor tests cheap; the registry is empty for them so reap is a
+    no-op. Subprocess CLI-independence tests check their own sys.modules, so
+    importing PySide6 in the main pytest process is safe.
+    """
+    yield
+    try:  # noqa: SIM105 — broad guard: PySide6 missing / import error → no-op
+        from surg_rl.editor.sim_step_worker import (
+            _ACTIVE_SIM_RUNTIMES,
+            reap_all_sim_runtimes,
+        )
+    except Exception:  # noqa: BLE001
+        return
+    if _ACTIVE_SIM_RUNTIMES:
+        reap_all_sim_runtimes()
+        # The reaper called close() (full teardown: thread joined, sim closed,
+        # render-poll stopped). But the render-poll's 33 ms singleShot is the
+        # window's last external ref, and it is not READY yet, so a plain
+        # processEvents returns without firing it. QTest.qWait SPINS the event
+        # loop for 50 ms (> 33 ms), so the singleShot fires, early-returns
+        # (stop() set _running=False), and drops its bound-method ref — only
+        # then is the EditorWindow QObject graph unreachable. gc.collect then
+        # collects the fully-torn-down graph in this controlled context
+        # (shiboken deletion is safe: thread finished, sim closed) instead of
+        # letting it leak to a later mock-driven cyclic GC that segfaulted
+        # traversing a stale wrapper (the Phase 42 test_stops_cleanly crash).
+        try:  # noqa: SIM105 — best-effort event drain
+            from PySide6.QtTest import QTest
+
+            QTest.qWait(50)
+        except Exception:  # noqa: BLE001
+            pass
+        import gc
+
+        gc.collect()
+
+
 # Ensure src/ is on the path for pytest collection
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 

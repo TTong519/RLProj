@@ -35,6 +35,7 @@ thread-affine; render lives on the UI thread in ``RenderPollLoop``).
 
 from __future__ import annotations
 
+import contextlib
 import threading
 import time
 from dataclasses import dataclass
@@ -59,6 +60,105 @@ _PUBLISH_HZ: float = 30.0
 # if the accumulator has backed up (e.g. after a UI-thread stall). When hit,
 # discard the remaining debt by resetting _accum to 0.0 (Pitfall 4).
 _MAX_STEPS_PER_TICK: int = 8
+
+
+# --- Module-level registry of live editor sim runtimes ----------------------
+# EditorWindow.__init__ starts a SimStepWorker QThread + a RenderPollLoop
+# self-rescheduling singleShot chain. Tests that construct EditorWindow
+# WITHOUT calling close() leak both: the singleShot chain holds the loop →
+# the loop's ``simulator_ref`` lambda holds the EditorWindow, so the window
+# is NEVER unreachable while the render-poll runs → a per-window
+# ``weakref.finalize`` safety net never fires. The leaked thread + render-poll
+# then run until interpreter shutdown → ``QThread: Destroyed while thread is
+# still running`` (SIGABRT) or a pybullet C-state segfault during teardown.
+#
+# This registry + ``reap_all_sim_runtimes`` is the reliable fix: an autouse
+# fixture in tests/conftest.py calls ``reap_all_sim_runtimes`` after every
+# test, stopping each leaked render-poll (kills the singleShot chain) +
+# cancelling + joining each leaked QThread, so no sim runtime outlives a
+# test (no cross-test leak → no shutdown crash). The registry holds STRONG
+# refs so a leaked QThread is never destroyed while still running even
+# before the reaper runs.
+_ACTIVE_SIM_RUNTIMES: list[tuple[object, SimStepWorker, object, object]] = []
+_ACTIVE_LOCK = threading.Lock()
+
+
+def register_sim_runtime(
+    window: object, thread: object, worker: SimStepWorker, render_loop: object
+) -> None:
+    """Record a live (window, thread, worker, render_loop) runtime. Holds a
+    strong ref so a leaked QThread is not destroyed while running (the reaper
+    joins it) and a leaked EditorWindow is torn down by the reaper's close()."""
+    with _ACTIVE_LOCK:
+        _ACTIVE_SIM_RUNTIMES.append((window, thread, worker, render_loop))
+
+
+def unregister_sim_runtime(thread: object) -> None:
+    """Drop a runtime that was torn down via the close() path (so the reaper
+    does not double-stop it). No-op if already reaped/unregistered."""
+    with _ACTIVE_LOCK:
+        _ACTIVE_SIM_RUNTIMES[:] = [r for r in _ACTIVE_SIM_RUNTIMES if r[1] is not thread]
+
+
+def reap_all_sim_runtimes(timeout_ms: int = 3000) -> None:
+    """Tear down every leaked editor runtime by calling its EditorWindow.close()
+    (the FULL proper teardown: aboutToClose → stop+join the SimStepWorker
+    QThread, stop the RenderPollLoop, close the simulator), then null the
+    render-loop's window refs so the window is collectable.
+
+    Called by the autouse fixture in tests/conftest.py after each test. Tests
+    that construct EditorWindow WITHOUT calling close() leak a window whose
+    QObject graph (EditorWindow ↔ ViewportPanel via the _scene_bound signal;
+    EditorWindow → SimStepWorker → RenderPollLoop via the snapshot_ready
+    signal) forms a reference cycle only breakable by cyclic GC, AND whose
+    render-poll's 33 ms singleShot holds the last external ref to the loop.
+    A later mock-driven cyclic GC (test_rendering::test_stops_cleanly) then
+    collects the cycle and traverses a stale shiboken6 QObject wrapper →
+    segfault (Phase 42 regression; baseline has no QThread and is clean).
+
+    Calling close() here runs the SAME teardown slots closeEvent runs, so the
+    graph is in a clean state (thread joined, sim closed) when the fixture
+    later spins the event loop (QTest.qWait) to fire the 33 ms singleShot and
+    gc.collect()s the now-unreachable graph — in this controlled context
+    shiboken deletion is safe, so no stale wrapper lingers for a later test.
+
+    Safe to call when empty; safe to call repeatedly. The close() path
+    unregisters via ``unregister_sim_runtime`` so this never double-closes a
+    window already closed by the test.
+    """
+    with _ACTIVE_LOCK:
+        items = list(_ACTIVE_SIM_RUNTIMES)
+        _ACTIVE_SIM_RUNTIMES.clear()
+    for window, thread, worker, render_loop in items:
+        # Full teardown via close() (mirrors closeEvent). Best-effort; never
+        # raise — this is a GC-safety reaper, not the primary close path.
+        if window is not None:
+            with contextlib.suppress(Exception):  # noqa: BLE001
+                window.close()
+        # Belt-and-braces in case close() did not run (e.g. window already
+        # partially destroyed): stop the render-poll + join the QThread +
+        # close the leaked simulator + null the worker's sim ref.
+        with contextlib.suppress(Exception):  # noqa: BLE001
+            render_loop.stop()
+        with contextlib.suppress(Exception):  # noqa: BLE001
+            worker._cancelled = True
+        if thread is not None:
+            thread.quit()
+            with contextlib.suppress(Exception):  # noqa: BLE001
+                thread.wait(timeout_ms)
+        with contextlib.suppress(Exception), worker._sim_lock:  # noqa: BLE001
+            sim = worker._simulator
+            worker._simulator = None
+            if sim is not None:
+                sim.close()
+        # Release the render-loop's holds on the EditorWindow (its
+        # simulator_ref/camera_offset_ref lambdas + on_fps_update bound method
+        # + canvas ref capture the window/viewport).
+        with contextlib.suppress(Exception):  # noqa: BLE001
+            render_loop._simulator_ref = None
+            render_loop._canvas = None
+            render_loop._camera_offset_ref = None
+            render_loop._on_fps_update = None
 
 
 @dataclass
