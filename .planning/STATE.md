@@ -4,17 +4,17 @@ milestone: v0.7.0
 milestone_name: Phases
 current_phase: 42
 current_phase_name: render-sim-decoupling-animated-viewport
-status: executing
-stopped_at: Completed 42-01-PLAN.md
-last_updated: "2026-07-22T22:02:05.345Z"
+status: verifying
+stopped_at: Completed 42-02-PLAN.md
+last_updated: "2026-07-23T01:36:11.191Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 42 execution started
 progress:
   total_phases: 11
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 4
-  completed_plans: 3
-  percent: 9
+  completed_plans: 4
+  percent: 18
 ---
 
 # Project State
@@ -32,10 +32,10 @@ See: .planning/PROJECT.md (updated 2026-07-15 — v0.7.0 milestone started)
 
 Phase: 42 (render-sim-decoupling-animated-viewport) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-17 — Phase 42 execution started
 
-Progress: [████████░░] 75%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -73,6 +73,7 @@ Progress: [████████░░] 75%
 | Phase 41 P01 | 31m | 3 tasks | 5 files |
 | Phase 41 P02 | 18m | 2 tasks | 3 files |
 | Phase 42 P01 | multi-session (~4d) | 3 tasks | 4 files |
+| Phase 42 P02 | ~2h | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -94,6 +95,10 @@ Decisions are logged in PROJECT.md Key Architecture Decisions. Recent decisions 
 - [Phase ?]: D-09 two-pronged SC#3 verification: TestCloseMidCallMockSlow (always-on offscreen backstop, monkeypatch parse_sync to sleep) + TestCloseMidCallRealProvider (skipif no LLM_API_KEY, real provider path)
 - [Phase ?]: Phase 42 P01: Render/sim decoupling seam = SimStepWorker.snapshot_ready (queued Signal) -> RenderPollLoop.on_snapshot; ONE render timer on UI thread + ONE sim loop on QThread worker (D-01/D-02); _Snapshot(state, frame_id:int) is the cross-thread boundary; speed scales wall_dt NOT sim_dt (Pitfall 5); _MAX_STEPS_PER_TICK=8 spiral cap
 - [Phase ?]: Phase 42 P01: worker loads PAUSED (D-11); step_one runs exactly one step(None) while paused without resuming the timer (D-07); stop() is cooperative cancel flag + timer.stop ONLY — controller owns thread.quit/wait(3000) + log-on-timeout, NEVER terminate (D-04, mirrors Phase 41 D-05 LLMPanel.stop template)
+- [Phase ?]: Proxy signals route cross-thread @Slot invocation — @Slot methods are NOT signals and cannot be .emit()-ed directly
+- [Phase ?]: Phase 42 P02 shutdown safety: module-level sim-runtime registry + autouse-test-fixture reaper (reap_all_sim_runtimes) REPLACED the weakref.finalize safety net — the RenderPollLoop self-rescheduling singleShot chain holds the loop, whose window-ref lambdas hold the EditorWindow, so the window is never unreachable while the render-poll runs and a weakref.finalize never fires. The registry holds STRONG refs (leaked QThread not destroyed while running → no "QThread: Destroyed while still running" SIGABRT); the reaper close()s leaked windows after each test
+- [Phase ?]: Phase 42 P02 cycle-breaker: ViewportPanel stores the window's `_update_fps_status` bound method as `_on_fps_update` (a Python attribute) → window→panel→bound-method→window cycle only breakable by cyclic GC; cyclic GC traversing the stale shiboken6 wrapper segfaulted (test_rendering crash). `_break_qobject_cycles` in closeEvent nulls `panel._on_fps_update` + the render_loop's window-ref lambdas so the graph is REFCOUNT-collected at close() (no stale wrapper for a later cyclic GC). PySide6 signal-slot connections do NOT create a Python ref cycle, so disconnecting `_scene_bound` was unnecessary (only emitted a RuntimeWarning) — omitted
+- [Phase ?]: _stop_sim_worker sets _cancelled=True directly (GIL-safe bool) instead of sim_worker.stop() — avoids cross-thread QTimer.killTimer
 
 ### Pending Todos
 
@@ -144,8 +149,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-22T22:02:05.337Z
-Stopped at: Completed 42-01-PLAN.md
+Last session: 2026-07-23T01:34:58.843Z
+Stopped at: Completed 42-02-PLAN.md
 Resume file: None
 
 *Updated: 2026-07-15 — v0.7.0 roadmap created. 11 phases (41–51), 13/13 requirements mapped (0 unmapped). Next: `/gsd-plan-phase 41`.*
